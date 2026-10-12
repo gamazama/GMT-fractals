@@ -55,7 +55,7 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
    - c. The row's switch takes the point looked at, as the button does. Or should the switch
      re-enter with the last constant? *Recommended: the switch re-enters with the last constant
      when there is one; the button takes the point.*
-     NOT ANSWERED (asked twice, 2026-10-12).
+     **ANSWERED 2026-10-12: "2c - yes".** Handed to the builder of the constant's rows.
    - d. Switching Julia on puts the iteration floor back to 14. *Recommended: keep.*
      **NO CHANGE: kept** (see 1b).
    - e. The Kleinian card, whose whole-view proof line is a little over the bar. *Recommended:
@@ -124,11 +124,13 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 14. **Locations as a file**: a duplicate is the same camera strings, Julia constant and formula
     (the same spot looking another way counts as the same place); a pasted LIST is added and no
     longer jumps to its first entry; an import is not an undo step. Confirm or change.
+    **ANSWERED 2026-10-12: confirmed.**
 15. **Session autosave** is off by default; on, a reload opens where the app was left; the File
     menu's Autosave switch and "Restore Last Session" were removed from this app (they were
     app-gmt's and wrote app-gmt's keys); a session does not hold My locations or My Gradients;
     Home after a restore is the restored place. Confirm or change. Found beside it: fluid-toy and
     fractal-toy still show those two app-gmt rows in their File menus.
+    **ANSWERED 2026-10-12: confirmed.** (The two rows in fluid-toy and fractal-toy: not answered.)
 16. **The Diagnostics tab**: the renderer's accuracy gate has been on all along (a one-pixel
     readback twice a second while a still gathers). Should the shell start with it off?
 17. **Help, the shortcuts page, What's New and the first-dive lesson are built** (the commit after
@@ -185,7 +187,8 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 ## F. Found by him while flying routes, 2026-10-12 (his words; each is to build or to look at)
 
 26. "the route is missing a reset (delete all keys/restart route)".
-27. "also missing a way to reset the view". What he means by it is asked, not assumed.
+27. "also missing a way to reset the view". Asked what he means: "reset view = back to formula
+    start view".
 28. "missing a way to select/delete multiple route markers".
 29. "after deleting route markers, the interpolation goes off and through objects". A fault:
     reproduce and measure before any fix.
@@ -199,10 +202,25 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
     the radius and the tap count; a depth-aware smoothing pass; a better estimator in the same
     taps; marched occlusion as GMT's (kernel work). Recommended: the rows first. Sheets for his
     eye: `debug/scratch/ao-sheet/` (`ao-radius-*.png`: 0.04 / 0.12 / 0.30; `ao-taps-*.png`: 10
-    against 32 taps on one flying frame). What looks wrong to him: asked, not yet answered.
-    Seen beside it and not explained: in that scratch capture the whole bulb's PICTURE from
-    outside came out as specks with a halo while its occlusion channel was whole
-    (`ao-radius-whole-bulb.png`), the look the bulb's Julia set has from outside (2a).
+    against 32 taps on one flying frame).
+    **ANSWERED 2026-10-12: "AO: 1 and 3, maybe 4"**, and what looks wrong: "GMT's occlusion just
+    looks much nicer and more realistic." GMT's is the fourth option exactly (grep `GetAO` in
+    `engine-gmt/features/ao/shader.ts`: up to 32 samples of the distance field at growing
+    heights along the normal, or along a cosine-weighted direction that changes every sample of
+    a still; each sample counts by how much nearer the surface is than its height). Put to him:
+    the rows now, then the cost of 4 measured before a new estimator is designed for 3.
+33. THE SPECKS FROM FAR. Seen in the occlusion capture (`ao-radius-whole-bulb.png`: the whole
+    bulb's picture as specks with a halo). He: "the specks with a halo when viewing from far
+    (~ >1) - its a bug, we need to fix." ONE measurement, then to him (his rule for his kernel):
+    `debug/scratch/far-specks/specks.log` (the whole bulb, power 8, 128 x 128 rays, the last
+    commit's renderer). By distance off the surface, the share of rays on which a careful march
+    and one twice as careful end more than two pixels of depth apart: 0.3: 0.02 %, 0.6: 0.04 %,
+    1.0: 0.08 %, 1.5: 3.95 %, 2.0: 89.6 %, 3.0: 95.0 %, 4.0: 95.4 %. From 2.0 on the careful
+    march "hits" on 99 % of rays (66 % at 4.0, where the bulb fills about an eighth of the
+    view): rays stop in empty space. It is NOT the far hand-off (never handing off: as bad) and
+    NOT the iteration count (14 and 32 give the same table). It begins with the camera between
+    2.7 and 3.2 from the centre. The bulb's Julia set from outside is drawn from that far too
+    (2a's grain). Cause: not looked for; his.
 
 ## G. The build queue as it stood when the calls of A and B were in (2026-10-12)
 
