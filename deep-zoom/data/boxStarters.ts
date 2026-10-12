@@ -20,6 +20,11 @@
  *           (place-sheet-s-1.5.png, place-sheet-positive.png beside the tool)
  * The whole-box view is built, not found: the camera 6.5 half-sides of the set away along a fixed
  * diagonal, as `formulaHome` in deep-zoom/locations.ts builds the view a switch of formula lands on.
+ * Its saved iteration count is 51, what the renderer's own margin rule settles at there; until
+ * 2026-10-12 the card saved 14, at which every step rule measured had rays on the wrong surface
+ * (plans/deep-zoom-shell/BOX-RAY-STEP.md: 0.78 % with today's rule). The rule only ever raises a
+ * count, so in the app the card looked right a moment after the jump; a route keyframe set at once,
+ * or a tool that holds the count, got the 14.
  *
  * NOT IN `STARTERS` ON PURPOSE. `data/starters.ts` and `data/places.ts` are also the bulb's test
  * data: the node checks and the smokes march every view in them with the bulb's maths
@@ -42,7 +47,7 @@ export const BOX_STARTERS: Starter[] = [
         depth: 6.0,
         startDepth: 6.0,
         formula: { kind: FORMULA_BOX, boxScale: -1.5, boxMinRadius: 0.5, boxFold: 1, boxFixedRadius: 1, boxRotX: 0, boxRotY: 0, boxRotZ: 0 },
-        view: {"cam":["1096911848332305037074805845702972509381124328566735171980201942093341996875776","714654689065040866850505792569326471459539256410128103460489426966611400589312","1013812465882913519064088689437401360010477617719514360792707988688998951288832"],"yaw":-2.3955442465809504,"pitch":-0.4462656061462504,"iters":14,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},
+        view: {"cam":["1096911848332305037074805845702972509381124328566735171980201942093341996875776","714654689065040866850505792569326471459539256410128103460489426966611400589312","1013812465882913519064088689437401360010477617719514360792707988688998951288832"],"yaw":-2.3955442465809504,"pitch":-0.4462656061462504,"iters":51,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},
     },
     {
         name: "Arches · 1.2e-20",

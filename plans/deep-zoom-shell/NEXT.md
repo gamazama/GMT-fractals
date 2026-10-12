@@ -83,14 +83,22 @@ before we start adding formulas."
    - Not explained, seen once: smoke stage 3's dive overshot in 1 of the builder's 7 runs.
    - For him, if a first visit should be shorter still: the two-call form (5.8 s) is kept as a
      file, `debug/scratch/load/step2/core.v-g2.js.txt`; it costs the bulb 5.6 % of frame time.
-3. **The Mandelbox's ray step** (`BOX-RAY-STEP.md`), with a new ADR over ADR-0135's third
-   decision. As recommended to him, and built so unless he says otherwise: today's hit surface
-   kept (the picture does not change; moving the hit test to the ray estimate is a look decision
-   brought to him later as a side by side); far relax left alone until the build, where it stops
-   acting; the step by the whole estimate, as the bulb's, with the one bad view (scale 3, 9e-9,
-   2.4 % of rays behind) traced as the build's first job; the step alone first, resumed orbits
-   second and only if GPU timing shows a gain; the whole-box card's iterations raised to what the
-   margin rule gives (51, not 14).
+3. **The Mandelbox's ray step** (`BOX-RAY-STEP.md`). BUILT 2026-10-12, FAILED ITS FRAME-TIME GATE,
+   NOT IN THE TREE: his decision. The step alone was built against `120023fc` on the terms
+   recommended to him (today's hit surface kept, the whole estimate, no resumed orbits), after the
+   study's one bad view was traced and the rule fixed for it (an inversion late in the orbit makes
+   the iterate speed up during the step). On the GPU it is cleaner at every one of 92 view-settings
+   (rays on another surface than the careful march: starters 0.51 -> 0.04 %, a 56-view sweep 2.70 ->
+   0.41 %) and its pictures are nearer the careful march's, but frame time failed: Whole box
+   +3.6 %, Arches +39.3 %, Block city -28.7 % (mean +4.7 % against a bound of 3, worst against a
+   bound of 8); Lace +46 %. It is faster at scales 1.3, 2 and 3 and slower at the negative scales
+   the starters use: a block of pixels waits for its slowest ray, that ray is held by the step's
+   aim, and a pass with the jet costs about 1.35 of one without. The tree was put back; the build
+   is kept as `debug/scratch/box-ray-study/build/core.stage-a.js`; the ADR is drafted as
+   `ADR-DRAFT-box-ray-step.md` with the gate's tables and his four calls (take it as measured or
+   leave the box; the aim; far relax, which needs no build and causes two thirds of today's wrong
+   share off the starters; resumed orbits). Step size therefore stays in the app for the
+   Mandelbox. Done regardless: the whole-box card saves 51 iterations, not 14.
 4. **Julia mode and the Kleinian card** (`JULIA.md`, `CHEAP-FORMULAS.md`), with its ADR. As
    recommended: both formulas, the box first; "Julia from this place" is the classic (the point
    looked at becomes the constant, the whole set seen from outside); no number rows for the
