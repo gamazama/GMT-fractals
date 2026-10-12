@@ -236,6 +236,35 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
     NOT the iteration count (14 and 32 give the same table). It begins with the camera between
     2.7 and 3.2 from the centre. The bulb's Julia set from outside is drawn from that far too
     (2a's grain). Cause: not looked for; his.
+    **He: "The specks from far -send agent to find the cause." FOUND the same day, with a
+    counter-test** (`debug/scratch/far-specks/`: `trace.log`, `counter-head.log`, `counter-B.log`,
+    `pic-head.png`, `pic-B.png`, `julia-head.png`, `julia-B.png`; nothing in the tree changed).
+    - The cause: the deep kernel holds a pixel's orbit as "the camera's orbit plus a difference".
+      With the camera outside the escape radius its own orbit goes to |c|^8 on the first
+      iteration (12,000 at 2.0 off the surface, 103,000 at 3.0, 564,000 at 4.0), and a point by
+      the bulb, whose iterate is 5 to 30, is then the difference of two such numbers in single
+      precision: rubbish. The estimate made from it comes out zero or negative in a shell of
+      empty space round the bulb, and a non-positive estimate reads as a hit. The same
+      arithmetic in f64 is right everywhere; the plain f32 program is clean at every distance.
+      Grep `function buildRefOrbit` (the break at 100), `if (!applied) {` in `pertOrbit`,
+      `float r2f = sqrt(max(cT0.w * cT0.w + sE * QE`, and `if (!esc || de.x <= 0.0)` in LOOP A
+      (it stands before the `FAR_SWITCH` test, so the hand-off never protects).
+    - The counter-test (one change in a scratch copy: where the reference's point is outside
+      radius 2 the pixel iterates directly): two careful marches apart on 89.6 / 95.0 / 95.3 % of
+      rays at 2.0 / 3.0 / 4.0 before, 0.00 % after; stray hits beside the bulb 10.2 / 43.9 /
+      64.4 % before, 0 after; the picture is a bulb; the Julia set from outside clears too.
+    - A second, smaller fault it uncovers: from about 3.7 off, the ray step's first stride is
+      longer than the free distance (4.33 against 4.19 at 4.0 off) and lands in the solid: a
+      patch of specks at the centre. Grep `The page's START CAP`.
+    - Reached by the same cause: the Julia set from outside, the "Whole bulb" card (3.23 from the
+      centre, just past the cliff), normal taps in far views. NOT reached: the Mandelbox from far
+      (clean to 200 from the centre), the plain picture before ready, the navigation's CPU rays.
+    - Two routes to a fix, neither taken: in the kernel (never ride a reference point far past
+      escape: iterate directly there; Julia mode needs its own form) or in the march (hand the
+      ray to the f32 far field at once when the camera's reference is useless). The gate must be
+      the size of the reference's next point, not "camera outside radius 2": by arithmetic the
+      cliff is 2.95 from the centre at power 8, 2.06 at power 12, 1.72 at power 16. The direct
+      proof and the deep pictures must not move. His call which route.
 
 ## G. The build queue as it stood when the calls of A and B were in (2026-10-12)
 
