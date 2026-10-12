@@ -338,3 +338,25 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
   loaded scene's keyframes; what a delete does to a leg that then crosses the solid (29, his).
 - Seen once by a builder: smoke step N5.08 ("with W and S held, 1 left the camera where it
   was") failed in one run of three.
+
+## H. His orders of 2026-10-12, the afternoon (his words), and who has them
+
+- "lets do burning and kalibox". Burning on the bulb: a builder has it (the plan and his seven
+  answers are `BURNING-KALIBOX.md`). KaliBox follows it, as a stage of its own.
+- "Pictures for a loaded scene's keyframes" and "GMT's export fixes (10 to 12 and the 0-byte
+  file)": the next builder runs after Burning (one builder at a time in this tree).
+- "occlusion - please design me the most suitable estimator you know how". The design put to
+  him: read the depth buffer in SLICES through the pixel, with steps that grow geometrically
+  (equal taps an octave), find what each slice hides and integrate it with the cosine weight
+  (the horizon integral of Jimenez et al. 2016); a second variant gives each tap a THICKNESS and
+  a 32-sector mask, so a thin arm does not darken everything behind it (Therrien et al. 2023);
+  then the colour-aware multi-bounce fit, so crevices in pale ground are not black. A study
+  agent prototypes both in a scratch copy and measures them against true occlusion and against
+  GMT's own estimator, both worked out on the CPU for the same view
+  (`debug/scratch/ao-design/`). What neither can do is see past one depth layer: that is what
+  GMT's marched samples do, and it stays the "maybe 4".
+- "routes: we need to provide an option to fix a leg and avoid crossing the solid using the
+  shortest smooth path, otherwise a run is ruined by a deleted keyframe." A CPU study proves the
+  rule first (an elastic band pulled tight round the solid at a clearance that follows the
+  route's own depth, then cut into keyframes by the trail's fitter) and writes
+  `ROUTE-AROUND.md`; the build follows it.
