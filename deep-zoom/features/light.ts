@@ -3,15 +3,17 @@
  *
  * PURPOSE
  *   How the surface is lit: which shading runs (Classic / New), which lights are on, where the key
- *   light stands, and five strengths of the New shading (shadows, occlusion, sky, roughness, haze).
- *   Eleven params. Declaring them as a feature gives each a panel row, an undo step, a preset field
+ *   light stands, five strengths of the New shading (shadows, occlusion, sky, roughness, haze), and
+ *   how the occlusion is sampled (its radius and its sample count, 2026-10-12).
+ *   Thirteen params. Declaring them as a feature gives each a panel row, an undo step, a preset field
  *   and a keyframe track (`dzLight.keyTurn`, ...).
  *
  * THIS IS THE INTERIM FOR THE LIGHT STUDIO
  *   `dzLight` is what lights the picture until stage L lands (BUILD-PLAN package L5). At L5 five
  *   keys leave this feature for the shared light list (feature `lighting`, key `lights`) through
  *   one scene migration: `lightType`, `lampFalloff`, `keyElevation`, `keyTurn`, `lightTint`.
- *   `shading`, `shadows`, `occlusion`, `sky`, `roughness` and `haze` stay. So: ADD NO DEPENDENT ON
+ *   `shading`, `shadows`, `occlusion`, `occlusionRadius`, `occlusionSamples`, `sky`, `roughness` and
+ *   `haze` stay. So: ADD NO DEPENDENT ON
  *   THOSE FIVE KEYS — no condition in another feature, no bridge, no shortcut, no saved-location
  *   field that names them. The two light-type indices below are deliberately not exported.
  *
@@ -28,12 +30,14 @@
  *     lightTint      api.setLook({ tint })
  *     shadows        api.setLook({ shadow })
  *     occlusion      api.setLook({ ao })
+ *     occlusionRadius   api.setLook({ aoRadius })  a share of the picture's height
+ *     occlusionSamples  api.setLook({ aoTaps })    taps a pixel; the shader takes 1 to 32
  *     sky            api.setLook({ sky })
  *     roughness      api.setLook({ rough })
  *     haze           api.setLook({ haze })
  *   `api.setLook(o)` is `Object.assign(look, o)`: one call may carry several keys, and a key it
  *   does not know is stored and ignored. Read-back: `api.dz.settings()` gives `lookMode`, `light`
- *   and `falloff`; the other eight are on `api.look` under the names above.
+ *   and `falloff`; the other ten are on `api.look` under the names above.
  *   ENUMS. `shading` and `lightType` are floats holding the option's INDEX
  *   (`engine/defineEnumParam.ts`). Each exports `X_OPTIONS` (option names, dropdown order),
  *   `X_RENDERER_VALUES` (the renderer's value for each option, same order — use `indexOf` on it to
@@ -51,7 +55,8 @@
  *     shading, lightType                              always
  *     lampFalloff                                     lightType is Lamp or Both
  *     keyElevation, keyTurn, lightTint, shadows       shading is New AND lightType is not Lamp
- *     occlusion, sky, roughness, haze                 shading is New
+ *     occlusion, occlusionRadius, occlusionSamples,
+ *     sky, roughness, haze                            shading is New
  *   This departs from BLUEPRINT section 3, which shows `lightType` and `lampFalloff` under the
  *   Classic shading only. The New shading reads the light type too: Lamp switches the key, the
  *   fill, the kicker and every shadow OFF and lights with the camera lamp and the sky alone; Both
@@ -63,7 +68,7 @@
  *   shader compile.
  *
  * PITFALLS
- *   - DEEP PATH ONLY, ALL ELEVEN. The f32 baseline (the picture only while the deep shader is
+ *   - DEEP PATH ONLY, ALL THIRTEEN. The f32 baseline (the picture only while the deep shader is
  *     still compiling, since 2026-10-08; grep `deepActive = deepProg`) draws with its own small shader (grep `const FRAG =` in core.js):
  *     one camera-fixed light, one fixed colour, none of these inputs. Until the renderer reports
  *     `api.dz.telemetry().mode === 'deep'` no row of this tab changes a pixel. No condition can
@@ -89,8 +94,17 @@
  *     wraps at 2 pi (grep `isRotationTrack` in `utils/timelineUtils.ts`, `isRotation` in
  *     `engine/AnimationEngine.ts`). `keyTurn` and `keyElevation` are in DEGREES and are named so on
  *     purpose: never `keyRotation`. No id here contains one of the three strings.
- *   - SEVENTEEN MORE LOOK FIELDS ARE NOT HERE. `look` in core.js also holds exposure, saturation,
- *     occlusion radius, shadow softness and length, haze colour, the key, fill and kicker
+ *   - THE TWO OCCLUSION ROWS ARE RUNTIME VALUES (2026-10-12; the owner's rule: a control he might
+ *     drag never compiles a shader). The radius is a uniform (`uLookA.y`); the sample count is a
+ *     uniform too (`uAoTaps`), read under a fixed loop bound of 32 (grep `MAX_TAPS` in core.js),
+ *     which is where the row's maximum comes from. The radius's range is the owner's; the shading
+ *     pass never lets it under 4 pixels (grep `max(uLookA.y * uRes.y, 4.0)`). At 10 samples the
+ *     picture is what it was while the count was a constant of the shader, but for the last bit
+ *     of two divisions: a level in 3 pixels of a million (measured; grep `MEASURED 2026-10-12`
+ *     under OCCLUSION FROM DEPTH in core.js). 32 samples cost 0.3 to 0.5 ms a frame more than
+ *     10 at 1024 x 1024 (same place).
+ *   - SIXTEEN MORE LOOK FIELDS ARE NOT HERE. `look` in core.js also holds exposure, saturation,
+ *     shadow softness and length, haze colour, the key, fill and kicker
  *     strengths, the fill and kicker colours, metallic, reflectivity, diffuse, and three more
  *     angles (key azimuth, fill azimuth, fill elevation). They have defaults and no
  *     range anywhere in the renderer; a slider with a guessed range is a control the renderer may
@@ -101,7 +115,7 @@
  *   - No key may start with `is`: saved scenes and share links drop such keys.
  *
  * @invariant No key of the `dzLight` slice is typed `any`: `SliceFromParams` over this feature's
- *   params gives `number` for all eleven keys — proven by: npm run typecheck ("Type '"shading"'
+ *   params gives `number` for all thirteen keys — proven by: npm run typecheck ("Type '"shading"'
  *   does not satisfy the constraint 'never'" on the `SliceIsTyped` line at the foot of this file).
  *   Falsified 2026-10-08: with `type: 'float'` removed from the `shading` entry, tsc reported
  *   exactly that line and key.
@@ -109,11 +123,23 @@
  *   core.js: `mode: 1`, `keyElev: 40`, `keyTurn: 0`, `tint: 0.5`, `shadow: 1.0`, `ao: 1.0`,
  *   `sky: 0.3`, `rough: 0.75`, `haze: 0.0` in `const look = {`; `let lightMode = 0, falloffMul =
  *   4.0`; and the `CTLS` rows 'look', 'lighting', 'falloff', 'key height', 'key turn', 'light
- *   colour', 'shadows', 'occlusion', 'sky', 'roughness', 'haze'). No guard checks it yet; the
+ *   colour', 'shadows', 'occlusion', 'sky', 'roughness', 'haze'; and, read 2026-10-12, `aoRadius:
+ *   0.12`, `aoTaps: 10` and the rows 'occl. radius', 'occl. samples'). No guard checks it yet; the
  *   stage-2 smoke step "every feature default equals the module's settings read at ready" is the
  *   intended proof.
  * @assumption The "when each row is shown" table matches the shading pass. It was read from the
  *   GLSL, not measured: no check moves a hidden row's value and compares pixels.
+ * @invariant `occlusionRadius` and `occlusionSamples` reach the renderer as the look fields
+ *   `aoRadius` and `aoTaps`, in one `setLook` and no other call — proven by: npm run
+ *   check:deep-zoom-param-map ("push: the occlusion's radius and sample count go as the look
+ *   fields aoRadius and aoTaps, one setLook and nothing else, and read back"). Falsified
+ *   2026-10-12: the samples row's field misspelt `aoTap` in host/paramMap.ts -> that line red.
+ * @assumption The shading pass reads both as uniforms and nothing compiles when either moves. No
+ *   standing check opens it: driven in the app on 2026-10-12 (debug/scratch/ao-rows/app-rows.mts,
+ *   git-ignored): the two rows under Occlusion, the renderer at 0.3 and 32 after eight store
+ *   writes, `host.building()` null throughout, the built programs' list unchanged, 66 % of a
+ *   gathered still's pixels moved by the radius; hidden under Classic. A scene saved before the
+ *   two rows existed loads them at 0.12 and 10 (same folder, old-scene.mts).
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
@@ -215,6 +241,20 @@ export const DzLightFeature = {
             label: 'Occlusion',
             condition: NEW_SHADING,
             description: 'Darkens crevices and pits: how much of the open sky the surroundings of each point hide.',
+        },
+        occlusionRadius: {
+            type: 'float',
+            default: 0.12, min: 0.02, max: 0.5, step: 0.01,
+            label: 'Occlusion radius',
+            condition: NEW_SHADING,
+            description: 'How far round each point the occlusion looks, as a share of the picture\'s height. Small: crevices only. Large: whole cavities.',
+        },
+        occlusionSamples: {
+            type: 'int',
+            default: 10, min: 4, max: 32, step: 1,
+            label: 'Occlusion samples',
+            condition: NEW_SHADING,
+            description: 'More samples: less grain in a moving frame, and more time. A gathered still looks the same.',
         },
         sky: {
             type: 'float',

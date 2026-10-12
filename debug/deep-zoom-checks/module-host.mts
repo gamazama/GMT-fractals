@@ -405,7 +405,7 @@ function makeRig() {
             state.trueDepth -= dist;   // a head-on approach: every unit flown is a unit closer
         },
         // What host/looseParams.ts pushes through and host/paramMap.ts reads back (stage 2).
-        look: { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, sky: 0.3, rough: 0.75, haze: 0 } as Record<string, unknown>,
+        look: { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, aoRadius: 0.12, aoTaps: 10, sky: 0.3, rough: 0.75, haze: 0 } as Record<string, unknown>,
         setLook: (o: Record<string, unknown>): void => { note('setLook', o); Object.assign(api.look, o); },
         setSurf: (m: number): void => { note('setSurf', m); state.settings.detail = m; },
         setGradientTexels: (rgba: Uint8Array, w?: number): void => { note('setGradientTexels', rgba, w); },

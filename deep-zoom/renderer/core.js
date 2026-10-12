@@ -1725,6 +1725,7 @@ uniform vec3  uFillDir, uKickDir;// toward the fill light and the kicker (the ke
 uniform vec3  uFillCol, uKickCol;// their colours times their intensities (the key is white times uLookB.x)
 uniform vec3  uHaze;             // what distance fades to; also the background
 uniform int   uNrmTap;           // normals from depth: how many pixels away the four taps are (1 = crisp; 2 or 3 = smoother)
+uniform int   uAoTaps;           // occlusion: how many taps a pixel takes, 1 to 32 (a uniform: the row is dragged, nothing compiles)
 /* palette: a loaded gradient strip if present, else the built-in IQ cosine palette */
 vec3 palette(float s){
   if (uUseGradient == 1) return texture(uGradient, vec2(fract(s), 0.5)).rgb;
@@ -1804,16 +1805,40 @@ float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.005
    A tap whose surface is far in front of or behind this one counts less: one depth layer cannot
    know what is behind it, and a foreground arm should not darken the wall behind it.
    The spiral turns with the pixel and with uSampleN, so a still's samples add up to a fine
-   sampling and no blur pass is needed. Returns 0 (open) upward. */
+   sampling and no blur pass is needed. Returns 0 (open) upward.
+   TWO NUMBERS OF IT ARE THE USER'S (2026-10-12): the radius (uLookA.y, a share of the picture's
+   height, never under 4 pixels) and the tap count (uAoTaps, 10 unless asked). The count is a
+   uniform under a loop bound of 32, so neither row compiles anything. More taps take grain out
+   of a single frame; a gathered still looks the same, because its samples already turn the
+   spiral.
+   MEASURED 2026-10-12 (debug/scratch/ao-rows/, git-ignored; RTX 5070 Ti, ANGLE d3d11):
+     - AT 10 TAPS THE PICTURE IS THE ONE IT WAS WHILE THE COUNT WAS A CONSTANT, BUT FOR THE LAST
+       BIT OF TWO DIVISIONS. This pass alone, the old shader text against this one on the same
+       G-buffer (6 views at 256 and 512, both normal modes, the picture and the occlusion alone,
+       6 sample indices, with and without jitter: 576 pictures): 301 of 94,371,840 pixels differ,
+       each by one level of 255, at most 5 in one picture. As floats a fifth of the values differ,
+       by 3.4e-7 at most. The cause is the two divisions by the count: with the old text's loop
+       made to stop at a uniform but still dividing by the constant 10.0, every float is the same.
+       A constant divisor is folded by the shader compiler; a uniform is divided by as the frame
+       runs. (Whole pictures cannot show it: a grainy view's march does not repeat from page to
+       page, grep FIRST MINUTE.)
+     - THE COUNT COSTS LITTLE. One frame (api.timeThumb, march and shading) at 1024 x 1024, two
+       sessions: 29.7 to 30.2 ms at 10 taps and 30.1 to 30.5 at 32 at the box starter "Arches";
+       28.1 to 28.6 and 28.5 to 28.7 at the "Slicing" place. That is 0.3 to 0.5 ms for 22 more
+       taps a pixel; at 512 x 512 it does not show (8.2 and 7.5 ms at either count). At 10 the
+       uniform costs what the constant did (29.9 to 30.1 and 28.1 to 29.2). The march is the
+       frame. */
 float occlusion(ivec2 c, float Lc, vec3 rdC, vec3 n){
-    const int TAPS = 10;
+    const int MAX_TAPS = 32;
+    float taps = float(uAoTaps);
     float px = uFovScale / uRes.y;
     float Rpx = max(uLookA.y * uRes.y, 4.0);
     float rot = 6.2831853 * fract(ign(vec2(c)) + float(uSampleN) * 0.61803399);
     float jit = fract(ign(vec2(c) + 17.0) + float(uSampleN) * 0.75487767);
     float occ = 0.0;
-    for (int i = 0; i < TAPS; i++) {
-        float f = (float(i) + jit) / float(TAPS);
+    for (int i = 0; i < MAX_TAPS; i++) {
+        if (i >= uAoTaps) break;
+        float f = (float(i) + jit) / taps;
         float r = 1.5 + Rpx * f * f;
         float a = rot + float(i) * 2.3999632;
         vec3 D; float dL;
@@ -1822,7 +1847,7 @@ float occlusion(ivec2 c, float Lc, vec3 rdC, vec3 n){
         float h = dot(D, n) / max(d, 1e-9);                       // sine of the tap's elevation above the tangent plane
         occ += max(0.0, h - 0.06) * (1.0 - smoothstep(1.5, 4.0, d / (r * px)));
     }
-    return 2.2 * occ / float(TAPS);
+    return 2.2 * occ / taps;
 }
 /* ── SHADOW FROM DEPTH ──
    Walk from this pixel's hit point toward the key light, in steps that grow geometrically, and at
@@ -2277,7 +2302,7 @@ const us = (g => ({ g:g('uG'), origin:g('uOrigin'), res:g('uRes'), right:g('uRig
   useGradient:g('uUseGradient'), lightMode:g('uLightMode'), falloffRel:g('uFalloffRel'), guideTex:g('uGuideTex'),
   look:g('uLook'), view:g('uView'), sampleN:g('uSampleN'), planeN:g('uPlaneN'), depthRange:g('uDepthRange'), splitX:g('uSplitX'),
   compare:g('uCompare'), farLook:g('uFarLook'), lookA:g('uLookA'), lookB:g('uLookB'), lookC:g('uLookC'), haze:g('uHaze'),
-  mat:g('uMat'), fillDir:g('uFillDir'), kickDir:g('uKickDir'), fillCol:g('uFillCol'), kickCol:g('uKickCol'), nrmTap:g('uNrmTap') }))(n => gl.getUniformLocation(shadeProg, n));
+  mat:g('uMat'), fillDir:g('uFillDir'), kickDir:g('uKickDir'), fillCol:g('uFillCol'), kickCol:g('uKickCol'), nrmTap:g('uNrmTap'), aoTaps:g('uAoTaps') }))(n => gl.getUniformLocation(shadeProg, n));
 /* ════════ THE NEW LOOK ════════
    look.mode 1: GMT's lighting on the G-buffer, with the lights hung off the surface in view.
    look.mode 0 is the classic shading (one camera-fixed light, no shadows), kept as it was.
@@ -2325,10 +2350,10 @@ const us = (g => ({ g:g('uG'), origin:g('uOrigin'), res:g('uRes'), right:g('uRig
    21° its own ridges leave almost all of it in shadow; and the fill and kicker carry half of
    GMT's colour (tint 0.5; #ff8800 and #0088ff in linear light at tint 1). */
 const look = { mode: 1, view: 0, compare: 0, split: 0.5,
-  ao: 1.0, aoRadius: 0.12, shadow: 1.0, soft: 0.05, shadowLen: 0.6, haze: 0.0, hazeCol: [0.03, 0.05, 0.07],
+  ao: 1.0, aoRadius: 0.12, aoTaps: 10, shadow: 1.0, soft: 0.05, shadowLen: 0.6, haze: 0.0, hazeCol: [0.03, 0.05, 0.07],
   key: 3.0, sky: 0.3, rough: 0.75, metal: 0.2, refl: 0.6, diffuse: 1.0, sat: 1.0, exposure: 1.0,
   keyElev: 40, keyTurn: 0, keyAz: 152, fillAz: -40, fillElev: 21,
-  fill: 0.5, fillCol: [1.0, 0.246, 0.0], kick: 0.25, kickCol: [0.0, 0.246, 1.0], tint: 0.5, nrmTap: 1 };   // tint: 1 = GMT's light colours, 0 = all lights white · nrmTap: how many pixels away normals-from-depth read their neighbours
+  fill: 0.5, fillCol: [1.0, 0.246, 0.0], kick: 0.25, kickCol: [0.0, 0.246, 1.0], tint: 0.5, nrmTap: 1 };   // tint: 1 = GMT's light colours, 0 = all lights white · nrmTap: how many pixels away normals-from-depth read their neighbours · aoRadius, aoTaps: grep OCCLUSION FROM DEPTH
 api.look = look;
 api.setLook = (o)=>{ Object.assign(look, o); accumReset = true; };
 const RIG_N = 32, rigPx = new Float32Array(RIG_N * RIG_N * 4);
@@ -2560,6 +2585,7 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
   if (newLook) {
     gl.uniform3fv(us.planeN, rig.n); gl.uniform2f(us.depthRange, rig.near, rig.far);
     gl.uniform4f(us.lookA, look.ao, look.aoRadius, look.shadow, look.haze);
+    gl.uniform1i(us.aoTaps, Math.max(1, Math.min(32, Math.round(look.aoTaps) || 10)));   // 32 is the shader's loop bound (grep MAX_TAPS)
     gl.uniform4f(us.lookB, look.key, look.sky * 0.33, 0, look.sat);
     gl.uniform4f(us.lookC, 0, look.soft, look.shadowLen, look.exposure);
     gl.uniform3fv(us.haze, look.hazeCol);
@@ -3553,6 +3579,8 @@ const CTLS = [
   {t:'rng', l:'light colour', note:'New look. How coloured the fill light and the kicker are. 1 = the orange and blue of a fresh GMT scene; 0 = white.', g:()=>look.tint, min:0,max:1,step:0.05, fmt:v=>v.toFixed(2), s:v=>{look.tint=v; accumReset=true;}},
   {t:'rng', l:'shadows', note:'New look. Shadows of the key and the fill, found in the depth buffer: only what is in the picture can cast one.', g:()=>look.shadow, min:0,max:1,step:0.05, fmt:v=>v.toFixed(2), s:v=>{look.shadow=v; accumReset=true;}},
   {t:'rng', l:'occlusion', note:'New look. Darkens crevices and pits: how much of the open sky the surroundings of each point hide.', g:()=>look.ao, min:0,max:2,step:0.05, fmt:v=>v.toFixed(2), s:v=>{look.ao=v; accumReset=true;}},
+  {t:'rng', l:'occl. radius', note:'New look. How far round each point the occlusion looks, as a share of the picture\'s height. Small = crevices only; large = whole cavities.', g:()=>look.aoRadius, min:0.02,max:0.5,step:0.01, fmt:v=>v.toFixed(2), s:v=>{look.aoRadius=v; accumReset=true;}},
+  {t:'rng', l:'occl. samples', note:'New look. More samples = less grain in a moving frame, and more time. A gathered still looks the same.', g:()=>look.aoTaps, min:4,max:32,step:1, s:v=>{look.aoTaps=v; accumReset=true;}},
   {t:'rng', l:'sky', note:'New look. Strength of the sky dome that lights whatever the key does not reach.', g:()=>look.sky, min:0,max:2,step:0.05, fmt:v=>v.toFixed(2), s:v=>{look.sky=v; accumReset=true;}},
   {t:'rng', l:'roughness', note:'New look. Low = a tight, bright highlight; high = a broad soft sheen. The roughness of a GMT material.', g:()=>look.rough, min:0.1,max:1,step:0.05, fmt:v=>v.toFixed(2), s:v=>{look.rough=v; accumReset=true;}},
   {t:'rng', l:'haze', note:'New look. Fades the far part of the view toward a dark blue. Scaled to the depth actually in view.', g:()=>look.haze, min:0,max:1,step:0.05, fmt:v=>v.toFixed(2), s:v=>{look.haze=v; accumReset=true;}},

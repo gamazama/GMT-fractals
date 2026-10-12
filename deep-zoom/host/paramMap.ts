@@ -151,6 +151,8 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     look('lightTint', 'tint'),
     look('shadows', 'shadow'),
     look('occlusion', 'ao'),
+    look('occlusionRadius', 'aoRadius'),
+    look('occlusionSamples', 'aoTaps'),
     look('sky', 'sky'),
     look('roughness', 'rough'),
     look('haze', 'haze'),

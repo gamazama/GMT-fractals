@@ -9,7 +9,8 @@
  *         a `look` row names its field; a row without a push says why.
  *   push  a value reaches the module through the setter its row names, converted by the feature's
  *         own converter; an unchanged value is not sent again; the joint pushes (colour, light,
- *         phase) always carry all their values.
+ *         phase) always carry all their values; the occlusion's radius and sample count are look
+ *         fields (2026-10-12).
  *   constant  (2026-10-12) the Julia constant's three number rows go in the formula's own call only
  *         when they say another constant than the module holds; rows that merely show a constant
  *         that came with a view send nothing, and rows put back onto one send its exact strings
@@ -53,6 +54,13 @@
  *     row that is changed sends the three numbers ...", "constant: a drag from there sends numbers ...",
  *     and the limit of eight in "constant: the ninth ..." (that line went red with the second break,
  *     for the lookup, not for the count).
+ * 2026-10-12, THE OCCLUSION'S TWO ROWS (`dzLight.occlusionRadius`, `dzLight.occlusionSamples`), one
+ *   break in deep-zoom/host/paramMap.ts, restored byte for byte (sha-256) and green again:
+ *   - the samples row's look field misspelt (`look('occlusionSamples', 'aoTaps')` -> `'aoTap'`)
+ *     -> 1 red: "push: the occlusion's radius and sample count go as the look fields aoRadius and
+ *     aoTaps, one setLook and nothing else, and read back" (the fake saw
+ *     setLook({ aoRadius: 0.3, aoTap: 24 })). The "read: with the module at its defaults ..." line
+ *     stayed green: a look field the module does not hold has no read-back to compare.
  */
 import { DZ_PARAM_ROWS, DZ_PARAM_FEATURES, DZ_PARAM_ROW_BY_ID, defaultParams, paramId, readParams } from '../../deep-zoom/host/paramMap.ts';
 import { createParamPusher } from '../../deep-zoom/host/looseParams.ts';
@@ -74,7 +82,7 @@ function makeApi() {
         detail: 1, reach: 1, power: 8, phase: [0, 0] as [number, number], color: 0, cscale: 1, light: 0, falloff: 4,
         normals: 2, land: false, frame: 320, accum: true, lookMode: 1,
     };
-    const look: Record<string, unknown> = { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, sky: 0.3, rough: 0.75, haze: 0 };
+    const look: Record<string, unknown> = { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, aoRadius: 0.12, aoTaps: 10, sky: 0.3, rough: 0.75, haze: 0 };
     const lever = { stepRelax: 0, capRelax: 1, mode: 'auto' as 'auto' | 'deep' | 'f32', hitRefine: 0 };
     const ray = { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 };   // the module's own start values (core.js: `let rayAsk`)
     let normalDetail = 0;
@@ -222,6 +230,12 @@ console.log('[3] push');
     rig.clear();
     p.push({ 'dzLight.keyElevation': 55, 'dzLight.haze': 0.25 });
     check(JSON.stringify(rig.of('setLook')) === '[[{"keyElev":55,"haze":0.25}]]', 'push: look values go in one setLook under the module’s field names', JSON.stringify(rig.of('setLook')));
+    rig.clear();
+    // The occlusion's two rows (2026-10-12): look fields like the rest, so a drag is one setLook and no compile.
+    p.push({ 'dzLight.occlusionRadius': 0.3, 'dzLight.occlusionSamples': 24 });
+    check(JSON.stringify(rig.of('setLook')) === '[[{"aoRadius":0.3,"aoTaps":24}]]' && rig.calls.length === 1
+        && readParams(rig.api)['dzLight.occlusionRadius'] === 0.3 && readParams(rig.api)['dzLight.occlusionSamples'] === 24,
+        'push: the occlusion\'s radius and sample count go as the look fields aoRadius and aoTaps, one setLook and nothing else, and read back', JSON.stringify(rig.calls));
     rig.clear();
     p.push({ 'dzFormula.iterations': 40, 'dzFormula.autoIterations': false });
     check(JSON.stringify(rig.of('setIters')) === '[[40]]' && JSON.stringify(rig.of('setAutoIters')) === '[[false]]', 'push: iterations and auto iterations have their own setters');

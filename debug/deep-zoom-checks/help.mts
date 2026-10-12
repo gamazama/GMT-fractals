@@ -198,6 +198,8 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Julia from this place', 'deep-zoom/components/JuliaHere.tsx', 'Julia from this place\n'],
     ['Shading', 'deep-zoom/features/light.ts', "SHADING_OPTIONS, 'Shading'"],
     ['Light type', 'deep-zoom/features/light.ts', "LIGHT_TYPE_OPTIONS, 'Light type'"],
+    ['Occlusion radius', 'deep-zoom/features/light.ts', "label: 'Occlusion radius'"],
+    ['Occlusion samples', 'deep-zoom/features/light.ts', "label: 'Occlusion samples'"],
     ['Plain', 'deep-zoom/features/colour.ts', "label: 'Plain'"],
     ['Gradient', 'deep-zoom/features/colour.ts', "label: 'Gradient'"],
     ['Mapping', 'deep-zoom/features/colour.ts', "label: 'Mapping'"],

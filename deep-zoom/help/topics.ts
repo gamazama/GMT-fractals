@@ -232,7 +232,8 @@ The three tabs on the right change how the picture looks, never where you are. \
 ## Light
 - **Shading**: Classic is one light fixed to the camera, with no shadows. New has lights that follow the surface in view, with shadows.
 - **Light type**: Direct, Lamp (a light at the camera that fades with distance) or Both. \`L\` steps through them.
-- The other rows place the key light and set the shadows, the sky and the haze.
+- The other rows place the key light and set the shadows, the occlusion, the sky and the haze.
+- **Occlusion radius** is how far round each point the occlusion looks. **Occlusion samples**: more of them take the grain out of a picture that is moving.
 
 ## Colour
 - **Plain** is one colour over the whole surface. **Gradient** takes a colour from the gradient for each point.

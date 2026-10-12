@@ -227,6 +227,10 @@ export interface DzLook {
     view?: number;
     compare?: number;
     ao?: number;
+    /** The occlusion's radius, as a share of the picture's height (0.12 at the start). */
+    aoRadius?: number;
+    /** The occlusion's taps a pixel (10 at the start; the shader takes 1 to 32). */
+    aoTaps?: number;
     shadow?: number;
     haze?: number;
     sky?: number;
