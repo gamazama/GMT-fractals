@@ -15,11 +15,12 @@
  *     engine's animation tick (`engine.animation`, engine/animation/modulationTick.ts). The
  *     timeline does not play without it, LFO panel or not.
  *   - PauseControls, BucketRender: the renderer has no pause yet and keeps its own tiled export.
- *   - The tutorial and What's New: later stages, each when a renderer handle stands behind
- *     it. (The palette suite came in stage 5: registerFeatures.ts, setup.ts. The render dialog
- *     came in stage R6a, for PNG frames into a folder, and video files in R6b: routeRender.tsx.
- *     The session - the scene kept across a reload while Settings > Files > Autosave is on -
- *     came 2026-10-12: session.ts, the last call of the chain below.)
+ *   - (What came later, each in its own file: the palette suite in stage 5, registerFeatures.ts
+ *     and setup.ts. The render dialog in stage R6a, for PNG frames into a folder, and video files
+ *     in R6b: routeRender.tsx. The session - the scene kept across a reload while Settings >
+ *     Files > Autosave is on - on 2026-10-12: session.ts. Help's own topics, What's New and the
+ *     first-run guide the same day: help/installDeepZoomHelp.tsx and tutorial/firstDive.ts, the
+ *     last call of the chain below.)
  *   - The File menu's two autosave rows ("Autosave", "Restore Last Session"): they are app-gmt's,
  *     reading and writing app-gmt's keys, and are taken off this app's menu below.
  *   - `engine/plugins/camera/presetField`: not imported, with the Camera plugin.
@@ -53,10 +54,8 @@ import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
 import { installMenu, menu } from '../engine/plugins/Menu';
 import { installHud } from '../engine/plugins/Hud';
-import { installHelp } from '../engine/plugins/Help';
-import { setHelpTopicsLoader } from '../data/help/registry';
-import { gmtSupportConfig } from '../engine-gmt/support';
-import { feedbackMenuItem, registerFeedbackUI } from '../engine-gmt/feedback';
+import { installDeepZoomHelp } from './help/installDeepZoomHelp';
+import { installFirstDive } from './tutorial/firstDive';
 import { StatusChip } from './components/StatusChip';
 import { DepthReadout } from './components/DepthReadout';
 import { hud } from '../engine/plugins/Hud';
@@ -174,19 +173,14 @@ try {
     // One line the first time a depth is passed (the telemetry store drives it).
     startMilestones();
 
-    // @engine/help, minimal: the "?" menu with Show Hints (and its H key),
-    // Send Feedback and Support GMT. No topic links until this app has topics
-    // (stage 4, deep-zoom/help/): `hideTopicLinks` drops Getting Started and
-    // Keyboard Shortcuts, and the empty loader keeps GMT's fractal-renderer
-    // help — the default source — out of this app's context menus.
-    // installHelp is idempotent: stage 4 replaces this call, it does not add one.
-    setHelpTopicsLoader(() => Promise.resolve({}));
-    registerFeedbackUI();
-    installHelp({
-        hideTopicLinks: true,
-        support: gmtSupportConfig(),
-        extraItems: [feedbackMenuItem()],
-    });
+    // @engine/help, on this app's own topics: the "?" menu with Getting Started,
+    // Keyboard Shortcuts (a page written from the shortcuts registry when it is
+    // read), Show Hints and its H key, Send Feedback, What's New with its dot,
+    // "Show the intro again" and Support GMT. The topics are a lazy chunk; the
+    // loader set here also keeps GMT's fractal-renderer help - the default
+    // source - out of this app's context menus. The `/` key that opens Help is
+    // registered with the app's other keys (hotkeys.ts).
+    installDeepZoomHelp();
 
     // The renderer's state in the top bar's centre: engine badge + depth.
     // Store-free (it reads the telemetry store beside the host), registered
@@ -241,6 +235,11 @@ try {
     // back here - unless a link just opened, which is what was asked for on this load - and is
     // kept from here on. Off (the default) this restores nothing and writes nothing.
     installDzSession({ preempted: linkOpened });
+    // The first-run guide: the engine's tutorial card, lesson 1, "The first dive". On a first
+    // visit it starts by itself when the deep renderer is ready - not on a visit that opened a
+    // link, whose place is what was asked for. <TutorialRunner /> and <TutorialOverlay /> are
+    // mounted in DeepZoomApp.
+    installFirstDive({ preempted: linkOpened });
 } catch (err) {
     console.error('[deep-zoom] The app failed to start, before the first render.', err);
     bootError = err;

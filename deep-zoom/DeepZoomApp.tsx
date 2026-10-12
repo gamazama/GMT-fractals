@@ -19,9 +19,14 @@
  *     the picture is drawn by a tick (DeepZoomSurface.tsx), and <RenderLoopDriver/> is the only
  *     thing in this app that calls `runTicks`. Without it the picture never draws.
  *     Mount exactly one driver (two is the double-run bug, ADR-0003).
+ *   - <TutorialRunner/> + <TutorialOverlay/>: the engine's tutorial, which draws the first-dive
+ *     lesson's card (deep-zoom/tutorial/firstDive.ts). Mounted ONCE and for the app's whole life:
+ *     the runner keeps its step's listeners until the lesson ends, and an unmount in the middle
+ *     of a lesson would leak them (engine/plugins/tutorial/runner.ts, header). With no lesson
+ *     active both render nothing.
  *
- * What is not here yet: the tutorial runner and overlay. (<TimelineHost/>, the feature overlay
- * host and <SceneFileDropZone/> came with stages 2 and 3 and are mounted below.)
+ * (<TimelineHost/>, the feature overlay host and <SceneFileDropZone/> came with stages 2 and 3,
+ * the tutorial's two with the first-run guide; all are mounted below.)
  *
  * ONE SELECTOR HERE IS FOR ITS RE-RENDER ONLY: `advancedMode`. The Diagnostics tab is in the dock
  * in Advanced mode only (panels.ts), and the engine's <Dock> works out which tabs to draw when it
@@ -51,6 +56,7 @@ import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
+import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { SettingsHost } from '../components/SettingsAccess';
 import { MobileViewportShell } from '../engine/components/MobileViewportShell';
 import { ToastHost } from '../engine/components/ToastHost';
@@ -144,6 +150,9 @@ export const DeepZoomApp: React.FC = () => {
             <TimelineHost />
             <SceneFileDropZone />
             <HelpOverlay />
+            {/* The first-run guide's card (the engine's tutorial; nothing while no lesson is active). */}
+            <TutorialRunner />
+            <TutorialOverlay />
 
             <SettingsHost />
 

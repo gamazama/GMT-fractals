@@ -14,6 +14,9 @@
  * in the same jump, as a Mandelbox card pressed from the bulb switches the formula (`jumpTo`).
  *
  * Registered as `dz-starters` in main.tsx; panels.ts places it at the top of Locations.
+ *
+ * `runStarter` is exported for the first-dive lesson, whose first card has a button that runs one
+ * of these cards (deep-zoom/tutorial/steps.tsx): the same jump and the same dive, not a copy.
  */
 import React from 'react';
 import { STARTERS } from '../data/starters';
@@ -27,7 +30,8 @@ import { getHost } from '../host/current';
 /** Frames to let the renderer draw the start view before the dive reads its distance. */
 const SETTLE_FRAMES = 6;
 
-async function runStarter(starter: Starter): Promise<void> {
+/** A card's whole action: the jump to its start view, then the dive to its depth (a place: the jump alone). */
+export async function runStarter(starter: Starter): Promise<void> {
     const target = starter.look ? { view: starter.view, look: starter.look, depth: String(starter.startDepth) }
         : starter.formula ? { view: starter.view, formula: starter.formula, depth: String(starter.startDepth) }
         : starter.view;

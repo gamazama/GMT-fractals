@@ -511,8 +511,10 @@ export function installLocations(): void {
         },
         onReset: jumpHome,
         // Digits recall and Ctrl+digit saves - not while a fly key or a look drag is held: a
-        // finger slipping from W onto 1 must not throw the camera to another place.
-        slotShortcuts: { count: 9, category: 'Locations', when: () => !isFlying() },
+        // finger slipping from W onto 1 must not throw the camera to another place. The two
+        // prefixes are what Help's shortcuts page prints for these keys (it is written from the
+        // registry: deep-zoom/help/shortcutsPage.ts): "Go to location 1 to 9".
+        slotShortcuts: { count: 9, category: 'Locations', when: () => !isFlying(), savePrefix: 'Save this view as location', recallPrefix: 'Go to location' },
         menu: {
             menuId: 'locations',
             slot: 'left',

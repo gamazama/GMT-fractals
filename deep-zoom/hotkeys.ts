@@ -23,6 +23,11 @@
  *   Look        F G detail; [ ] iterations; I auto iterations; - = power; V colouring; L light type;
  *               O overlays.
  *   View        ` Advanced mode; Tab Fly / Orbit.
+ *   Help        / opens Help on its first topic, and closes it when it is open.
+ * Help's own Keyboard Shortcuts page is WRITTEN FROM THIS REGISTRY when it is read
+ * (deep-zoom/help/shortcutsPage.ts): a key added here is on it with its `description` and under
+ * its `category`, and no list anywhere else has to follow. The topics name keys by hand, and
+ * `npm run check:deep-zoom-help` fails for a key they name that is no longer registered here.
  * Keys that act in this app and are registered elsewhere: the slot digits (1-9 recall, Ctrl+1-9
  * save: the state library's own, installed in locations.ts), Alt+S (save a PNG: the engine's scene
  * plugin), Ctrl+Z / Ctrl+Y (the engine's undo), H (hints: the engine's help), T (the timeline) and,
@@ -34,7 +39,6 @@
  *       by itself, and its one switch is on the Route tab (deep-zoom/trail.ts).
  *   X   the old still export. A still is File > Save Scene (PNG), Alt+S; frames are the render
  *       dialog (deep-zoom/routeRender.tsx). The renderer's own tiled export is not reachable.
- *   /   help topics. This app has none yet (main.tsx installs Help with `hideTopicLinks`).
  */
 import { shortcuts } from '../engine/plugins/Shortcuts';
 import { useEngineStore } from '../store/engineStore';
@@ -47,6 +51,7 @@ import { colourFromRenderer, colourToRenderer } from './features/colour';
 import { LIGHT_TYPE_OPTIONS } from './features/light';
 import { OVERLAYS_OPTIONS } from './features/inspect';
 import { iterationCeiling } from './features/formula';
+import { DZ_TOPIC } from './help/ids';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 const store = () => useEngineStore.getState();
@@ -82,6 +87,12 @@ const toggleCameraMode = (): void => {
     showToast(next === DZ_MODE_ORBIT
         ? 'Orbit: drag turns about the point under the pointer, the wheel or a middle drag flies to it, right drag moves it, Q E roll. Tab: Fly'
         : 'Fly: W A S D, Q E roll, drag to look, the wheel sets the speed. Tab: Orbit', 'info', 4000);
+};
+/** Help, on its first topic; pressed with Help open, it closes it. The topic is named by its id
+ *  (a string): the topics themselves are a lazy chunk this file must not import. */
+const toggleHelp = (): void => {
+    if (store().helpWindow.visible) store().closeHelp();
+    else store().openHelp(DZ_TOPIC.flying);
 };
 const focusDiveField = (): void => {
     const field = document.querySelector<HTMLInputElement>('[data-dz-dive-exponent]');
@@ -121,4 +132,6 @@ export function registerDeepZoomHotkeys(): void {
     // a row in Settings (deep-zoom/settings.ts): a key alone is a switch nobody can find.
     add('advanced-mode', '`', toggleAdvancedMode, 'Advanced mode on / off (shows the advanced rows of each tab and the Diagnostics tab)', 'View');
     add('camera-mode', 'Tab', toggleCameraMode, 'Camera mode: Fly / Orbit', 'View');
+
+    add('help', '/', toggleHelp, 'Help: open it, or close it', 'Help');
 }

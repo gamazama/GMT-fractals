@@ -1,0 +1,276 @@
+/**
+ * deep-zoom/help/topics.ts - this app's help: the topic map handed to `setHelpTopicsLoader`
+ * (./installDeepZoomHelp.tsx) in place of GMT's fractal-renderer topics. LAZY: this file is
+ * `import()`ed when Help is first opened, and nothing in the main bundle may import it (a topic
+ * is named from there through ./ids.ts).
+ *
+ * OWNER REVIEW: every word here is a first draft, written on 2026-10-12 from the app as it was
+ * that day - the header of each file a sentence speaks of, and the buttons' own names on screen -
+ * and not from the plan or from the old prototype's Help, whose keys and panels are gone. Keep it
+ * that way: a sentence here that the app does not do is worse than no sentence.
+ *
+ * WHAT IS HERE
+ *   Seven topics under Getting Started (the first one is their parent, and what the "?" menu's
+ *   Getting Started and the `/` key open): flying and orbiting, depth, places, routes, rendering,
+ *   the formulas, light colour and quality. Keyboard Shortcuts, which is NOT written here: its
+ *   text is made from the shortcuts registry each time it is read (./shortcutsPage.ts). What's New.
+ *
+ * RULES OF THIS FILE (`npm run check:deep-zoom-help` holds the first four, and the list of words
+ * the fifth means)
+ *   - BACKTICKS MEAN A KEY, and nothing else: `B`, `Ctrl+Z`, `Esc`. Every one must be a key that
+ *     is registered today (deep-zoom/hotkeys.ts and the engine's own) or a fly key (./flyKeys.ts),
+ *     under the name the shortcuts page prints it by. A number, a file name or a setting is never
+ *     put in backticks.
+ *   - IN THE SEVEN TOPICS, BOLD MEANS A NAME ON SCREEN - a button, a row, a tab, a heading - spelled
+ *     as it is there, or a movement of the mouse ("Drag the picture"). The check holds each name
+ *     against the source file that draws it, so a renamed button turns the check red; a new bold
+ *     name has to be added to the check's list with its file. (What's New bolds for emphasis.)
+ *   - Every topic has an id from ./ids.ts, and every id there has a topic.
+ *   - A category must be one the help browser orders (types/help.ts `HelpSection['category']`).
+ *   - No word a first-time user cannot follow: the picture comes from "the deep renderer", and
+ *     how it works is not this file's subject.
+ *   - JULIA MODE: say what the switch and the button do. Do not say how deep a Julia set can be
+ *     flown: nothing has measured it.
+ *
+ * Rendered by components/HelpBrowser.tsx's small markdown: `##` / `###` headings, `- ` bullets,
+ * `**bold**`, backticks, `> ` muted asides, `---` rules. No tables. In the reading pane the
+ * browser puts a parent's children in order of their TITLES; the sidebar keeps the order below.
+ *
+ * WHAT'S NEW: newest entry first, under a `## <DZ_VERSION> — <title>` heading, and change
+ * deep-zoom/version.ts in the same edit - that is what relights the dot on the "?" button. Short:
+ * at most eight one-line bullets an entry, what a user can now do, real numbers.
+ */
+import type { HelpSection } from '../../types/help';
+import { DZ_TOPIC } from './ids';
+import { shortcutsMarkdown } from './shortcutsPage';
+
+const topic = (t: HelpSection): [string, HelpSection] => [t.id, t];
+
+export const DZ_HELP_TOPICS: Record<string, HelpSection> = Object.fromEntries([
+    topic({
+        id: DZ_TOPIC.flying,
+        category: 'Getting Started',
+        title: 'Flying and orbiting',
+        content: `
+Deep Zoom is a 3D fractal you fly into, 77 decades deep. A decade is ten times closer.
+
+## Fly mode
+The app starts in Fly mode.
+- \`W\` \`S\` go forward and back, \`A\` \`D\` left and right, \`Space\` up and \`C\` down.
+- **Drag the picture** to look. The further you drag from where you began, the faster the turn.
+- \`Q\` \`E\` roll.
+- Hold \`Shift\` to go four times as fast.
+- **The wheel on the picture** sets the fly speed.
+
+The speed follows what is in front of you: slow near a surface, fast in open space. So one speed setting works at every depth.
+
+## Orbit mode
+\`Tab\` switches between Fly and Orbit.
+- **Drag** turns the camera about the point under the pointer.
+- **The wheel** flies to the point under the pointer, or back from it. A middle drag does the same by hand.
+- **Right drag** drags the point under the pointer: the camera moves sideways.
+- \`Q\` \`E\` roll. The other fly keys do nothing here.
+
+## Getting back
+- \`Ctrl+Z\` undoes a flight: the camera goes back to where it took off.
+- \`Backspace\` goes back to the view before the last jump.
+- \`Home\` is the start view.
+
+> A drag that looks the wrong way up: Settings (the gear) has Invert look Y.
+`,
+    }),
+    topic({
+        id: DZ_TOPIC.depth,
+        category: 'Getting Started',
+        parentId: DZ_TOPIC.flying,
+        title: 'Depth',
+        content: `
+The number at the top left of the picture is the depth: how far the camera is from what is in the middle of the picture. The Mandelbulb is about 2 across, so a depth of 1e-6 is half a millionth of it.
+
+Each step of 1 in the exponent is ten times closer: one decade. Under the number the readout says how many decades are left, and what you have passed if the fractal were as wide as the observable universe: the Earth at 1e-20, a grain of sand at 1e-30, an atom at 1e-37.
+
+## The scale
+The column at the right edge of the picture is the whole range, 1e0 at the top and 1e-77 at the bottom, with a marker where you are. Click it to dive to that depth.
+
+## Dive
+- Type an exponent into **Dive to 1e-** and press **Dive**. \`J\` puts the cursor in the field.
+- A dive flies straight ahead until the surface is that close, so point the camera at something first.
+- \`Esc\` or **Stop** ends a dive, and so does a fly key that moves the camera. A drag or a roll steers it.
+
+## How deep it goes
+- 1e-50 is as deep as the picture has been checked against a second, independent calculation. Deeper works too; the readout says when you are past the checked depth.
+- 1e-77 is the floor. The numbers the deep renderer counts with end there, and no dive goes below it.
+
+\`O\` switches what is drawn over the picture: everything, the depth readout alone, or nothing.
+`,
+    }),
+    topic({
+        id: DZ_TOPIC.places,
+        category: 'Getting Started',
+        parentId: DZ_TOPIC.flying,
+        title: 'Places',
+        content: `
+A place is where the camera is and which formula it is in. Light, colour and quality are not part of a place: jumping to one leaves them as they are.
+
+## Ready-made
+The **Locations** tab opens with three sets of cards.
+- **Starter dives** jump to a start view and dive from there to the depth on the card.
+- **Mandelbox** and **Kept places** are places to jump to.
+
+## Your own
+- \`B\`, or **Save this view**, adds the view to **My locations**, with a picture and its depth as the name. Double-click the name to change it.
+- Click a row to go there. The list is in order of depth.
+- The first nine you saved are numbered: \`1\` to \`9\` go to them, and \`Ctrl+1\` to \`Ctrl+9\` replace one with the view on screen. Not while you are flying.
+- Every jump is one undo step, and \`Backspace\` takes you back.
+
+## Sharing
+At the foot of the tab:
+- **Copy location** and **Paste location** carry one place as text.
+- **Copy link** makes a link that opens this view with its light and colour.
+- **Export all** saves My locations as one file, and **Import** adds the places in such a file. A file dropped on the app is added the same way.
+`,
+    }),
+    topic({
+        id: DZ_TOPIC.routes,
+        category: 'Getting Started',
+        parentId: DZ_TOPIC.flying,
+        title: 'Routes',
+        content: `
+A route is a camera move through keyframes: views you set along the way. It is kept on the timeline, and the **Route** tab lists it.
+
+## Keyframes
+- Fly to a view and press \`K\`, or **Add keyframe**. Fly on and press \`K\` again: the route now runs from the first view to the second.
+- Click a row to go to its keyframe. The buttons on a row play the leg that arrives there, replace the keyframe with the view on screen, and delete it.
+- A row is red when its leg passes through the solid. Move one of its two keyframes, or add one between them.
+- \`T\` opens the timeline, where a keyframe can be moved in time.
+
+## From the trail
+The app remembers how you fly. That is the trail, and its line on the Route tab says how deep and how long it is.
+- **Route to here** makes the route from the trail: from where it began to this view, without the dead ends. It replaces the route, and asks first when the route has keyframes you set by hand.
+- **Smoothing** sets how closely that route follows what you flew.
+- The **Trail** button switches the remembering off and on.
+
+## Timing
+- **Even pace** times every leg by its length on screen, half a decade a second.
+- **As flown** times a route made from the trail the way you flew it.
+
+## Playing
+- **Play** runs the route from the playhead to its last keyframe.
+- A fly key that moves, the wheel, or anything in Orbit mode stops it and hands you the camera where it is.
+- When the camera is not on the route, the tab says so, and **Return** puts it back.
+
+## Free look
+While a route plays in Fly mode, a drag on the picture or \`Q\` \`E\` turns the view, and the route plays on under it. The turn is gone when playback stops, unless the timeline's record button is on: then it is kept with the route, and **Clear** removes it.
+
+> A scene saved from the File menu keeps the route. A link does not carry it.
+`,
+    }),
+    topic({
+        id: DZ_TOPIC.rendering,
+        category: 'Getting Started',
+        parentId: DZ_TOPIC.flying,
+        title: 'Rendering',
+        content: `
+**Render**, on the Route tab and on the timeline, makes the route into pictures: one for every frame from the first keyframe to the last. With no route it renders the timeline as it is.
+
+## Frames or video
+- **PNG sequence (folder)** writes one PNG a frame into a folder you pick. A render you stop loses nothing: the frames written stay, and a later run can go on from them. At the end the dialog gives the ffmpeg line that makes a video of them.
+- **MP4** or **WebM** writes one video file as the render goes. **Interrupt Render** holds it; then **Resume**, **Finish** to keep what is made so far, or **Discard**. A video cannot be continued later.
+
+## Size and samples
+- The size is the long edge, 640 to 3840 px, at the shape of the picture.
+- **Samples / Frame**: more samples are cleaner and slower.
+- **Draft** sets the smallest size and 1 sample, for a quick look at the whole route before the real render.
+
+## When frames are already in the folder
+The dialog counts them and asks.
+- **Overwrite** renders every frame and replaces each file.
+- **Continue** renders only the frames that are missing. It is offered when the frames there have the same long edge.
+- **Cancel** renders nothing.
+
+The route holds the camera and nothing else, so one route can be rendered with several looks. For one still picture: **Save Scene (PNG)** in the File menu, or \`Alt+S\`.
+`,
+    }),
+    topic({
+        id: DZ_TOPIC.formulas,
+        category: 'Getting Started',
+        parentId: DZ_TOPIC.flying,
+        title: 'The formulas',
+        content: `
+The **Formula** tab chooses what is drawn. Switching the formula shows the whole of the new one from outside, and undo brings back the place you were at.
+
+## Mandelbulb
+- **Power** is the exponent in the formula, 2 to 16. 8 is the classic Mandelbulb. \`-\` \`=\` change it by 1.
+- **Phase theta** and **Phase phi** shift the formula's two angles.
+
+## Mandelbox
+- **Scale** is how much each fold scales space. Negative values give another family of shapes. Between -1.02 and 1.02 there is nothing to draw, and the slider passes over that band.
+- **Min Radius**, **Folding Limit**, **Fixed Radius** and **Pre-Rotation** shape the folds.
+- The first switch to the Mandelbox takes a few seconds, while its renderer is built.
+- The **Kleinian** card on the Locations tab is the Mandelbox with no inner radius.
+
+## Julia mode
+- **Julia mode** on: the picture is the Julia set of one point. Switching it on takes the point at the centre of the view and shows the whole of its set from outside.
+- **Julia from this place** is the same step as a button. Pressed inside a Julia set, it takes the next point from there.
+- Undo, or \`Backspace\`, brings back the place you were at.
+
+## Iterations
+- **Iterations** is the lowest count. \`[\` \`]\` change it by 1.
+- With **Auto iterations** on, the count rises by itself as you go deeper, and never falls. \`I\` switches it.
+`,
+    }),
+    topic({
+        id: DZ_TOPIC.look,
+        category: 'Getting Started',
+        parentId: DZ_TOPIC.flying,
+        title: 'Light, colour and quality',
+        content: `
+The three tabs on the right change how the picture looks, never where you are. \`H\` shows what each row does, under the row.
+
+## Light
+- **Shading**: Classic is one light fixed to the camera, with no shadows. New has lights that follow the surface in view, with shadows.
+- **Light type**: Direct, Lamp (a light at the camera that fades with distance) or Both. \`L\` steps through them.
+- The other rows place the key light and set the shadows, the sky and the haze.
+
+## Colour
+- **Plain** is one colour over the whole surface. **Gradient** takes a colour from the gradient for each point.
+- **Mapping** is what picks the colour: Orbit trap or Iterations. **Scale** is how often the gradient repeats.
+- The star beside the gradient opens My Gradients, and the button next to it the Gradient Studio.
+- \`V\` steps through Plain, Iterations and Orbit trap.
+
+## Quality
+- When the camera stops, the picture sharpens: **Accumulate** averages up to 64 samples into it.
+- **Frame size** is the long edge of the picture in pixels. **Detail** is how close rays get to the surface; \`F\` \`G\` lower and raise it.
+- **Reach** is how far a ray travels before it gives up.
+- **Hit refine** removes cuts and slices that show on a surface before the picture has sharpened.
+`,
+    }),
+    // Keyboard Shortcuts: read from the registry whenever the browser draws or searches it (./shortcutsPage.ts).
+    topic({
+        id: DZ_TOPIC.shortcuts,
+        category: 'General',
+        title: 'Keyboard Shortcuts',
+        get content(): string { return shortcutsMarkdown(); },
+    }),
+    topic({
+        id: DZ_TOPIC.whatsNew,
+        category: "What's New",
+        title: "What's New",
+        content: `
+## 0.1.0 — Deep Zoom
+- **Fly into a Mandelbulb or a Mandelbox, down to 1e-77.** Each has a Julia mode.
+- **Fly or Orbit** (\`Tab\`), or type a depth and **Dive** to it.
+- **Save places** with \`B\`; \`1\` to \`9\` go back to the first nine.
+- **Routes**: \`K\` drops a keyframe as you fly, and **Play** flies through them.
+- **Render** a route as PNG frames or a video file, up to 3840 px.
+
+### If you used the earlier prototype
+- **Drag the picture to look.** \`Q\` \`E\` roll; \`Space\` and \`C\` go up and down.
+- \`V\` is the colouring and \`O\` the overlays; \`1\` to \`9\` are saved places.
+- The trail remembers how you fly: no record key. \`Alt+S\` saves a PNG.
+`,
+    }),
+]);
+
+/** The topic map, for `setHelpTopicsLoader`. */
+export const dzHelpTopics = (): Record<string, HelpSection> => DZ_HELP_TOPICS;
