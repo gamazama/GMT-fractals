@@ -18,19 +18,29 @@
  *   - Nothing is sent before `host.ready`: the stage-2 smoke compares the feature defaults with the
  *     module's settings at ready, and a push before then would change what it reads. At ready
  *     everything is sent once - the store wins over whatever the module started with.
- *   - Params whose change rebuilds the reference orbit (class O: power, phase, iterations,
- *     precision) are sent `DZ_ORBIT_PUSH_DELAY_MS` after the last change, so a slider drag at depth
- *     rebuilds once and not once per pixel of travel. Everything else goes at once.
- *   - THE WAIT IS FOR A HAND ON A SLIDER, NOT FOR THE TIMELINE. A value the timeline writes changes
- *     every frame, so the trailing wait would never end while it plays. Whoever sets the camera for
- *     a timeline frame calls `flushHostSync()` first (`deep-zoom/route.ts`): the held values go
- *     now, and the view lands on the formula it belongs to.
+ *   - Params whose change rebuilds the reference orbit (class O: the formula's rows) are gathered
+ *     for `DZ_ORBIT_PUSH_DELAY_MS`, one frame, and go as one push: a slider that fires several
+ *     times a frame costs one push. Everything else goes at once.
+ *   - THE HOLD IS COUNTED FROM THE FIRST CHANGE AND IS NOT STARTED AGAIN BY THE NEXT ONE, so a hand
+ *     that keeps dragging sees the picture follow it (the owner, 2026-10-12: "update live during
+ *     interaction pls instead of on release"). Until that day the wait was 90 ms after the LAST
+ *     change, which a moving hand never reaches. It cost nothing to give up: the renderer rebuilds
+ *     its orbit once a frame however many values arrived (grep `orbitDirty` in renderer/core.js),
+ *     and it rebuilds it every frame of a flight anyway.
+ *   - THE TIMELINE DOES NOT WAIT EVEN THE FRAME. Whoever sets the camera for a timeline frame calls
+ *     `flushHostSync()` first (`deep-zoom/route.ts`): the held values go now, and the view lands
+ *     on the formula it belongs to.
  *   - `holdAutoIterations(true)` sends `dzFormula.autoIterations` as off whatever the store holds,
  *     until it is called with false (then the store's value goes again). The route holds it while
  *     it drives the camera: the renderer's rule only ever raises the count, so a frame's count
  *     would depend on where the playhead had been before. The store is not written.
  *   - Never write to the store from here. A value the renderer changes by itself (the iteration
  *     count, under auto iterations) is shown from telemetry, not written back.
+ *
+ * @invariant A class O value that keeps changing reaches the host while it changes, not when the
+ *   hand stops - proven by: npm run check:deep-zoom-route ("sync: a formula value that keeps
+ *   changing is sent while it changes"). Falsified 2026-10-12: the hold started again by every
+ *   change (the old trailing wait) -> that line red, never sent in 30 writes.
  */
 import { useEffect } from 'react';
 import { useEngineStore } from '../store/engineStore';
@@ -38,8 +48,8 @@ import { getHost, subscribeHost } from './host/current';
 import type { DeepZoomHost, DzParams, DzParamValue } from './host/DeepZoomHost';
 import { DZ_PARAM_FEATURES, DZ_PARAM_ROW_BY_ID, paramId } from './host/paramMap';
 
-/** How long an orbit-rebuilding value waits for the next change before it is sent. */
-export const DZ_ORBIT_PUSH_DELAY_MS = 90;
+/** How long orbit-rebuilding values are gathered, from the first change, before they go as one push: a frame. */
+export const DZ_ORBIT_PUSH_DELAY_MS = 16;
 
 const FEATURE_IDS = Object.keys(DZ_PARAM_FEATURES) as Array<keyof typeof DZ_PARAM_FEATURES>;
 
@@ -115,10 +125,8 @@ export function startHostSync(): () => void {
             else { now[id] = value; anyNow = true; }
         }
         if (anyNow) liveHost()?.setParams(outgoing(now));
-        if (anyOrbit) {
-            if (orbitTimer !== null) clearTimeout(orbitTimer);
-            orbitTimer = setTimeout(flushOrbit, DZ_ORBIT_PUSH_DELAY_MS);
-        }
+        // Not started again while one is running: see THE HOLD IS COUNTED FROM THE FIRST CHANGE.
+        if (anyOrbit && orbitTimer === null) orbitTimer = setTimeout(flushOrbit, DZ_ORBIT_PUSH_DELAY_MS);
     };
 
     const adopt = (host: DeepZoomHost | null): void => {

@@ -24,8 +24,8 @@
  *   - `group: null` means no push of `looseParams.ts` carries the value: it is shell-only, it
  *     waits on a module change named in `why`, or (the gradient) it reaches the renderer by
  *     another member of the host, named in `why`. A row that waits must not be in a panel.
- *   - Invalidation class O rebuilds the reference orbit (heavy at depth): the sync holds O pushes
- *     back while a slider is moving. A restarts the still. (A class C, "can block on a shader
+ *   - Invalidation class O rebuilds the reference orbit (heavy at depth): the sync gathers O pushes
+ *     for one frame, so a moving slider is followed (`deep-zoom/useHostSync.ts`). A restarts the still. (A class C, "can block on a shader
  *     compile", had one row, `dzQuality.bla`; both went on 2026-10-11.)
  *
  * @invariant Every param of every registered `dz*` feature has exactly one row here, and every row

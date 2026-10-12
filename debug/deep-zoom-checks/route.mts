@@ -51,6 +51,8 @@
  *                                                                             -> 2 red: "drive: at keyframe 2's frame ... to the digit" (another
  *              camera string, and a roll of -7e-18 where there is none), "play: a leg starts on the keyframe before it"
  *   - drive:   `flushHostSync()` removed from the hook                        -> 1 red: "drive: a formula value the sync was holding is sent before the frame's view"
+ *   - sync:    the hold started again by every change, as the 90 ms wait was until 2026-10-12
+ *                                                                             -> 1 red: "sync: a formula value that keeps changing is sent while it changes" (never sent in 30 writes)
  *   - heading: `heading = null` removed from the `viewSet` listener           -> 3 red: "heading: a view set by the route clears it",
  *              "a jump clears it", "a keyframe set with no move since the last jump has none"
  *   - solid:   the iteration count not handed to `estimateAtPoint`            -> 1 red: "solid: a leg is asked at 9 points, each with the count ..."
@@ -325,10 +327,19 @@ check(setViews().length === n + 1, 'drive: and a later frame, the same view, set
 // The sync's held values go before the view; the iteration rule is held off while the route drives.
 calls.length = 0;
 useEngineStore.getState().setDzFormula({ power: 5 });
-check(!calls.some((c) => c.name === 'setParams' && 'dzFormula.power' in c.patch), 'drive: (a formula value written by hand waits its 90 ms)');
+check(!calls.some((c) => c.name === 'setParams' && 'dzFormula.power' in c.patch), 'drive: (a formula value written by hand waits its frame)');
 scrub(450);
 const powerAt = calls.findIndex((c) => c.name === 'setParams' && c.patch['dzFormula.power'] === 5), viewAt = calls.findIndex((c) => c.name === 'setView');
 check(powerAt >= 0 && viewAt > powerAt, 'drive: a formula value the sync was holding is sent before the frame\'s view', `setParams at ${powerAt}, setView at ${viewAt}`);
+// A hand on a slider: thirty writes with no pause as long as the old 90 ms wait. The value has to arrive while it moves.
+calls.length = 0;
+let sentAtWrite = -1;
+for (let i = 0; i < 30; i++) {
+    useEngineStore.getState().setDzFormula({ power: 2 + (i % 2) });
+    await new Promise<void>((resolve) => setTimeout(resolve, 4));
+    if (sentAtWrite < 0 && calls.some((c) => c.name === 'setParams' && 'dzFormula.power' in c.patch)) sentAtWrite = i;
+}
+check(sentAtWrite >= 0 && sentAtWrite < 29, 'sync: a formula value that keeps changing is sent while it changes', `first seen after write ${sentAtWrite} of 30`);
 useEngineStore.getState().setDzFormula({ power: 8 });
 calls.length = 0;
 flyTo(4e-8, { yaw: -1.1, pitch: 0.2 });

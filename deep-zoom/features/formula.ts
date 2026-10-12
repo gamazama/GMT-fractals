@@ -56,7 +56,7 @@
  * INVALIDATION
  *   Every param here is class O: the renderer rebuilds its reference orbit (grep `orbitDirty` in
  *   core.js), which is heavy at depth — about one BigInt evaluation per iteration — and restarts
- *   the still. The sync layer debounces these during a drag. `autoIterations` raises no flag by
+ *   the still. The sync layer gathers these for one frame, so a drag is followed. `autoIterations` raises no flag by
  *   itself; it costs an orbit rebuild each time it raises the live count. The first switch to the
  *   Mandelbox also builds its shader variant in the background (about 2 s; the top bar says so).
  *
