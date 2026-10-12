@@ -99,12 +99,24 @@ before we start adding formulas."
    leave the box; the aim; far relax, which needs no build and causes two thirds of today's wrong
    share off the starters; resumed orbits). Step size therefore stays in the app for the
    Mandelbox. Done regardless: the whole-box card saves 51 iterations, not 14.
-4. **Julia mode and the Kleinian card** (`JULIA.md`, `CHEAP-FORMULAS.md`), with its ADR. As
-   recommended: both formulas, the box first; "Julia from this place" is the classic (the point
-   looked at becomes the constant, the whole set seen from outside); no number rows for the
-   constant in the first build, only "from this place" and paste; the bulb below about 1e-10 is
-   looked at on the GPU before anything is promised; Kleinian as a card on the box in the same
-   build. Burning on the bulb waits for the box's fold-crossing test.
+4. **Julia mode and the Kleinian card** (`JULIA.md`, `CHEAP-FORMULAS.md`). BUILT 2026-10-12,
+   `136d867d`; the ADR is drafted, not filed (`ADR-DRAFT-julia-mode.md`, with his five calls). One
+   uniform in both kernels, no new program and no new call of the kernel; the constant travels as
+   strings with the view; a Julia switch and "Julia from this place" on the Formula tab; "Kleinian,
+   scale 1.8" as a fifth Mandelbox card with no kernel line. Mandelbrot mode proven unmoved (the
+   bench's JSON, the direct proof's lines, 41 pictures, frame time, build time).
+   - **The Mandelbox's half is clean** (six direct-proof lines to 1e-30; a slatted cube from
+     outside).
+   - **The bulb's half is for him to look at**: from outside a grainy body with a halo of specks
+     (cause not known), a clean folded relief at 1.8e-7, grooves from 1e-10, streaks from 1e-20;
+     four of its direct-proof lines do not meet the bar and are printed ungated. The GPU says the
+     second reference (the orbit of the constant) is what those lines need: the study had put its
+     gain at a fifth, and `JULIA.md` still says so. Pictures: `debug/scratch/formula-next/`.
+   - In the app the mode is scratch-proven only; no smoke step was added.
+
+**After the four steps, the same night** (he: "proceed best you can with all the remaining items
+that make sense to proceed with autonomously"): the shell leftovers of session 10 that need no
+kernel work. See session 10 below for what landed.
 
 Sessions 1 to 5 are one line of work and should run in that order. 7 to 12 are independent of each other
 and of 1 to 5, except that only one session at a time may own `core.js`.

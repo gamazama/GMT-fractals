@@ -1,5 +1,12 @@
 # Julia mode in the deep zoomer - build plan
 
+> **Built 2026-10-12 (`136d867d`); two things below were corrected by the GPU.** The second
+> reference (the orbit of the constant) is worth far more than the fifth this page gives it: on
+> the GPU the plain rebase leaves 23 and 37 of 169 rays over 1e-3 where the rebase to the origin
+> leaves 0, and it is what the bulb's four ungated direct-proof lines need. And the bulb's Julia
+> set is a grainy body with a halo from OUTSIDE too, which this page did not foresee (cause not
+> known). As built, with the pictures and the owner's calls: `ADR-DRAFT-julia-mode.md`.
+
 Written 2026-10-11 after a CPU study. Nothing in the renderer or the shell has been changed for this.
 The owner's word: "take cheapest definitely, and start research on what else is cheap or easy". The plan
 page named Julia mode as the cheapest addition ("same kernel, a constant c. Not measured."). It is measured
