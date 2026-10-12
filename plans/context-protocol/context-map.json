@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-12T05:40:57.991Z",
+  "generated_at": "2026-10-12T06:34:55.893Z",
   "repo_root": "H:/GMT/workspace-gmt/stable/.claude/worktrees/deep-zoom",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
-    "files": 3907,
-    "bytes": 94243853,
-    "tokens": 14799448,
-    "loadable_tokens": 14670958,
-    "context_worthy_tokens": 7094436,
-    "source_of_truth_tokens": 5779526,
+    "files": 3918,
+    "bytes": 94343821,
+    "tokens": 14828194,
+    "loadable_tokens": 14699704,
+    "context_worthy_tokens": 7122261,
+    "source_of_truth_tokens": 5804283,
     "orientation_tokens": 26484,
-    "architecture_tokens": 1288426,
-    "reachable_union_files": 1203,
-    "reachable_union_tokens": 3978500,
+    "architecture_tokens": 1291494,
+    "reachable_union_files": 1212,
+    "reachable_union_tokens": 3995174,
     "dead_context_files": 24,
     "dead_context_tokens": 72448
   },
@@ -22,7 +22,7 @@
     "app-gmt": {
       "entry": "app-gmt/main.tsx",
       "files": 886,
-      "tokens": 2856200
+      "tokens": 2856223
     },
     "fluid-toy": {
       "entry": "fluid-toy/main.tsx",
@@ -56,8 +56,8 @@
     },
     "deep-zoom": {
       "entry": "deep-zoom/main.tsx",
-      "files": 569,
-      "tokens": 1798654
+      "files": 579,
+      "tokens": 1816503
     }
   },
   "dead_context": [
@@ -184,8 +184,8 @@
   ],
   "by_tier": {
     "root": {
-      "tokens": 1369491,
-      "files": 345
+      "tokens": 1386165,
+      "files": 354
     },
     "app-gmt": {
       "tokens": 56928,
@@ -196,8 +196,8 @@
       "files": 259
     },
     "tooling": {
-      "tokens": 6111466,
-      "files": 629
+      "tokens": 6123538,
+      "files": 631
     },
     "demo": {
       "tokens": 8972,
@@ -234,19 +234,19 @@
   },
   "by_context_class": {
     "source": {
-      "tokens": 4156226,
-      "files": 1267
+      "tokens": 4172877,
+      "files": 1276
     },
     "architecture": {
-      "tokens": 1288426,
-      "files": 335
+      "tokens": 1291494,
+      "files": 336
     },
     "data": {
-      "tokens": 6316666,
+      "tokens": 6317587,
       "files": 927
     },
     "config": {
-      "tokens": 13362,
+      "tokens": 13385,
       "files": 12
     },
     "orient": {
@@ -258,8 +258,8 @@
       "files": 620
     },
     "source-tooling": {
-      "tokens": 1609938,
-      "files": 372
+      "tokens": 1618021,
+      "files": 373
     },
     "reference-legacy": {
       "tokens": 1259856,
@@ -272,15 +272,15 @@
   },
   "by_load_policy": {
     "on-demand": {
-      "tokens": 5779526,
-      "files": 1651
+      "tokens": 5804283,
+      "files": 1661
     },
     "read-for-area": {
-      "tokens": 1288426,
-      "files": 335
+      "tokens": 1291494,
+      "files": 336
     },
     "skip": {
-      "tokens": 4778680,
+      "tokens": 4779601,
       "files": 314
     },
     "read-first": {
@@ -298,7 +298,7 @@
   },
   "tier_policy_matrix": {
     "root": {
-      "on-demand": 1198975,
+      "on-demand": 1215649,
       "read-for-area": 21614,
       "skip": 10824,
       "read-first": 9588
@@ -311,9 +311,9 @@
       "on-demand": 727660
     },
     "tooling": {
-      "on-demand": 1609999,
-      "skip": 3589161,
-      "read-for-area": 909361,
+      "on-demand": 1618082,
+      "skip": 3590082,
+      "read-for-area": 912429,
       "read-first": 2945
     },
     "demo": {
@@ -1175,16 +1175,16 @@
       "loadPolicy": "read-for-area"
     },
     {
+      "path": "deep-zoom/locations.ts",
+      "tokens": 9430,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "plans/z-index-system-design.md",
       "tokens": 9358,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
-    },
-    {
-      "path": "deep-zoom/locations.ts",
-      "tokens": 9354,
-      "tier": "root",
-      "loadPolicy": "on-demand"
     },
     {
       "path": "debug/test-gx-session.mts",
@@ -1381,6 +1381,12 @@
     {
       "path": "plans/context-protocol/scripts/context-cost.mjs",
       "tokens": 8131,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/deep-zoom-checks/help.mts",
+      "tokens": 8083,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -1895,6 +1901,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "plans/deep-zoom-shell/NEXT.md",
+      "tokens": 6256,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "debug/smoke-gradient-studio.mts",
       "tokens": 6255,
       "tier": "tooling",
@@ -2129,12 +2141,6 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "plans/deep-zoom-shell/NEXT.md",
-      "tokens": 5820,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
-    },
-    {
       "path": "data/help/topics/changelog.ts",
       "tokens": 5812,
       "tier": "gmt-app",
@@ -2144,6 +2150,12 @@
       "path": "debug/test-palette-channelcurve.mts",
       "tokens": 5760,
       "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "package.json",
+      "tokens": 5747,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -2168,12 +2180,6 @@
       "path": "components/Timeline.tsx",
       "tokens": 5726,
       "tier": "gmt-app",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "package.json",
-      "tokens": 5724,
-      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -2927,6 +2933,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "deep-zoom/help/topics.ts",
+      "tokens": 4467,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "debug/test-param-mapping.mts",
       "tokens": 4465,
       "tier": "tooling",
@@ -2987,6 +2999,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "deep-zoom/main.tsx",
+      "tokens": 4369,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "debug/test-trace-refine.mts",
       "tokens": 4356,
       "tier": "tooling",
@@ -3013,12 +3031,6 @@
     {
       "path": "deep-zoom/components/Diagnostics.tsx",
       "tokens": 4318,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "deep-zoom/main.tsx",
-      "tokens": 4311,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -8443,6 +8455,21 @@
       "lines": 307,
       "tokens": 8196,
       "structuralTokens": 10338,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/deep-zoom-checks/help.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 28660,
+      "lines": 338,
+      "tokens": 8083,
+      "structuralTokens": 10650,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -13955,10 +13982,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 5575,
-      "lines": 124,
-      "tokens": 1640,
-      "structuralTokens": 1633,
+      "bytes": 5891,
+      "lines": 128,
+      "tokens": 1733,
+      "structuralTokens": 1723,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -14040,10 +14067,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 8630,
-      "lines": 166,
-      "tokens": 2538,
-      "structuralTokens": 2466,
+      "bytes": 9292,
+      "lines": 175,
+      "tokens": 2732,
+      "structuralTokens": 2656,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -14289,6 +14316,91 @@
       ]
     },
     {
+      "path": "deep-zoom/help/flyKeys.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 3695,
+      "lines": 72,
+      "tokens": 1087,
+      "structuralTokens": 1096,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
+      "path": "deep-zoom/help/ids.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 825,
+      "lines": 21,
+      "tokens": 243,
+      "structuralTokens": 254,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
+      "path": "deep-zoom/help/installDeepZoomHelp.tsx",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 4008,
+      "lines": 82,
+      "tokens": 1179,
+      "structuralTokens": 1159,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
+      "path": "deep-zoom/help/shortcutsPage.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 9693,
+      "lines": 173,
+      "tokens": 2851,
+      "structuralTokens": 3107,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
+      "path": "deep-zoom/help/topics.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 15190,
+      "lines": 276,
+      "tokens": 4467,
+      "structuralTokens": 4490,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
       "path": "deep-zoom/host/current.ts",
       "tier": "root",
       "contextClass": "source",
@@ -14414,10 +14526,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 8670,
-      "lines": 124,
-      "tokens": 2548,
-      "structuralTokens": 2940,
+      "bytes": 9460,
+      "lines": 137,
+      "tokens": 2780,
+      "structuralTokens": 3183,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -14448,10 +14560,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 32687,
-      "lines": 596,
-      "tokens": 9354,
-      "structuralTokens": 9731,
+      "bytes": 32946,
+      "lines": 598,
+      "tokens": 9430,
+      "structuralTokens": 9810,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -14465,10 +14577,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 14679,
-      "lines": 261,
-      "tokens": 4311,
-      "structuralTokens": 4398,
+      "bytes": 14874,
+      "lines": 260,
+      "tokens": 4369,
+      "structuralTokens": 4445,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -14793,6 +14905,57 @@
       ]
     },
     {
+      "path": "deep-zoom/tutorial/firstDive.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 10556,
+      "lines": 187,
+      "tokens": 3105,
+      "structuralTokens": 3044,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
+      "path": "deep-zoom/tutorial/hostEvents.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 5352,
+      "lines": 99,
+      "tokens": 1575,
+      "structuralTokens": 1662,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
+      "path": "deep-zoom/tutorial/steps.tsx",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 4249,
+      "lines": 76,
+      "tokens": 1250,
+      "structuralTokens": 1292,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
       "path": "deep-zoom/useHostSync.ts",
       "tier": "root",
       "contextClass": "source",
@@ -14803,6 +14966,23 @@
       "lines": 160,
       "tokens": 2210,
       "structuralTokens": 2194,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
+      "path": "deep-zoom/version.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 817,
+      "lines": 15,
+      "tokens": 241,
+      "structuralTokens": 247,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43420,7 +43600,8 @@
       "reachableFrom": [
         "app-gmt",
         "gradient-explorer",
-        "gradient-explorer-next"
+        "gradient-explorer-next",
+        "deep-zoom"
       ]
     },
     {
@@ -47371,10 +47552,10 @@
       "loadPolicy": "on-demand",
       "ext": ".json",
       "reason": "config",
-      "bytes": 16599,
-      "lines": 260,
-      "tokens": 5724,
-      "structuralTokens": 6258,
+      "bytes": 16666,
+      "lines": 261,
+      "tokens": 5747,
+      "structuralTokens": 6283,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": [
@@ -50464,10 +50645,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1694089,
-      "lines": 67419,
-      "tokens": 584169,
-      "structuralTokens": 558896,
+      "bytes": 1696761,
+      "lines": 67532,
+      "tokens": 585090,
+      "structuralTokens": 559776,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -51139,12 +51320,27 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 22698,
-      "lines": 286,
-      "tokens": 5820,
-      "structuralTokens": 6595,
+      "bytes": 24396,
+      "lines": 306,
+      "tokens": 6256,
+      "structuralTokens": 7082,
       "cpt": 3.9,
       "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/deep-zoom-shell/OPEN-CALLS.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 10264,
+      "lines": 136,
+      "tokens": 2632,
+      "structuralTokens": 2953,
+      "cpt": 3.9,
+      "heavy": false,
       "reachableFrom": []
     },
     {

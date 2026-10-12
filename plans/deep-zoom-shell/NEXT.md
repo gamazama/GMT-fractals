@@ -150,6 +150,11 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
 - No design yet beyond this: one page and his yes before code.
 
 ### 4. Help and the first dive
+- BUILT 2026-10-12 (the night), for his wording: seven help topics from the app as it is, a
+  shortcuts page generated from the registry, `/` for Help, What's New (`0.1.0`), and lesson 1
+  "The first dive" as a proposal of seven cards. `OPEN-CALLS.md` call 17 has what is his to cut.
+  With it, three of the five empty rows of `PROTOTYPE-REMOVAL.md` are filled (the first-run
+  guide, the Help panel, the `/` key).
 - S4-2 and S4-3 in `BUILD-PLAN.md`. The Mandelbox, the navigation by rays and routes postdate the help
   text of the prototype: write the topics from the app as it is, not from last week's tabs.
 - What's New entries: see the memory note on the in-app changelog for where they live.

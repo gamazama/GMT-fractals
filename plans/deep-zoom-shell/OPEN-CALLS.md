@@ -5,11 +5,8 @@ Written at the end of the session that built `ROUTES.md` R5 to R7 and the kernel
 numbers are, and what the orchestrator recommends. Nothing here is decided. Branch `deep-zoom-tool`,
 local, 140 commits ahead of `main`, never pushed (his rule: "we push after 1-12").
 
-**State of the tree when this was written.** Clean at `b510ae9a` except for the help builder's
-unfinished work (`deep-zoom/help/`, `deep-zoom/tutorial/`, `deep-zoom/version.ts` and edits to
-`DeepZoomApp.tsx`, `StarterDives.tsx`, `hotkeys.ts`, `locations.ts`, `main.tsx`): the session
-that started it verifies and commits it; do not touch those files until `git status` is clean.
-The two dev servers (3410 the working tree, 3420 the fly tree) belong to that session and stop
+**State of the tree.** Clean: the help work that was unfinished when this page was first written
+is verified and committed (see call 17). The two dev servers (3410 the working tree, 3420 the fly tree) belong to that session and stop
 with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 
 ## A. The kernel
@@ -87,8 +84,23 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
     fractal-toy still show those two app-gmt rows in their File menus.
 16. **The Diagnostics tab**: the renderer's accuracy gate has been on all along (a one-pixel
     readback twice a second while a still gathers). Should the shell start with it off?
-17. **Help, the shortcuts page, What's New and the first-dive lesson** were still being built when
-    this was written: their words are his to cut. See the commit that lands them.
+17. **Help, the shortcuts page, What's New and the first-dive lesson are built** (the commit after
+    `df202f04`; `deep-zoom/help/`, `deep-zoom/tutorial/`, `check:deep-zoom-help`). All of it is
+    wording for him to cut:
+    - Seven help topics written from the app as it is, and a Keyboard Shortcuts page generated
+      from the registry each time it is read; `/` opens and closes Help.
+    - What's New, version `0.1.0`, name "Deep Zoom": five bullets on what the app does and three
+      for people who used the prototype (`deep-zoom/help/topics.ts`).
+    - **The lesson is a PROPOSAL**: neither D9 nor the plan row lists its steps. "The first dive",
+      seven cards, each advancing on the real deed: a dive to 1e-6; fly with W and a drag; B saves
+      the view; K drops a keyframe; fly on and K again; Play on the Route tab; a closing card.
+      A first visit shows it once the renderer is ready (not on a share-link visit); "Show the
+      intro again" is in the "?" menu. With the card up W still flies and a drag still looks
+      (verified in the app).
+    - Found beside it: the starter "Surface" toasts "Stopped at 2.11e-5" although the dive
+      arrives; the engine's tutorial switches hints ON when a lesson ends, whatever they were;
+      the app still says "perturbation" in a toast and the top-bar badge, and one card is named
+      "Past f64".
 18. Found, not fixed: after File > Load Scene the project is named "mandelbulb-deepzoom"; the
     engine's dock does not notice a `showIf` flip by itself (worked round in `DeepZoomApp.tsx`);
     smoke stage 3's dive overshot once in 7 runs of one night.
