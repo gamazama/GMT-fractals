@@ -191,6 +191,18 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
     reproduce and measure before any fix.
 30. "sometimes the timing for a route marker is too long and no way to adjust it".
 31. "route markers still missing thumbnails" (13's keyframes cut from a trail).
+32. Not a route matter, the same morning: "another pressing matter we havent discussed is ambient
+    occlusion-we need options or defaults that inmprove its quality". Today it is read from the
+    depth buffer: 10 taps a pixel out to 0.12 of the picture's height, no smoothing pass (a
+    still's 64 samples average it; one flying frame is grainy), and Strength is its only row
+    (grep `OCCLUSION FROM DEPTH` in `renderer/core.js`). Put to him, cheapest first: rows for
+    the radius and the tap count; a depth-aware smoothing pass; a better estimator in the same
+    taps; marched occlusion as GMT's (kernel work). Recommended: the rows first. Sheets for his
+    eye: `debug/scratch/ao-sheet/` (`ao-radius-*.png`: 0.04 / 0.12 / 0.30; `ao-taps-*.png`: 10
+    against 32 taps on one flying frame). What looks wrong to him: asked, not yet answered.
+    Seen beside it and not explained: in that scratch capture the whole bulb's PICTURE from
+    outside came out as specks with a halo while its occlusion channel was whole
+    (`ao-radius-whole-bulb.png`), the look the bulb's Julia set has from outside (2a).
 
 ## G. The build queue as it stood when the calls of A and B were in (2026-10-12)
 
@@ -201,3 +213,6 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 - The renderer's CPU ray: the navigation on the Mandelbox steps by the whole scalar estimate (6).
 - GMT's export: 10, 11, 12 and the 0-byte file.
 - Formulas (session 12): KaliBox's CPU still, then Burning on the bulb and KaliBox (5).
+- The look: occlusion (32), once he has said what looks wrong.
+- Running when this was written: a builder on the Julia constant's rows, and a CPU-only study
+  that writes `BURNING-KALIBOX.md`.
