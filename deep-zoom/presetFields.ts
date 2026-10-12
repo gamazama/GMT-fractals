@@ -34,6 +34,27 @@
  *     must not disagree with the store).
  *   - This file does not import the store: `deserialize` is given `get`.
  *   - A loaded view ends the trail (`trailEnds` in deep-zoom/trail.ts), before it is handed over.
+ *   - A LOADED VIEW THAT NO READY RENDERER HAS TAKEN YET IS STILL THE SCENE'S VIEW (2026-10-12).
+ *     The renderer's shader takes some seconds to build, and until it has, the renderer stands at
+ *     its start view and the loaded one is parked. `serialize` answers the parked view, as it was
+ *     loaded, for exactly that long. Before, it read the renderer whatever it stood at: a scene
+ *     saved in those seconds held the start view, and with the session's autosave (deep-zoom/
+ *     session.ts) a reload within seconds of a boot would have written the start view over the
+ *     place just restored - the place lost by pressing F5 twice.
+ *
+ * @invariant a view that was loaded and has not been taken by a ready renderer is what a scene
+ *   written meanwhile holds, string for string; and a view's Julia constant goes through a
+ *   scene's text and back to the renderer byte for byte - proven by: npm run
+ *   check:deep-zoom-scene-roundtrip ("parked: a scene written before the renderer is ready holds
+ *   the view that was loaded, not the renderer's start view", "scene: the Julia constant comes
+ *   back, three strings byte for byte, and reaches the renderer"). Falsified 2026-10-12: the
+ *   parked line taken out of `serialize` -> 2 red; the constant left out of what `serialize`
+ *   writes -> 5 red. The record is in that check's header.
+ * @assumption The rest of what that check reads - the camera strings and the angles of the view,
+ *   a saved location's row, every keyframe's payload, the version stamp, a renderer that mounts
+ *   later being handed the parked view - is its other "scene: ..." and "parked: ..." lines, which
+ *   pass and were not broken on purpose (the location's row and the route are other files' and
+ *   the engine's doing: deep-zoom/share.ts, deep-zoom/route.ts, `setSequence`).
  */
 import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
 import { getHost, subscribeHost } from './host/current';
@@ -107,18 +128,22 @@ function viewFromSaved(saved: DzSavedView, state: Slices): DzView {
  * (seen 2026-10-08, smoke step "a share link opens the same view").
  */
 let parked: DzView | null = null;
+/** The parked view as the scene held it: what `serialize` answers for as long as it is parked. */
+let parkedSaved: DzSavedView | null = null;
 function offer(): void {
     const host = getHost();
     const view = parked;
     if (!host || !view) return;
     host.setPendingView(view);
-    void host.ready.then(() => { if (getHost() === host && parked === view) parked = null; }, () => undefined);
+    void host.ready.then(() => { if (getHost() === host && parked === view) { parked = null; parkedSaved = null; } }, () => undefined);
 }
 subscribeHost(offer);
 
 presetFieldRegistry.register({
     key: 'dzView',
     serialize: () => {
+        // A loaded view that no ready renderer has taken yet IS the scene's view (see PITFALLS).
+        if (parked && parkedSaved) return parkedSaved;
         const host = getHost();
         if (!host) return undefined;
         const view = host.getView();
@@ -135,6 +160,7 @@ presetFieldRegistry.register({
         if (!isSavedView(saved)) return;
         trailEnds();                                    // a loaded scene is not flown to: the trail ends where the camera stands
         parked = viewFromSaved(saved, get() as Slices);
+        parkedSaved = saved;
         offer();   // a ready host applies it at once; otherwise the next ready one does
     },
 });
