@@ -55,18 +55,34 @@ time, each needing `core.js` to itself. His reason for the order: "if we need to
 rewrite (option2) and if the gains are so significant, then it would be best to get it out the way
 before we start adding formulas."
 
-1. **The ray program kept across browser restarts, and a plain picture that is a picture.** One
-   extra one-pixel draw after a background build puts the program on the browser's disk (measured:
-   ready 0.04 s after a restart where it was 20 s); the bulb's plain picture gets a pixel-sized
-   hit level, so the start view shows a small line over a real picture while it builds.
-   `ROUTES.md`, "Where the bulb's 21 to 26 seconds go".
-2. **The kernel's single call site.** The build time follows the number of copies of the kernel
-   (7 call sites, about 3 s each; one site: 5.65 s in a sketch). A SPIKE FIRST: the sketch drew
-   nothing that was checked. It goes ahead if the 41 pictures are the same within the floor and
-   the frame time on the march bench is no more than 3 % worse; otherwise the fallback is the
-   small merges (both tap sets in one loop, the two probes through one call: 14.8 s), and the
-   numbers go to him. It comes before the box's ray step because that step would otherwise take
-   the Mandelbox's 4.5 s build toward the bulb's 20.
+1. **The ray program kept across browser restarts, and a plain picture that is a picture.**
+   DONE 2026-10-11, `fecd8fec`. One extra one-pixel draw after a background build (`keepOnDisk` in
+   `core.js`) puts the program on the browser's disk: in the production build, after a browser
+   restart, ready at 0.38 s where it was 23.4 to 25.0 s; the Mandelbox's program 0.04 s where it
+   was 4.7 to 4.8 s. A first visit is unchanged by it. The bulb's plain picture took the box's
+   pixel-footprint hit level (two lines of the baseline's shader lost their `USE_BOX` guard): at
+   the start view 5.9 % of its pixels are speckle where 61 % were, so the loading notice is the
+   small line down to a depth of 1 and the card below. For him: a view that waits for ready (a
+   link, a scene) now sits under the small line over the start view's picture, then jumps.
+2. **Fewer copies of the kernel.** DONE 2026-10-12, `120023fc`, as THREE calls, not one. The
+   single call site was built first and failed on frame time (bulb views 36 to 105 % slower:
+   pixels taking taps at different loop passes make every pass cost its dearest pixel). Forms
+   measured on the way: one loop 5.7 s and +71 %; two calls 5.8 s and +5.6 % (worst +10.1 %);
+   three calls 7.62 s and -1.5 % (worst +0.8 %). The three-call form is in: the march in `main`,
+   a loop for what the march owes (the bisection, hit refine, the two probes), a loop for both
+   tap sets (grep `THREE CALLS OF THE KERNEL` in `core.js`). The production page is ready in
+   8.5 s where it took 20.5; the Mandelbox's program builds in 2.08 s where it took 4.41. Proven
+   the same: the bench's JSON byte for byte, the direct proof's lines, pass G read back to the
+   bit on 19 views, 41 pictures within the floor in three shoots of four.
+   - The fourth shoot's one off-picture (the shell frame at Power 2, 5e-20) was run down before
+     the commit: that frame rendered every two seconds, three sessions a kernel, the same night:
+     the usual picture (the same bytes as ever) in 215 of 228 renders with the kernel before
+     and 210 of 228 with this one. The same within noise. The odd-render rate itself was about
+     6 to 8 % that night where it was 2 % the afternoon before, for both kernels: it moves with
+     the machine's state, which is one more fact for `NEXT.md` session 7.
+   - Not explained, seen once: smoke stage 3's dive overshot in 1 of the builder's 7 runs.
+   - For him, if a first visit should be shorter still: the two-call form (5.8 s) is kept as a
+     file, `debug/scratch/load/step2/core.v-g2.js.txt`; it costs the bulb 5.6 % of frame time.
 3. **The Mandelbox's ray step** (`BOX-RAY-STEP.md`), with a new ADR over ADR-0135's third
    decision. As recommended to him, and built so unless he says otherwise: today's hit surface
    kept (the picture does not change; moving the hit test to the ray estimate is a look decision
