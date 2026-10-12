@@ -32,9 +32,13 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
      steps) changes nothing at Arches or Lace; at Block city it costs 24 % at Detail 1 and 38 % at
      Detail 32, for 0.24 -> 0.16 % and 1.91 -> 0.78 % of rays on the wrong surface. On the
      starters it is a cost; the gain is at scales above 2.5.
+     **NO CHANGE** (put to him 2026-10-12 as "far relax stays the default unless you say
+     otherwise", with c, 2b, 2d, 2e and 7; he answered other calls twice after it and did not
+     object).
    - c. Resumed orbits for the box (stage B) could bring the time back, but only pass counts say
      so, and pass counts are what misled the study. Spike it? *Recommended: only if he wants Step
      size gone from the app; otherwise park.*
+     **NO CHANGE: parked** (follows from a; see b).
 2. **Julia mode is in the tree** (`136d867d`); `ADR-DRAFT-julia-mode.md` has the pictures' names.
    The Mandelbox's half is clean. The bulb's is a grainy body with a halo from outside (cause not
    known), a clean relief at 1.8e-7, grooves from 1e-10, streaks from 1e-20.
@@ -45,14 +49,27 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
      With it he raised f: "I dont see how to set the julia constant's coordinate."
    - b. Build the second reference (the orbit of the constant)? The GPU says it is what the
      bulb's four ungated proof lines need. *Recommended: yes.*
+     **NO CHANGE: parked** (see 1b). The recommendation was turned round when it was put to him:
+     he found the mode flies well, and the second reference would not cure the grain from
+     outside or the streaks at depth.
    - c. The row's switch takes the point looked at, as the button does. Or should the switch
      re-enter with the last constant? *Recommended: the switch re-enters with the last constant
      when there is one; the button takes the point.*
+     NOT ANSWERED (asked twice, 2026-10-12).
    - d. Switching Julia on puts the iteration floor back to 14. *Recommended: keep.*
+     **NO CHANGE: kept** (see 1b).
    - e. The Kleinian card, whose whole-view proof line is a little over the bar. *Recommended:
      keep.*
+     **NO CHANGE: kept** (see 1b).
    - f. Number rows for the constant, so it can be keyframed (a morph). *Recommended: a later
      stage, after he has flown the mode.*
+     **ANSWERED 2026-10-12: "2f yes"**, to this concept: three rows (X, Y, Z) under the Julia
+     switch, shown while it is on; typed or dragged they change the set live, and they can be
+     keyframed; a constant taken from a deep place keeps its full precision until a row is
+     touched; the button stays. To build.
+     With it: "if possible changing the formula paramters to update live during interaction pls
+     instead of on release". **DONE, `4e5b0016`**: the formula rows follow a drag (the sync's
+     hold was 90 ms after the last change; it is one frame from the first).
 3. **The kernel has three call sites** (ready in 8.5 s on a first visit, frame time unchanged). A
    two-call form builds in 5.8 s and costs the bulb 5.6 % of frame time
    (`debug/scratch/load/step2/core.v-g2.js.txt`). *Recommended: stay at three.*
@@ -64,6 +81,9 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 5. **What comes after Julia among formulas** (`CHEAP-FORMULAS.md`): Burning on the bulb (it needs
    the fold-crossing test the box's ray step built), KaliBox (a CPU still first). *Recommended:
    nothing more until 1 and 2 are settled.*
+   **ANSWERED 2026-10-12: "5 yes burning and kalibox".** Both, for session 12. KaliBox wants its
+   CPU still first; Burning leaned on the fold-crossing test of the box's ray step, which is not
+   in the tree (1a).
 6. **The navigation on the Mandelbox** could step its CPU ray by the whole scalar estimate
    instead of half: half the steps, 0 to 0.8 % of rays more than 5 % past the careful ray.
    *Recommended: yes, as a small measured change.*
@@ -71,24 +91,33 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 7. Left open by him, recorded in `NEXT.md` session 7: why power 8 needs the depth rule for
    iterations; the odd single render (about 2 to 8 % of renders of a grainy frame, by the
    machine's state; he could not see a difference in the sheets).
+   **NO CHANGE: both stay parked in session 7** (see 1b).
 
 ## B. Routes, free look, rendering
 
 8. **Free look**: his to fly ("will have to fly and see what you mean"). A pass that ends turned
    leaves the rest of the route turned; an unrecorded turn snaps back. Ease back, or leave?
+   **ANSWERED 2026-10-12: "8 is cool!"** Left as it is. What he found while flying it is section F.
 9. **fluid-toy now holds frames back for the codec** (a builder's addition: without it nothing
    reached the file before the end). *Recommended: keep.*
+   **ANSWERED 2026-10-12: "9 fine".** Kept.
 10. **GMT's Continue is offered only while the export version holds still**, and in a keyed scene
     moving the playhead between two runs changes it. Leave what the timeline drives out of the
     version? It changes versioning for videos and bucket renders too. *Recommended: yes, through
     the registry that already keeps the locked focus out.*
+    **ANSWERED 2026-10-12: yes.** To build.
 11. **A continued GMT render has another grain** because the worker's sample counter restarts
     with a run. Seeding it from the frame's own number would make a continued plain render exact
     and leave single runs as they are. *Recommended: yes; it is small.*
+    **ANSWERED 2026-10-12: yes.** To build.
 12. **GMT's video path raises the version before the file picker**: backing out of the picker
     leaves a version number with no file. *Recommended: fix with 10.*
+    **ANSWERED 2026-10-12: yes.** To build, with 10.
 13. Small, recorded: Draft has no way back; an Overwrite stopped halfway leaves a mixed folder;
     GMT's Discard leaves a 0-byte file; keyframes cut from a trail show a number and no picture.
+    **ANSWERED 2026-10-12, two of the four:** "0-byte file goes" (with 10 to 12), and "route
+    markers still missing thumbnails" (section F). Draft's way back and the mixed folder: not
+    answered, left recorded.
 
 ## C. The shell (built the night of 2026-10-12; each was decided without him)
 
@@ -152,3 +181,23 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
     tab, the locations file or the help; and its `deep-zoom/` row still names the prototype.
 25. What's New: GMT's entry for the export fixes is drafted on `main` (`915bebd6`, not pushed);
     the deep zoomer's own comes with 17.
+
+## F. Found by him while flying routes, 2026-10-12 (his words; each is to build or to look at)
+
+26. "the route is missing a reset (delete all keys/restart route)".
+27. "also missing a way to reset the view". What he means by it is asked, not assumed.
+28. "missing a way to select/delete multiple route markers".
+29. "after deleting route markers, the interpolation goes off and through objects". A fault:
+    reproduce and measure before any fix.
+30. "sometimes the timing for a route marker is too long and no way to adjust it".
+31. "route markers still missing thumbnails" (13's keyframes cut from a trail).
+
+## G. The build queue as it stood when the calls of A and B were in (2026-10-12)
+
+- Done: the formula rows follow a drag (`4e5b0016`).
+- Shell, the formula: the Julia constant's rows (2f).
+- Shell, routes: 26 to 31.
+- Shell, the loading notice: the large card whenever a view is parked (4).
+- The renderer's CPU ray: the navigation on the Mandelbox steps by the whole scalar estimate (6).
+- GMT's export: 10, 11, 12 and the 0-byte file.
+- Formulas (session 12): KaliBox's CPU still, then Burning on the bulb and KaliBox (5).
