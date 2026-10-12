@@ -3253,6 +3253,12 @@ function burnDeltaJS(Z, d, neg){
    writes it - c = the point and Julia mode, both signs of scale, with a rotation, from outside, at 1e-8 to 1e-30,
    and 3e-51 from an abs plane - proven by: npm run check:deep-zoom-kalibox-orbit ("kalibox twin = exact ..."
    lines). Falsified 2026-10-12: the opposite-side case cut in boxOrbitJS -> 12 red (that file's header).
+   @invariant on the GPU the USE_KALI kernel computes what that CPU orbit computes and what a fixed-point orbit of
+   the explicit point gives - c = the point and Julia mode, from outside and at 1e-8 to 1e-30, with a rotation, at
+   a negative scale, and with the camera 3e-51 from an abs plane - proven by: npm run smoke:deep-zoom-direct (the
+   nine "kalibox, ... GPU vs twin: 0 over 1e-3 ... GPU vs direct: 0 over 1e-3 ... PASS" lines). Falsified
+   2026-10-12: the opposite-side case cut in the shader's kaliFoldD -> all nine FAIL, exit 1 (the record is in
+   debug/deep-zoom-direct-check.mts).
    @assumption the rotation's matrix, MinRad2 held at 1, the two formulas' numbers kept apart and the two far
    distances are right: that check has a line for each ("rotation: ...", "seam: ...", "far: ..."), none broken
    on purpose. */

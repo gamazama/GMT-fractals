@@ -149,8 +149,8 @@ import { createDeepZoom as createCore } from './core.js';
 import type { DeepZoomBoxParams, DeepZoomCoreInstance, DeepZoomCoreOptions } from './core.js';
 
 export type { DeepZoomBoxParams };
-/** Which formula the renderer draws (grep `THE FORMULA SEAM` in core.js). */
-export type DzFormulaKind = 'mandelbulb' | 'mandelbox';
+/** Which formula the renderer draws (grep `THE FORMULA SEAM` and `KALIBOX` in core.js). */
+export type DzFormulaKind = 'mandelbulb' | 'mandelbox' | 'kalibox';
 
 /** A camera view. The fields a recorded keyframe has, so a bookmark and a path frame are
  *  interchangeable, plus the roll. (Shapes copied from deep-zoom-prototype/bridge.ts, the iframe prototype's seam.) */
@@ -443,7 +443,18 @@ export interface DeepZoomApi {
      *  ... GPU vs twin: 0 over 1e-3 ... GPU vs direct: 0 over 1e-3 ... PASS", five lines). Falsified
      *  2026-10-09: three breaks, each exit 1 - one case of the box fold in the shader (the three deep
      *  lines FAIL), the sphere fold's shell case (two FAIL), and the fold distances uploaded as plain
-     *  floats (only the fold-plane line FAILS). The record is in that script's header. */
+     *  floats (only the fold-plane line FAILS). The record is in that script's header.
+     *  'kalibox' (added 2026-10-12; grep `KALIBOX` in core.js) is GMT's KaliBox: the Mandelbox's step with
+     *  abs(z) + a translation in the box fold's place, drawn by the box's kernel, march and rules with a shader
+     *  variant of its own (about 2 s to build, from the first switch to it). Its four numbers (`kaliScale`,
+     *  `kaliMinRad2`, `kaliTrans`, `kaliRot`) are kept apart from the box's. With c = the point it has no whole
+     *  object: `dz.wholeObject()` then scans a cube set by hand.
+     *  @invariant KaliBox's orbit on the CPU equals an exact fixed-point orbit of the same point under GMT's
+     *  map - proven by: npm run check:deep-zoom-kalibox-orbit ("kalibox twin = exact ..." lines; the break is
+     *  in that file's header).
+     *  @invariant its GPU kernel computes what that CPU orbit computes and what a fixed-point orbit of the
+     *  explicit point gives - proven by: npm run smoke:deep-zoom-direct (the nine "kalibox, ... PASS" lines;
+     *  the break is in that script's header). */
     setFormula(kind: DzFormulaKind, params?: DeepZoomBoxParams): void;
     /** What is selected, and the box's parameters as they are held (after the limits); `julia` and `c`: JULIA
      *  MODE (grep the name in core.js) and its constant, for either formula. `cNum` is the same constant as
@@ -457,9 +468,9 @@ export interface DeepZoomApi {
      *  orbit of the explicit point under z -> fold(z)^n + c gives - proven by: npm run smoke:deep-zoom-direct (the
      *  ten gated "burning, ..." lines) and npm run check:deep-zoom-burning-orbit. Falsification records in
      *  debug/deep-zoom-direct-check.mts and debug/deep-zoom-checks/burning-orbit.mts. */
-    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number]; julia: boolean; c: [string, string, string]; cNum: [number, number, number]; burning: boolean; burnMix: number };
-    /** Whether the deep shader of the SELECTED formula is there: the Mandelbox's variant, or with BURNING (grep the
-     *  name in core.js) on, the bulb's variant with the fold. */
+    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number]; kaliScale: number; kaliMinRad2: number; kaliTrans: [number, number, number]; kaliRot: number; julia: boolean; c: [string, string, string]; cNum: [number, number, number]; burning: boolean; burnMix: number };
+    /** Whether the deep shader of the SELECTED formula is there: the Mandelbox's variant, KaliBox's, or with BURNING
+     *  (grep the name in core.js) on, the bulb's variant with the fold. */
     formulaState(): 'building' | 'on' | 'failed';
     setAutoIters(on: boolean): void;
     autoIters(): boolean;

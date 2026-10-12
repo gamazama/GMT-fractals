@@ -19,6 +19,15 @@ export interface DeepZoomBoxParams {
     fixedR?: number;
     /** Pre-rotation about x, y, z in radians, applied in that order every iteration. */
     rot?: [number, number, number];
+    /** KALIBOX (grep the name in core.js): its own four, kept apart from the Mandelbox's and kept from call to
+     *  call. Scale may be negative, |scale| held as the box's (start: 1.8). */
+    kaliScale?: number;
+    /** The sphere fold's inner radius, squared (GMT's MinRad2). Held between 1e-9 and 1 (start: 0.3492). */
+    kaliMinRad2?: number;
+    /** The translation added after the fold (start: 0.0365, -1.9183, 0.0365). */
+    kaliTrans?: [number, number, number];
+    /** The rotation before the fold: one angle in radians about the axis (1, 1, 0). */
+    kaliRot?: number;
     /** BURNING (grep the name in core.js), the Mandelbulb's: at the top of every iteration a negative coordinate
      *  is multiplied by 1 - 2 `burnMix` (0 to 1; 1 = the plain abs). Kept from call to call, also while the box
      *  is drawn. The first time it is on, a variant of the ray program builds in the background. */
@@ -105,8 +114,8 @@ export interface DeepZoomCoreOptions {
     /** Default 'mandelbulb' (the page). 'mandelbox': start on the Mandelbox (grep `THE FORMULA SEAM` in
      *  core.js); its deep shader variant starts to build at once, beside the bulb's. The box steps by the
      *  page's rule: the ray march is the bulb's, stays as it was asked and applies again when the bulb is
-     *  selected. `api.setFormula` changes it later. */
-    formula?: 'mandelbulb' | 'mandelbox';
+     *  selected. `api.setFormula` changes it later. 'kalibox': start on KaliBox (grep `KALIBOX`), likewise. */
+    formula?: 'mandelbulb' | 'mandelbox' | 'kalibox';
     /** The box's parameters from the start (they are kept while the bulb is drawn). */
     formulaParams?: DeepZoomBoxParams;
     /** Called once if the browser takes the WebGL context away (`instance.contextLost` turns true).

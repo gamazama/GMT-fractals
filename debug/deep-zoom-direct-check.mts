@@ -199,6 +199,36 @@
  * NOT seen red: the reference's signed coordinates uploaded as plain floats (the view beside the plane is there
  * for it, as the Mandelbox's fold-plane view is; that break was not spent), the direct pass after a rebase with
  * the fold left out, and the read-back of Burning beside each line.
+ *
+ * ADDED 2026-10-12: KALIBOX (grep KALIBOX in deep-zoom/renderer/core.js), a last section of nine lines. GMT's
+ * KaliBox is the Mandelbox's step with abs(z) + a translation in the box fold's place, drawn by a VARIANT of the
+ * box's program (USE_BOX + USE_KALI): the fold as a delta by Burning's case table (`kaliFoldD`), the reference's
+ * signed coordinates read from the box's rows 2 to 4 (a folding limit of 0), each a mantissa and its own exponent.
+ * The "kalibox, ..." lines hold that kernel to it as the Mandelbox's lines hold theirs: the same grid - 13 x 13
+ * rays, the careful march's hits, two points a ray - and at each point the GPU's estimate against the CPU twin
+ * (`boxOrbitJS` with the table, itself held to an exact orbit of GMT's map by `npm run
+ * check:deep-zoom-kalibox-orbit`) and against `boxDirectHP`, a fixed-point orbit of the explicit point. The bar is
+ * the Mandelbox grids' own. Each line also checks that the module reads its KaliBox numbers back as it was told
+ * and that the Mandelbox's own numbers are where they were. Every view is printed by
+ * `KALI_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/kalibox-orbit.mts`.
+ *   ALL NINE GATED (first run: 0 points over 1e-3 on every one, the worst 5.5e-4):
+ *       Scale 1.8, c = the point      from outside (8.5 from the middle of its shapes), at 9.2e-9 and at 9.1e-31
+ *       GMT's preset (Julia mode)     from outside (36 rays meet it), at 9.8e-11 and at 9.7e-31
+ *       the same, the camera 3e-51 from the abs plane x = 0, at 9.2e-51: half the rays stand across the plane at
+ *                                     the first iteration, and the reference's coordinate is below what a plain
+ *                                     f32 holds - the case rows 2 to 4 carry an exponent of their own for
+ *       Scale 1.8 with Rotation 0.6   at 9.9e-21 (the one line the rotation has)
+ *       Scale -1.5, c = the point     at 8.4e-21
+ * What these lines do not hold: the plain-f32 copies of the fold (the baseline and the far field, which draw every
+ * view from outside), the navigation's ray, the count rule. The 105 lines above are untouched: the same to the
+ * character as before (compared with the run of the commit before).
+ * SEEN RED, 2026-10-12 (one break in deep-zoom/renderer/core.js, restored byte for byte, sha-256): the shader's
+ * opposite-side case cut (`kaliFoldD`: its return made `Z.x < 0.0 ? -d : d`: a pixel across an abs plane from the
+ * reference is folded as if it stood on the reference's side)
+ *   -> exit 1, all nine lines FAIL (70 to 337 points over 1e-3 on each; "escape flags differ 152" at Scale -1.5).
+ *   The 105 earlier lines printed as they did.
+ * NOT seen red: the reference's signed coordinates uploaded as plain floats (the view beside the plane is there
+ * for it, as the Mandelbox's fold-plane view is; that break was not spent), and the read-back beside each line.
  */
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -331,9 +361,24 @@ const BURN_VIEWS: BurnGridView[] = [
     { name: 'power 8, mix 1, Julia mode, K = (0.25, 0.1, 0.05)', power: 8, mix: 1, c: ['28948022309329048855892746252171976963317496166410141009864396001978282409984', '11579208923731620185132316204464901002111835403029097412826955913908447084544', '5789604461865810092566158102232450501055917701514548706413477956954223542272'], minRays: 60, view: { cam: ['94229599180515835181281469026992039421767283178295391478616653449384496726016', '53148940629159321404624787034588271250359280150860773870651306211715156279296', '37691839672206335621225989868048022588324101579525002899703152517684901445632'], yaw: -2.761086276477428, pitch: -0.536326162184031, iters: 22 } },   // 8.9e-11
     { name: 'power 8, mix 1, Julia mode, K = (0.25, 0.1, 0.05)', power: 8, mix: 1, c: ['28948022309329048855892746252171976963317496166410141009864396001978282409984', '11579208923731620185132316204464901002111835403029097412826955913908447084544', '5789604461865810092566158102232450501055917701514548706413477956954223542272'], minRays: 60, view: { cam: ['94229599157004323183788846110779192509408819354251213571510310628974380711936', '53148940614106342575858515783392668694613532606052368826345057073316598120448', '37691839662801730822228939704192233671973341204315324673124281153706394648576'], yaw: -2.761086276477428, pitch: -0.536326162184031, iters: 46 } },   // 8.9e-31
 ];
+/** KALIBOX's views (grep KALIBOX in deep-zoom/renderer/core.js): its numbers, Julia mode when `c` is there, each a
+ *  `view` with its count. Every one is printed by `KALI_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/kalibox-orbit.mts`,
+ *  found there by a fixed-point referee alone. */
+interface KaliGridView { name: string; params: { kaliScale: number; kaliMinRad2: number; kaliTrans: [number, number, number]; kaliRot: number }; minRays: number; gated?: boolean; c?: [string, string, string]; view: { cam: [string, string, string]; yaw: number; pitch: number; iters: number } }
+const KALI_VIEWS: KaliGridView[] = [
+    { name: 'Scale 1.8, c = the point, from outside', params: { kaliScale: 1.8, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0 }, minRays: 30, view: { cam: ['328849533433977978547896024212613236753594930876914152044700882246674654691328', '291796064878036814524279578873401080483951839554102352607852943741915915878400', '363587160205172868028177769487832899515248099226928289682835638078671031369728'], yaw: -2.3194463351493493, pitch: -0.4288507496795162, iters: 80 } },   // 8.5 from the middle
+    { name: 'Scale 1.8, c = the point', params: { kaliScale: 1.8, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0 }, minRays: 60, view: { cam: ['-82890753884846068075940485398237487021458466507875047959745622051875744382976', '15207169579895519345861709650181209222384439572613610687965313002559598755840', '-79583683397530848561097282261104995556721741755053222757031381275005855727616'], yaw: -2.3194463351493493, pitch: -0.4288507496795162, iters: 83 } },   // 9.2e-09
+    { name: 'Scale 1.8, c = the point', params: { kaliScale: 1.8, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0 }, minRays: 60, view: { cam: ['-84077710077576318884718568111730923292712544507066354381770871562169875431424', '14409824961878251740421256691966825236853715590184779899771387845119890685952', '-80861246933217607071696739763753204128738876236077036576974895804270132592640'], yaw: -2.3194463351493493, pitch: -0.4288507496795162, iters: 147 } },   // 9.1e-31
+    { name: 'GMT\'s preset (Julia mode), from outside', params: { kaliScale: 2.04348, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0 }, minRays: 30, c: ['-77476486908688269607782846778695012400687082290547348739704404086014905155584', '-150853933858375534543589835171760781994081047478212537131534536826448628416512', '-53003828848381487323855235229397735838293022472518496013430801456536079040512'], view: { cam: ['648435699728970653234383583018501230104082350193824534052565829604816942268416', '254742596322095650500663133534188924214308748231290553171005005237157177065472', '451589148025533151867523358276345077159195549212557543611785417420987059666944'], yaw: -2.5332676449712204, pitch: -0.41418057089713106, iters: 80 } },   // 7.5 from the middle
+    { name: 'GMT\'s preset (Julia mode)', params: { kaliScale: 2.04348, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0 }, minRays: 60, c: ['-77476486908688269607782846778695012400687082290547348739704404086014905155584', '-150853933858375534543589835171760781994081047478212537131534536826448628416512', '-53003828848381487323855235229397735838293022472518496013430801456536079040512'], view: { cam: ['56293890369402416053348884250747266271989799870081639805329471227469573914624', '-62476230120530206608884752925781515852518106308331733454597881217487747416064', '39204673650119581423465289947950345509852983658133461229295505498460852846592'], yaw: -2.5332676449712204, pitch: -0.41418057089713106, iters: 77 } },   // 9.8e-11
+    { name: 'GMT\'s preset (Julia mode)', params: { kaliScale: 2.04348, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0 }, minRays: 60, c: ['-77476486908688269607782846778695012400687082290547348739704404086014905155584', '-150853933858375534543589835171760781994081047478212537131534536826448628416512', '-53003828848381487323855235229397735838293022472518496013430801456536079040512'], view: { cam: ['56293890261887439627072885230302872827910838848208327158352725711507010093056', '-62476230178127515408675468007007917112069155075844091486240750010599273922560', '39204673575243079983737368283973833442619122342603026766518601591657529868288'], yaw: -2.5332676449712204, pitch: -0.41418057089713106, iters: 132 } },   // 9.7e-31
+    { name: 'GMT\'s preset (Julia mode), 3e-51 from the abs plane x = 0', params: { kaliScale: 2.04348, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0 }, minRays: 60, c: ['-77476486908688269607782846778695012400687082290547348739704404086014905155584', '-150853933858375534543589835171760781994081047478212537131534536826448628416512', '-53003828848381487323855235229397735838293022472518496013430801456536079040512'], view: { cam: ['347376267711948588916408320', '-224251312671039618643355450187496200139598024101428991917987311786183599587328', '9915702625617317120682463942914894858838628786349647476019563748018257657856'], yaw: -1.5707963267948966, pitch: -1.1144478582377877, iters: 175 } },   // 9.2e-51
+    { name: 'Scale 1.8, c = the point, Rotation 0.6', params: { kaliScale: 1.8, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0.6 }, minRays: 60, view: { cam: ['-113634369905553914175378862185752319406871351032480480943984508035286081470464', '100131914233640619728409840674231627708078138458868047380092698552978890555392', '-126221224774950842135975468769417809692398284079315213131857341002989514522624'], yaw: -2.305476600945549, pitch: -0.28259451801750224, iters: 129 } },   // 9.9e-21
+    { name: 'Scale -1.5, c = the point', params: { kaliScale: -1.5, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365], kaliRot: 0 }, minRays: 60, view: { cam: ['65805949043634075650300692263389281939459855979444224232178612207850394484736', '-36213946387851502944618016099180341693898996580856659440433522820446347591680', '77282777215159644338384559733254472843394953197297475242025658400997654921216'], yaw: 0.7292773806962719, pitch: 0.5767027150773774, iters: 180 } },   // 8.4e-21
+];
 const ORIGIN = process.env.ORIGIN === '1';
 
-let pass = 0, ran = 0, gridPass = 0, gridRan = 0, boxPass = 0, boxRan = 0, juliaPass = 0, juliaRan = 0, farPass = 0, farRan = 0, burnPass = 0, burnRan = 0;
+let pass = 0, ran = 0, gridPass = 0, gridRan = 0, boxPass = 0, boxRan = 0, juliaPass = 0, juliaRan = 0, farPass = 0, farRan = 0, burnPass = 0, burnRan = 0, kaliPass = 0, kaliRan = 0;
 const pageErrors: string[] = [];
 // DZ_HEADLESS=1: no window (same Chrome, same GPU flags).
 const browser = await chromium.launch({ channel: 'chrome', headless: process.env.DZ_HEADLESS === '1',
@@ -677,12 +722,65 @@ try {
       + `  GPU vs twin: ${String(over(twin, 1e-3)).padStart(3)} over 1e-3, worst ${worst(twin).toExponential(1)}  GPU vs direct: ${String(over(direct, 1e-3)).padStart(3)} over 1e-3, worst ${worst(direct).toExponential(1)}${r.carried ? '' : '  THE MODULE DOES NOT READ BACK ITS BURNING'}  ${v.gated === false && r.carried ? '(not gated)' : ok ? 'PASS' : 'FAIL'}`);
   }
   await page.evaluate(`(() => { window.__setFormula('mandelbulb', { julia: false, burning: false, burnMix: 1 }); window.__setPower(8); window.__setRebaseOrigin(${ORIGIN}); window.__setAutoIters(true); })()`);
+
+  // ---- KALIBOX (added 2026-10-12; see the header) ----
+  console.log('\nKALIBOX: the Mandelbox\'s kernel with the abs fold (its own variant of the box\'s program) against its CPU twin and against a fixed-point orbit of the explicit point');
+  const kaliGrid = (v: KaliGridView): Promise<any> => page.evaluate(`(async () => {
+    const w = window, v = ${JSON.stringify(v)}, G = 13, f = Math.tan(0.55);
+    const frames = (n) => new Promise((done) => { const tick = () => (n-- > 0 ? requestAnimationFrame(tick) : done()); tick(); });
+    w.__setFormula('kalibox', v.c ? { ...v.params, julia: true, c: v.c } : { ...v.params, julia: false });
+    for (let i = 0; i < 1500 && w.__formulaState() === 'building'; i++) await new Promise((r) => setTimeout(r, 40));
+    if (w.__formulaState() !== 'on') return { error: 'the KaliBox variant did not build: ' + JSON.stringify(w.__variantErr()) };
+    // the rebase to the origin is asked for, as the shell asks for it (the box's kernel has none)
+    w.__setMode('deep'); w.__setRebaseOrigin(true); w.__setFarHandOff(0.5);
+    w.__setAutoIters(false); w.__setIters(v.view.iters); w.__dz.setView({ cam: v.view.cam, yaw: v.view.yaw, pitch: v.view.pitch, iters: v.view.iters, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 });
+    w.__setSurf(360 / G);                                                   // the hit tolerance of a picture 360 rows tall, on 13 rays
+    await frames(14);
+    w.__setReach(2); w.__setMarch({ maxSteps: 16384 }); w.__setStepRelax(0.1); w.__setHitRefine(8);
+    const g = w.__readGbuf(G);
+    w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0);
+    const v0 = w.__dz.getView(), dist = w.__dz.telemetry().depth, iters = w.__dz.telemetry().iters, refE = Math.floor(Math.log2(dist));
+    const cp = Math.cos(v0.pitch), sp = Math.sin(v0.pitch), cy = Math.cos(v0.yaw), sy = Math.sin(v0.yaw);
+    const fwd = [cp * cy, sp, cp * sy], right = [Math.cos(v0.yaw + Math.PI / 2), 0, Math.sin(v0.yaw + Math.PI / 2)];
+    const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+    const pts = []; let rays = 0;
+    for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+      const i = (y * G + x) * 4, kind = Math.floor(g[i + 2] / 256) % 4;
+      if (kind !== 1 && kind !== 2) continue;
+      rays++;
+      const ux = (x + 0.5 - G / 2) / G, uy = (y + 0.5 - G / 2) / G;
+      let d = [0, 1, 2].map((j) => fwd[j] + f * (ux * right[j] + uy * up[j])); const len = Math.hypot(d[0], d[1], d[2]); d = d.map((c) => c / len);
+      w.__dz.setYawPitch(Math.atan2(d[2], d[0]), Math.asin(d[1]));
+      for (const q of w.__directCheckHP([0.5, 0.97].map((a) => Math.pow(2, g[i] + refE) * a))) pts.push({ gpu: q.gpu, twin: q.pert, direct: q.direct, escG: q.escG, escD: q.escD });
+    }
+    const held = w.__formula(), p = v.params;                              // the module reads back what it was told, and the Mandelbox's own numbers are where they were
+    const carried = held.kind === 'kalibox' && held.kaliScale === p.kaliScale && held.kaliMinRad2 === p.kaliMinRad2 && held.kaliTrans.join() === p.kaliTrans.join() && held.kaliRot === p.kaliRot && held.scale === 2 && held.minR === 0.5 && held.fold === 1;
+    w.__dz.setView(v0); w.__setSurf(1);
+    return { depth: dist, iters, rays, pts, carried };
+  })()`);
+  await page.evaluate(`window.__setFormula('mandelbox', { scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] })`);   // the Mandelbox's numbers, for the read-back beside each line
+  for (const v of KALI_VIEWS) {
+    const r = await kaliGrid(v);
+    kaliRan++;
+    if (r.error) { console.log(`kalibox, ${v.name}: ${r.error}  FAIL`); continue; }
+    const esc = r.pts.filter((q: any) => q.escG && q.escD), flags = r.pts.length - esc.length;
+    const rel = (a: number, b: number): number => Math.abs(a - b) / Math.abs(b);
+    const twin = esc.map((q: any) => rel(q.gpu, q.twin)), direct = esc.map((q: any) => rel(q.gpu, q.direct));
+    const over = (xs: number[], lim: number): number => xs.filter((x) => !(x <= lim)).length, worst = (xs: number[]): number => xs.reduce((m, x) => (x > m || !(x === x) ? x : m), 0);
+    // the bar of the Mandelbox's grids: none over 1e-2, at most a fiftieth over 1e-3 - against the twin and against the direct orbit
+    const held = r.rays >= v.minRays && flags === 0 && over(twin, 1e-2) === 0 && over(direct, 1e-2) === 0 && over(twin, 1e-3) <= 0.02 * esc.length && over(direct, 1e-3) <= 0.02 * esc.length;
+    const ok = r.carried && (v.gated === false || held);                   // a line marked `gated: false` is printed with its numbers only
+    if (ok) kaliPass++;
+    console.log(`kalibox, ${v.name} (${r.depth.toExponential(1)}, ${r.iters} iterations): ${String(r.rays).padStart(3)} rays, ${r.pts.length} points  escape flags differ ${flags}`
+      + `  GPU vs twin: ${String(over(twin, 1e-3)).padStart(3)} over 1e-3, worst ${worst(twin).toExponential(1)}  GPU vs direct: ${String(over(direct, 1e-3)).padStart(3)} over 1e-3, worst ${worst(direct).toExponential(1)}${r.carried ? '' : '  THE MODULE DOES NOT READ BACK ITS KALIBOX'}  ${v.gated === false && r.carried ? '(not gated)' : ok ? 'PASS' : 'FAIL'}`);
+  }
+  await page.evaluate(`(() => { window.__setFormula('mandelbulb', { julia: false, burning: false, burnMix: 1 }); window.__setPower(8); window.__setRebaseOrigin(${ORIGIN}); window.__setAutoIters(true); })()`);
 } finally { await browser.close(); srv.stop(); }
 
 // The historical suite only prints; as a guard for the port this one also gates.
 if (pageErrors.length) console.log(`page errors (${pageErrors.length}):\n  ` + pageErrors.slice(0, 5).join('\n  '));
 const allOk = pass === DEPTHS.length && ran === DEPTHS.length && gridPass === GRIDS && gridRan === GRIDS
   && boxPass === BOX_VIEWS.length && boxRan === BOX_VIEWS.length && juliaPass === JULIA_VIEWS.length && juliaRan === JULIA_VIEWS.length && farPass === FAR_VIEWS.length && farRan === FAR_VIEWS.length
-  && burnPass === BURN_VIEWS.length && burnRan === BURN_VIEWS.length && pageErrors.length === 0;
-if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids, ${BOX_VIEWS.length}/${BOX_VIEWS.length} Mandelbox grids, ${JULIA_VIEWS.length}/${JULIA_VIEWS.length} Julia grids, ${FAR_VIEWS.length}/${FAR_VIEWS.length} far views, ${BURN_VIEWS.length}/${BURN_VIEWS.length} Burning grids and no page errors`);
+  && burnPass === BURN_VIEWS.length && burnRan === BURN_VIEWS.length && kaliPass === KALI_VIEWS.length && kaliRan === KALI_VIEWS.length && pageErrors.length === 0;
+if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids, ${BOX_VIEWS.length}/${BOX_VIEWS.length} Mandelbox grids, ${JULIA_VIEWS.length}/${JULIA_VIEWS.length} Julia grids, ${FAR_VIEWS.length}/${FAR_VIEWS.length} far views, ${BURN_VIEWS.length}/${BURN_VIEWS.length} Burning grids, ${KALI_VIEWS.length}/${KALI_VIEWS.length} KaliBox grids and no page errors`);
 process.exit(allOk ? 0 : 1);

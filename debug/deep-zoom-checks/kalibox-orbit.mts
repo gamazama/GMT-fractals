@@ -194,9 +194,10 @@ for (const [name, p, camPos, aim] of [
     ['Scale -1.5, c = the point', { kaliScale: -1.5 }, [-3.2, -3.6, -2.7], [1.5, 0.5, 1.5]],     // (a negative scale: the solid is the octant on the other side)
     ['Scale 1.8, c = the point, Rotation 0.6', { kaliScale: 1.8, kaliRot: 0.6 }, [2.84, 2.52, 3.14], [-2.4, -1.0, -2.5]],
 ] as Array<[string, KaliParams, number[], number[]]>) {
-    const { F } = enter(p), camFix = camPos.map(fix), fwd = unit(aim.map((x, i) => x - camPos[i])), dist = Math.hypot(camPos[0] - aim[0], camPos[1] - aim[1], camPos[2] - aim[2]);
+    const { P, F } = enter(p), camFix = camPos.map(fix), fwd = unit(aim.map((x, i) => x - camPos[i])), dist = Math.hypot(camPos[0] - aim[0], camPos[1] - aim[1], camPos[2] - aim[2]);
     const O = lib.buildRefOrbit(camFix, 82), T = compare(O, camFix, fwd, 1.6 * dist, 80, F, 0.02 * dist);
     check(good(T), `kalibox twin = exact, ${name}, from ${dist.toFixed(1)} away: ${say(T)}`);
+    printPlace(`${name}, from outside`, P, { cam: camFix, fwd, D: dist, cap: 80, ownEscape: 0 });
 }
 
 // 3. the rotation is the shader's: mat3 built column by column, the vector on the left
