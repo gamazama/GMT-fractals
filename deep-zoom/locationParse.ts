@@ -20,9 +20,45 @@
  * Of a pasted `look` only the formula is kept (`look.dzFormula`): that is all a place holds. Text
  * copied before 2026-10-10 also carries the light, the colour with its gradient, the detail and
  * the march there; they are dropped here, and the place opens with what the app has.
+ *
+ * A LIST (2026-10-12). "Export all" writes every saved location as one text, `locationsToText`: a
+ * list of entries in the shape "Copy location" writes, each with its name, no thumbnails. A list
+ * that is IMPORTED - pasted, opened, or dropped on the app as a file - is read by
+ * `parseLocationList`, which is the same reader with one difference: an entry it cannot read is
+ * REFUSED BY ITSELF, with its reason, and the rest are read (`parseLocationText` refuses the whole
+ * text, which is right for one pasted place and wrong for a file of forty with one bad row). The
+ * old prototype's `deep-zoom-locations.json` is such a list: entries `{ format, version, name,
+ * depth, view }`, which the reader takes as this shell's shape with `name` as the label.
+ *   - `looksLikeLocations` says whether a text is locations AT ALL, before anything is read: what
+ *     the file claim asks (`deep-zoom/claims.ts`). A scene is never one: it holds its camera under
+ *     `dzView` and has `features`.
+ *   - `locationKey` says when two places are THE SAME PLACE for an import: the camera's three
+ *     position strings, the Julia constant when there is one, and the formula - which one, Julia
+ *     mode, and the numbers that shape it (power and phase for the bulb, the seven for the box).
+ *     Not the direction looked in, not the iteration count, not the name. `newLocations` uses it,
+ *     against the list as it stood BEFORE the import: two entries of one file that are the same
+ *     place are both added, so that an exported list imported into an empty one comes back whole.
+ *
+ * A depth is kept as text but passes through a number on the way in (`depthText`): the text the
+ * app writes (`String(depth)`) comes back as it was; `4.2e+0` typed by hand comes back `4.2`.
+ *
+ * @invariant an exported list reads back with every `cam` string and the Julia constant byte for
+ *   byte; one entry with a number-mangled camera is refused by itself and the rest are read -
+ *   proven by: npm run check:deep-zoom-location-parse ("export: the Julia constant comes back byte
+ *   for byte, and no other place gains one", "import: one entry with a mangled camera is refused
+ *   by itself, with its place in the list and its reason, and the rest are read"). Falsified
+ *   2026-10-12: the first two breaks in that check's header.
+ * @assumption `locationKey` / `newLocations` call two places the same exactly when the header says
+ *   so. The check has eight lines on it ("import: the same file again adds nothing ...", "import:
+ *   another direction of view ...", and the six after), all green; the ONE break spent on the rule
+ *   (the formula's kind taken out of the key) left all of them green - the numbers that follow it
+ *   in the key already tell the bulb's three from the box's seven - so no line is known to go red
+ *   for a broken rule. ("... the same file again adds nothing" did go red once, by the export
+ *   break: a place whose Julia constant was lost on the way is no longer the same place.)
  */
 import type { DzView } from './host/DeepZoomHost';
 import type { DzLocationState } from './locations';
+import { FORMULA_BOX, FORMULA_BULB } from './features/formula';
 
 export type ParsedLocations =
     | { ok: true; locations: DzLocationState[]; labels: Array<string | undefined> }
@@ -91,7 +127,81 @@ function one(x: unknown): { state: DzLocationState; label?: string } | string {
     return { state: { view, depth: depthText(o.depth) }, label: typeof o.name === 'string' ? o.name : undefined };
 }
 
+/** The strict reader: every entry must be a location, or the whole text is refused with the first
+ *  bad entry's reason. (The app itself reads through `parseLocationList` since 2026-10-12; this is
+ *  the same reader with that one rule on top, and what the check's older lines are written against.) */
 export function parseLocationText(text: string): ParsedLocations {
+    const r = parseLocationList(text);
+    if (!r.ok) return r;
+    const bad = r.refused[0];
+    if (bad) return { ok: false, reason: `That text is not a location: ${r.total > 1 ? `item ${bad.item}: ` : ''}${bad.reason}.` };
+    return { ok: true, locations: r.locations, labels: r.labels };
+}
+
+/** One location as the text "Copy location" writes. */
+export function locationToText(state: DzLocationState): string {
+    return JSON.stringify({ app: 'gmt-deep-zoom', view: state.view, look: state.look, depth: state.depth }, null, 1);
+}
+
+// ── a list: Export all, and what an import reads ─────────────────────────────────────────────────
+
+/** Every saved location as the text "Export all" writes: a list, each entry in the shape "Copy
+ *  location" writes with its name beside it. In the order given. No thumbnail, no id; of a look
+ *  only the formula (a place saved before 2026-10-10 still holds more: see the header). */
+export function locationsToText(rows: ReadonlyArray<{ label: string; state: DzLocationState }>): string {
+    return JSON.stringify(rows.map((row) => ({
+        app: 'gmt-deep-zoom',
+        label: row.label,
+        view: row.state.view,
+        look: row.state.look ? { dzFormula: row.state.look.dzFormula } : undefined,
+        depth: row.state.depth,
+        ...(row.state.note ? { note: row.state.note } : {}),
+    })), null, 1);
+}
+
+export type ParsedLocationList =
+    | {
+        ok: true;
+        /** The text was a list (a JSON array), whatever its length. */
+        list: boolean;
+        /** How many entries the text held, read or not. */
+        total: number;
+        /** The entries that are locations, in the text's order, and each one's name when it had one. */
+        locations: DzLocationState[];
+        labels: Array<string | undefined>;
+        /** The entries that are not, by their place in the text (from 1), each with its reason. */
+        refused: Array<{ item: number; reason: string }>;
+    }
+    /** `detail`: when the text IS JSON and nothing in it could be read, the first entry's own reason,
+     *  without the "That text ..." lead (a file's toast leads with its own words). */
+    | { ok: false; reason: string; detail?: string };
+
+/** A value that is meant as a location, readable or not: it names a camera where one of the four
+ *  shapes holds it. A scene is not one (its camera is under `dzView`, and it has `features`). */
+function meantAsLocation(x: unknown): boolean {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return false;
+    const o = x as Record<string, unknown>;
+    if (o.features && typeof o.features === 'object') return false;
+    const holdsCam = (v: unknown): boolean => !!v && typeof v === 'object' && !Array.isArray(v) && 'cam' in (v as object);
+    return holdsCam(o) || holdsCam(o.view) || holdsCam((o.state as Record<string, unknown> | undefined)?.view) || holdsCam(o.state);
+}
+
+/** Whether `text` is locations at all: JSON whose one value, or one of whose list entries, is meant
+ *  as a location. True also when none of them can be READ (a number-mangled file is still a file
+ *  of locations, and must not be handed to anything else). */
+export function looksLikeLocations(text: string): boolean {
+    let data: unknown;
+    try {
+        data = JSON.parse((text ?? '').trim());
+    } catch {
+        return false;
+    }
+    return (Array.isArray(data) ? data : [data]).some(meantAsLocation);
+}
+
+/** Text in, every location it holds out: as `parseLocationText`, but an entry that cannot be read
+ *  is refused by itself and the rest are read. Not ok only when NOTHING in the text is a location. */
+export function parseLocationList(text: string): ParsedLocationList {
     const trimmed = (text ?? '').trim();
     if (!trimmed) return { ok: false, reason: 'The clipboard is empty.' };
     let data: unknown;
@@ -100,20 +210,54 @@ export function parseLocationText(text: string): ParsedLocations {
     } catch {
         return { ok: false, reason: 'That text is not a location (it is not JSON).' };
     }
-    const items = Array.isArray(data) ? data : [data];
+    const list = Array.isArray(data);
+    const items: unknown[] = list ? data as unknown[] : [data];
     if (items.length === 0) return { ok: false, reason: 'That list holds no locations.' };
     const locations: DzLocationState[] = [];
     const labels: Array<string | undefined> = [];
+    const refused: Array<{ item: number; reason: string }> = [];
     for (let i = 0; i < items.length; i++) {
         const r = one(items[i]);
-        if (typeof r === 'string') return { ok: false, reason: `That text is not a location: ${items.length > 1 ? `item ${i + 1}: ` : ''}${r}.` };
+        if (typeof r === 'string') { refused.push({ item: i + 1, reason: r }); continue; }
         locations.push(r.state);
         labels.push(r.label);
     }
-    return { ok: true, locations, labels };
+    if (locations.length === 0) {
+        const first = refused[0];
+        const detail = `${items.length > 1 ? `item ${first.item}: ` : ''}${first.reason}`;
+        return { ok: false, reason: `That text is not a location: ${detail}.`, detail };
+    }
+    return { ok: true, list, total: items.length, locations, labels, refused };
 }
 
-/** One location as the text "Copy location" writes. */
-export function locationToText(state: DzLocationState): string {
-    return JSON.stringify({ app: 'gmt-deep-zoom', view: state.view, look: state.look, depth: state.depth }, null, 1);
+/** What makes two places the same place for an import (see the header). A place with no formula of
+ *  its own - a bare view - is a Mandelbulb's, with the power and the phase its view carries. */
+export function locationKey(state: DzLocationState): string {
+    const v = state.view;
+    const saved = state.look?.dzFormula;
+    const choice = saved ?? state.formula;
+    const kind = choice?.kind ?? FORMULA_BULB;
+    const shape = kind === FORMULA_BOX
+        ? [choice?.boxScale, choice?.boxMinRadius, choice?.boxFold, choice?.boxFixedRadius, choice?.boxRotX, choice?.boxRotY, choice?.boxRotZ]
+        : saved ? [saved.power, saved.phaseTheta, saved.phasePhi] : [v.power, v.phase[0], v.phase[1]];
+    return JSON.stringify([v.cam, v.julia ?? null, kind, choice?.juliaMode === true, shape.map((n) => (typeof n === 'number' ? n : null))]);
+}
+
+/** Which of `incoming` are not yet in `have` (by `locationKey`), as indexes into `incoming`, and how
+ *  many are already there. ONLY `have` counts: a place that comes twice in the incoming list itself
+ *  is added twice. A list may hold one place under two names - two of this app's own starter dives
+ *  begin at the same camera - and an exported list imported into an empty one must come back whole. */
+export function newLocations(have: readonly DzLocationState[], incoming: readonly DzLocationState[]): { fresh: number[]; skipped: number } {
+    const known = new Set(have.map(locationKey));
+    const fresh: number[] = [];
+    for (let i = 0; i < incoming.length; i++) if (!known.has(locationKey(incoming[i]))) fresh.push(i);
+    return { fresh, skipped: incoming.length - fresh.length };
+}
+
+/** What an import did, in the words the app says it in. */
+export function importSummary(n: { added: number; skipped: number; refused: number }): string {
+    const parts = [`${n.added} location${n.added === 1 ? '' : 's'} added`];
+    if (n.skipped > 0) parts.push(`${n.skipped} skipped (already in My locations)`);
+    if (n.refused > 0) parts.push(`${n.refused} could not be read`);
+    return parts.join(', ');
 }
