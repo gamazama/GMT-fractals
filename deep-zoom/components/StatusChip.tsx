@@ -13,7 +13,7 @@
  *     could not be built: that is the app's boot failure (the card of components/BootCard.tsx,
  *     with `DZ_RAY_FAILED_TEXT`), the host is taken down, and this chip is not on screen then.
  *   - the depth, compact: `6.40e-53`. Depth is the camera's distance to the surface.
- *   - the same for the Mandelbox's shader, about 5 seconds from the first switch to that formula
+ *   - the same for the Mandelbox's shader, about 2 seconds from the first switch to that formula
  *     (`mandelbox: building`; the box's plain picture is drawn until it is there);
  * It keeps the depth on screen whichever dock tab is open and when the picture's own overlays are
  * hidden. Package S2-5 extends it (state, live iterations, drawn size, still progress) and moves
@@ -36,7 +36,7 @@ import { useDzNavigation } from '../navigationState';
  * S2-5 moves this to `components/depthFormat.ts`; keep the two outputs above when it does.
  */
 
-const RAY_BUILDING_TITLE = 'The ray march\'s shader is being built, about 20 seconds the first time. Until it is ready the plain single-precision picture is shown and nothing deep is drawn; then the deep picture comes by itself.';
+const RAY_BUILDING_TITLE = 'The ray march\'s shader is being built, ten seconds or more the first time. Until it is ready the plain single-precision picture is shown and nothing deep is drawn; then the deep picture comes by itself.';
 const BOX_BUILDING_TITLE = 'The Mandelbox\'s renderer is being built, a few seconds the first time. Its plain single-precision picture is drawn until it is ready, then changes by itself.';
 const BOX_FAILED_TITLE = 'The Mandelbox\'s renderer could not be built on this machine. Its plain single-precision picture is drawn instead, which runs out of precision a few decades in.';
 const ENGINE_TITLE = 'Perturbation with a 256-bit reference, at every depth. "f32" shows only for the seconds that renderer takes to start.';

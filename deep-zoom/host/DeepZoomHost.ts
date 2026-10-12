@@ -131,7 +131,7 @@
  *                         the ray march's - the same program as 'deep' since 2026-10-11, said under
  *                         its own name so the shell can say WHAT is building (`compiling` for the
  *                         20 or so seconds from the first frame, then `ready`, or `failed`) - and
- *                         the Mandelbox's (about 5 s from the first switch to it; its plain picture
+ *                         the Mandelbox's (about 2 s from the first switch to it; its plain picture
  *                         is drawn meanwhile).
  *     `progress`          live but read off the module's own status line; `text` is always set,
  *                         the numbers when they can be parsed. Events from the module at M3.

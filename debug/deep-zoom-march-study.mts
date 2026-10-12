@@ -66,7 +66,7 @@
  * NEEDS the worktree's dev server (preview `dz-worktree-dev`; ENGINE_URL, default
  * http://localhost:3410) and Chrome on the real GPU. No window unless DZ_HEADLESS=0. The Chrome
  * profile is kept in debug/scratch/.march-chrome so the deep shader and its counter variant come
- * from the shader cache: about 17 s of compiling on the first run ever (and after any edit of the
+ * from the shader cache: about 8 s of compiling on the first run ever (17 to 20 s before 2026-10-12; and after any edit of the
  * deep shader), under a second afterwards.
  * The sample flight is read from the frozen page's repo (DZ_SOURCE_REPO); without it, places only.
  *

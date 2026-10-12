@@ -1200,19 +1200,6 @@ vec3 normalF32(vec3 p, float e){
         k.xyy*deF32(p+k.xyy*e) + k.yyx*deF32(p+k.yyx*e) +
         k.yxy*deF32(p+k.yxy*e) + k.xxx*deF32(p+k.xxx*e));
 }
-/* de (HDR) at ray parameter t (HDR) along f32 dir rd: δc = t·rd.
-   esc=false ⇒ the orbit did NOT escape within budget ⇒ the point is inside the
-   n-iteration surface — its de is WRAPPED GARBAGE and must be treated as a hit,
-   never trusted for stepping (the second placement-failure mechanism). */
-vec2 deAt(vec2 t, vec3 rd, int mi, out bool esc, out OrbitOut oo) {
-  Hdr3 dp = Hdr3(hdrMulF(t, rd.x), hdrMulF(t, rd.y), hdrMulF(t, rd.z));
-#ifdef USE_JET
-  gTau = t.x * exp2(clamp(t.y - uRefE, -126.0, 126.0)); gTolN = gTau * uRayTol * uPixAng;   // RAY-COHERENT ORBITS: where this sample is, and how far off it may be evaluated
-#endif
-  oo = pertOrbit(uOrbit, uOrbitLen, dp, mi);
-  esc = oo.escaped;
-  return oo.de;
-}
 /* the palette PARAMETER from the (reused) hit orbit — no extra orbit march. Pass S turns it into a
    colour (grep colorFromParam).
    1 = SMOOTH escape-time bands (continuous, not integer-stepped);
@@ -1241,11 +1228,75 @@ float octPack(vec3 n){
   vec2 q = floor(clamp(e * 0.5 + 0.5, 0.0, 1.0) * 4095.0 + 0.5);
   return q.x + q.y * 4096.0;
 }
+/* ════════ THREE CALLS OF THE KERNEL, NOT SEVEN (2026-10-12) ════════
+   pertOrbit is called from THREE places in this shader, all in main: a step of the march (loop A), what the
+   march owes and the two probes (loop B), the normal's taps (loop C). Until this day it was called from seven
+   - a step of the march, the bisection, HIT REFINE, the 3-tap normal, the 4-tap normal, probe 1, probe 2 - and
+   the Direct3D compiler gives every call of a function a copy of its own. MEASURED 2026-10-11 (RTX 5070 Ti,
+   Chrome 155 through ANGLE, each build cold and alone, the mean of three; debug/scratch/load/, git-ignored):
+   the ray program with the march's call alone built in 2.3 s and every further call cost about 3 s - 5.2 s
+   with the bisection, 9.0 with HIT REFINE, 12.3 with the 4-tap normal, 15.3 with the 3-tap, 17.7 with probe 1,
+   20.5 s with all seven. Nothing else moved it: not a loop's bound (512 -> 128, or a bound the compiler cannot
+   know), not the ring's size (8, 4 or 48 slots, or one array in place of five). With these three calls the ray
+   program builds in 7.6 s and the Mandelbox's in 2.1 s, where they took 20.3 and 4.4.
+   WHAT IS EVALUATED DID NOT CHANGE: the same orbits at the same points with the same counts, in the order the
+   seven calls made them, the same checkpoints written and resumed, the same counters under USE_STATS. It is a
+   change of control flow, not of arithmetic, and both kernels (the bulb's, the Mandelbox's) are called through
+   it. Held to that on the day, against the seven-call shader:
+   the march bench's three kept places the same to the digit (its JSON byte for byte: the wrong shares 1.73,
+   1.85 and 0.75 %, the steps and the kernel passes a ray); the direct proof's 78 lines the same to the
+   character; every pass-G draw of the pictures tool's 19 views - the thumbnail and the 100 tile draws of each
+   4-sample frame - the same to the bit, and so in further shots with the 3-tap normal, HIT REFINE, the
+   landing, the look level, the ray hit test and the page's march on, wherever each shader repeated itself.
+   NOT HELD, AND OPEN: the finished pictures. Frames that do not repeat (grep FIRST MINUTE: the cause is not
+   known) do not repeat here either - in the harness the Mandelbox's block city and the power-4 starter, each
+   shader against itself as often as against the other - and ONE MAY HAVE GOT MORE FREQUENT: the shell's first
+   picture after its wait (Power 2 at 5e-20, 640 x 360). Shot turn and turn about in one browser, four shoots
+   each, it was off its reference in 1 of 4 with the seven calls (546 pixels of 230,400) and in 4 of 4 with
+   these three (twice that same file, twice 678 pixels); in the pictures tool's own shoots with these three it
+   came off its reference in one shoot of four (678 pixels), and every other picture of the 41 stayed the same
+   to the byte or within its recorded floor. Not looked into further.
+     LOOP A  THE MARCH, as it always was, less its two inner loops. Where a step lands inside the surface (the
+             bisection's case), or hits with HIT REFINE on, it leaves and says in ph what loop B owes the ray.
+     LOOP B  WHAT THE MARCH OWES - the bisection or the refine, each a run of evaluations at the middle of a
+             bracket - and the two probes, one evaluation each. ph says which of the four a ray is here for.
+             (gRay is still what the march set: these are samples of the ray. For a probe it is 0, as it starts.)
+     LOOP C  THE NORMAL'S TAPS, both sets (three taps or four) in one loop, with gRay back at 0.
+   WHY NOT FEWER. Each of these was built first and timed (2026-10-12: the kernel's api.timeThumb at 512, turn and
+   turn about with the seven-call shader in one browser, 8 bulb views and 3 of the Mandelbox; +/- 2 % on a view):
+     - ONE call, everything a phase of one loop. Built in 5.7 s; the bulb's views ran 36 to 105 % SLOWER (71 % at
+       the mean). A GPU runs neighbouring pixels in step with each other and a pass of a loop costs what its
+       dearest pixel costs: under ray-coherent orbits a step of the march resumes an orbit and runs a few kernel
+       passes, a tap runs a whole one, and every pixel took its taps at passes of its own choosing.
+     - ONE call, the loop turning twice (the march, then every pixel's taps together): 20 to 31 % slower.
+     - TWO calls: the march with the bisection, the refine and the probes as phases of its loop, and the taps.
+       Built in 5.8 s. 16 to 22 % slower while those phases kept a bracket, a counter and a point of their own;
+       4 to 10 % (5.6 % at the mean) once they borrowed variables of the march that are dead by then. The march
+       alone in that loop ran at the old speed. So what costs is whatever lives across the march's call of the
+       kernel beside the march itself, whether or not its phase ever runs.
+     - THREE calls, this form: built in 7.6 s. The bulb's views 1.5 % FASTER at the mean, no view more than
+       0.8 % slower (seven of the eight within 1 % either way; the power-4 starter 12 % faster, why not looked
+       into); the Mandelbox's 0.3 % slower at the mean, no view more than 0.8 %. A first visit's wait for the
+       deep picture, production build: 8.6 s where it was 23.2.
+   WHAT A LATER EDIT MUST KEEP: every further call of pertOrbit in this shader is about three more seconds of a
+   first visit, so a new consumer of the kernel belongs in loop B or in loop C; and nothing that is not the
+   march's belongs in loop A, not even a variable that lives across its call.
+   HOW A SLIP BETWEEN TWO LOOPS SHOWS (three deliberate breaks, 2026-10-12: the ray's state zeroed before loop B,
+   the bisection's end not handed on, the refine's bracket lost): never in the wrong shares, never as a FAIL of
+   the direct proof. It shows in the march bench's JSON (the work a ray, the rough share) and, for the first
+   two, in a third of the pictures tool's pictures; the third in no picture (none has HIT REFINE on). So hold an
+   edit here to the JSON and to the proof's lines byte for byte against the tree before, not to their verdicts. */
+/* what loop B is asked for (ph): nothing while a ray still marches, else one of four */
+const int PH_MARCH  = 0;
+const int PH_BISECT = 1;
+const int PH_REFINE = 2;
+const int PH_PROBE1 = 3;
+const int PH_PROBE2 = 4;
 /* The near-field HDR perturbation march (capped anti-arm-skip stepping + bisection onto the
-   n-iter boundary). Shared by the render path AND probe 3 (population study) so they march
-   IDENTICALLY. Returns the surface t (HDR); sets hit, steps, de-at-hit, and tF≥0 if the ray
-   handed off to the far-field f32 segment (t>T_SWITCH). The march starts at t0: 0 = the camera
-   (always, for the probes), else a guided start, which is zeroed again if its re-check fails. */
+   n-iter boundary) is loops A and B of main. Shared by the render path AND probe 3 (population study) so
+   they march IDENTICALLY. It leaves the surface t (HDR), hit, steps, the de at the hit, and tF≥0 if the ray
+   handed off to the far-field f32 segment (t>T_SWITCH). The march starts at t0: 0 = the camera (always, for
+   the probes), else a guided start, which is zeroed again if its re-check fails. */
 /* THE LOOK LEVEL (uLookLevel > 1; an experiment of 2026-10-09, off = the page). The detail setting does two things
    through one number: it says how close a ray stops (de < pa·t, pa = a display pixel ÷ detail), and it sets how far
    apart the normal's taps stand (2·pa·t). The first is geometry - a coarse level draws a fat surface that swallows
@@ -1254,229 +1305,266 @@ float octPack(vec3 n){
    parted: the ray still stops on the fine level pa, but on its way in it crossed the coarser level pa·uLookLevel,
    and the normal is taken THERE, with taps as far apart as that level asks. tLook is that crossing (the last one
    before the hit, placed between the two march samples that bracket it, as HIT LANDING places a hit); 0 when the
-   march never stood outside the look level (then the caller backs off along the ray instead). */
-vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, out vec2 deOut, out float tF, out OrbitOut hitOrbit, out vec2 tLook) {
-  vec2 tLa = vec2(0.0); float rLa = 0.0; bool lookSet = false; tLook = vec2(0.0);
-  vec2 t = t0, tPrev = t0, cap = vec2(0.0), de = vec2(0.0), dePrev = vec2(0.0);
-  hit = false; steps = 0; tF = -1.0; bool esc = false;
-  OrbitOut oo; OrbitOut lastOO; lastOO.escaped = false;   // last surface-side orbit → reused for colour
-  int budget = PICTURE_MARCH ? uMaxSteps : 256;      // the probes referee the plain march: 256 steps, no relaxing
-#ifdef USE_JET
-  if (PICTURE_MARCH && (uRayUse & 1) != 0) budget *= 4;   // THE RAY ESTIMATE: its steps are shorter than the page's, and never relaxed with distance
-#endif
-  int refine = !PICTURE_MARCH ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);   // HIT REFINE
-#ifdef USE_JET
-  bool rayOn = PICTURE_MARCH && uRayUse != 0;        // THE RAY ESTIMATE: the probes that referee the page's march keep the page's
-  bool rayHit = rayOn && (uRayUse & 2) != 0;
-  gRay = !rayOn ? 0 : (uRayUse & 4) != 0 ? 2 : 1; gRd = rd; gCkTop = 0; gCkLast = 1048576; gCkSince = 0; gRunBase = 0; gRunPrev = 0;
-#endif
-  for (int st = 0; st < budget; st++) {
-    steps = st;
-    de = deAt(t, rd, uIters, esc, oo);
-    lastOO = oo;
-#ifdef USE_JET
-    if (rayHit && st == 0 && t0.x != 0.0 && esc && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayHit * pa) {
-      t0 = vec2(0.0); t = vec2(0.0); tPrev = vec2(0.0);    // GUIDED START re-check, by the ray hit level
-      continue;
-    }
-#endif
-    if (st == 0 && t0.x != 0.0) {
-      /* GUIDED START re-check (t0 ≠ 0 only for a guided sample). The guide is a promise that
-         nothing lies in front of t0, so the start point must be OUTSIDE the surface: escaped, and
-         not already within hit tolerance (a surface that close, this far in front of every earlier
-         hit, is one no earlier sample saw). Otherwise drop the guide — t0 is zeroed, which the
-         caller reads as "this ray marched in full" — and march from the camera. A grazing ray
-         legitimately starts with a small de, so nothing stricter than the hit test is asked. */
-      if (!esc || de.x <= 0.0 || hdrToFloat(hdrMul(de, hdrRecip(t))) < pa) {
-        t0 = vec2(0.0); t = vec2(0.0); tPrev = vec2(0.0);
-        continue;
-      }
-    }
-    if (!esc || de.x <= 0.0) {
-      /* bracket [tPrev,t] starts at the LAST (capped) step, already ≪ the cone, so the
-         w<0.25·pa early-break ends most bisections in a few iters; uBisectMax (≈12) just
-         bounds the worst lane (warp divergence makes all lanes pay the slowest). */
-      for (int b = 0; b < 32; b++) {
-        if (b >= uBisectMax) break;
-#ifdef USE_STATS
-        gBis++;
-#endif
-        vec2 tm = hdrMulF(hdrAdd(tPrev, t), 0.5);
-        bool me; OrbitOut moo; vec2 md = deAt(tm, rd, (uBisectIters > 0 ? min(uIters, uBisectIters) : uIters), me, moo);
-        if (!me || md.x <= 0.0) t = tm; else { tPrev = tm; de = md; lastOO = moo; }
-        float w = hdrToFloat(hdrMul(hdrSub(t, tPrev), hdrRecip(t)));
-        if (w < 0.25 * pa) break;
-      }
-      t = tPrev; hit = true; break;                  // escaped-side boundary point
-    }
-    if (t.x != 0.0) {
-      float ratio = hdrToFloat(hdrMul(de, hdrRecip(t)));
-      if (uLookLevel > 1.0) {                           // THE LOOK LEVEL: remember where the ray last came in through it
-        float paL = pa * uLookLevel;
-        if (ratio >= paL) { tLa = t; rLa = ratio; lookSet = false; }
-        else if (!lookSet && tLa.x != 0.0) {
-          float uL = hdrToFloat(hdrMul(hdrSub(t, tLa), hdrRecip(tLa)));
-          float g0 = rLa - paL, g1 = (ratio - paL) * (1.0 + uL);
-          tLook = hdrMulF(tLa, 1.0 + uL * clamp(g0 / max(g0 - g1, 1e-30), 0.0, 1.0)); lookSet = true;
-        }
-      }
-#ifdef USE_JET
-      if (rayHit) {                                    // THE RAY ESTIMATE as the hit test: its own level, no landing, no refine
-        if (oo.rde.x > 0.0 && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayHit * pa) { hit = true; break; }
-        ratio = 1e30;
-      } else if (rayOn && uRayFloor > 0.0 && oo.rde.x > 0.0 && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayFloor * pa) {
-        /* THE CREEP FLOOR. The page's hit test stays, but where the iterate moves far faster along the ray than the
-           scalar derivative says, the ray estimate - and with it the step - falls far below the hit level while the
-           page's estimate does not: such a ray creeps for hundreds of steps past something it is a small part of a
-           pixel from, and the GPU waits for it. Under the floor that is a hit. */
-        hit = true; break;
-      }
-#endif
-      if (ratio < pa) {
-        /* HIT LANDING (uLand, off by default — it moves the surface). A hit is accepted
-           wherever the first step with de < pa·t happens to fall: anywhere in the last step,
-           which on a grazing surface is many pixels of depth. That scatter is harmless to a
-           normal taken from the distance field and is grain to one taken from depth. Both ends
-           of the last step are known — tPrev with de ≥ pa·t, t with de < pa·t — so put the hit
-           where the line through them crosses de = pa·t. No extra orbit. Everything is a ratio
-           to tPrev, so no magnitude touches f32. */
-        if (refine == 0 && (uLand == 1 || (uLand == 2 && gl_FragCoord.x + uOrigin.x >= uLandSplit)) && tPrev.x != 0.0 && dePrev.x > 0.0) {
-          float r0 = hdrToFloat(hdrMul(dePrev, hdrRecip(tPrev)));
-          float u  = hdrToFloat(hdrMul(hdrSub(t, tPrev), hdrRecip(tPrev)));
-          float g0 = r0 - pa, g1 = (ratio - pa) * (1.0 + u);
-          t = hdrMulF(tPrev, 1.0 + u * clamp(g0 / max(g0 - g1, 1e-30), 0.0, 1.0));
-        }
-        /* HIT REFINE (uHitRefine, off by default: it moves the surface). The hit above is
-           wherever the first step with de < pa·t fell - anywhere in the last step - and the
-           steps of neighbouring rays fall in step with each other, so the depth comes out in
-           terraces that shading from the depth buffer draws as cuts and contour lines (the
-           owner's 2.76e-39 view, 2026-10-08: "slicing - a stepping issue"). Both ends of the
-           last step are known - tPrev with de >= pa·t, t with de < pa·t - so halve that bracket n
-           times, keeping one end on each side, and stand on the last hit-side point found: the
-           hit is then within step / 2^n of a crossing of the level, whatever the step pattern.
-           One orbit per halving, on rays that hit only. Measured that day, share of pixels that
-           differ from a slow march (step 0.10, 8 halvings), one sample: an ordinary 1e-17 view
-           9.9 % -> 0.9 % with 4 halvings (render time x1.44); the 2.76e-39 view 57 % -> 35 %,
-           and 2.8 % with step 0.5 and 3 halvings (x1.4), where step 0.2 alone needs x2.6 for
-           2.4 %. It cannot find a surface the march stepped clean over: that takes a smaller
-           step. HIT LANDING is the free, one-shot form of the same idea and is skipped here. */
-        if (refine > 0 && tPrev.x != 0.0) {
-          vec2 ra = tPrev, rb = t;
-          for (int r = 0; r < 12; r++) {
-            if (r >= refine) break;
-            vec2 tm = hdrMulF(hdrAdd(ra, rb), 0.5);
-            bool me; OrbitOut moo; vec2 md = deAt(tm, rd, uIters, me, moo);
-            if (!me || md.x <= 0.0) { rb = tm; continue; }     // inside the n-iteration surface: the hit side, but not a point to stand on
-            if (hdrToFloat(hdrMul(md, hdrRecip(tm))) < pa) { rb = tm; t = tm; de = md; lastOO = moo; }
-            else ra = tm;
-          }
-        }
-        hit = true; break;
-      }
-      if (hdrToFloat(t) > FAR_SWITCH) { tF = hdrToFloat(t); break; }   // hand off to f32 far-field (grep FAR HAND-OFF)
-    }
-    tPrev = t; dePrev = de;
-    float relax = uStepRelax > 0.0 ? uStepRelax : 0.85;
-    /* FAR RELAX. A ray that looks along the surface passes close to ridge after ridge on its way
-       to distant ground, and a step is never longer than the distance to the nearest of them: with
-       the detail slider up, a fifth of such a picture ran out of steps before it reached anything
-       (far-study.mjs). So beyond uFarFrom — a few of the camera's own surface distances out, past
-       everything an ordinary view contains — the step factor rises toward uFarRelax.x. A step
-       that lands inside the surface is still caught and bisected back (above); what can be lost
-       is a far feature thinner than the overshoot, which the ray then steps through: measured,
-       0.1–1.6 % of a deep view's pixels show the surface behind the one they should. The near
-       ground and every ordinary view are marched exactly as before. */
-    if (uFarRelax.x > 0.0 && PICTURE_MARCH && t.x != 0.0)
-      relax = mix(relax, max(relax, uFarRelax.x), clamp((log2(t.x) + (t.y - uRefE) - uFarFrom) / uFarRelax.y, 0.0, 1.0));
-#ifdef USE_JET
-    /* THE RAY ESTIMATE as the step: the bound itself (uRayFactor), never relaxed with distance */
-    bool rayStep = rayOn && (uRayUse & 1) != 0 && oo.rde.x > 0.0;
-    vec2 step = rayStep ? hdrMulF(oo.rde, uRayFactor) : hdrMulF(de, relax);
-    if (rayStep && oo.rls.x > 0.0 && hdrGtPos(oo.rls, step)) step = oo.rls;   // THE LINE AGAINST THE BALL: the longer of the two
-#else
-    vec2 step = hdrMulF(de, relax);
-#endif
-#ifdef USE_JET
-    /* The page's START CAP (first step 5 % of the estimate, growing a quarter a step: "anti-arm-skip") is there
-       because the page's estimate over-reads. The ray step does not need it: on the CPU, 1,053 rays, the cap
-       cost 57 against 51 steps a ray and kept no ray out of a solid that went in without it. */
-    if (!rayStep) {
-#endif
-    if (cap.x == 0.0) cap = hdrMulF(de, 0.05);
-    vec2 capEff = (t.x != 0.0 && hdrGtPos(t, cap)) ? t : cap;
-    if (hdrGtPos(step, capEff)) step = capEff;
-    cap = hdrMulF(cap, 1.25);
-#ifdef USE_JET
-    }
-#endif
-    t = hdrAdd(t, step);
-  }
-#ifdef USE_JET
-  gRay = 0;                                            // the normal taps that follow run the page's orbit
-#endif
-  deOut = de;
-  hitOrbit = lastOO;
-  return t;
+   march never stood outside the look level (then the taps' set-up backs off along the ray instead). */
+/* the direction of tap j: mode 1 the three axes (a forward difference from the hit: reuse the hit's de as the base
+   point), any other the four corners of a tetrahedron */
+vec3 tapDir(int j) {
+    if (uNormalMode == 1) return j==0 ? vec3(1.,0.,0.) : j==1 ? vec3(0.,1.,0.) : vec3(0.,0.,1.);
+    return j==0 ? vec3(1.,-1.,-1.) : j==1 ? vec3(-1.,-1.,1.) : j==2 ? vec3(-1.,1.,-1.) : vec3(1.,1.,1.);
+}
+/* the point a tap evaluates: the ray's point at tN moved by eH along kv (all HDR). Mode 1 takes its taps at the hit
+   itself - tN is t there: THE LOOK LEVEL moves it in mode 2 only. */
+Hdr3 tapPoint(vec2 tN, vec2 eH, vec3 rd, vec3 kv) {
+    return Hdr3(
+        hdrAdd(hdrMulF(tN, rd.x), hdrMulF(eH, kv.x)),
+        hdrAdd(hdrMulF(tN, rd.y), hdrMulF(eH, kv.y)),
+        hdrAdd(hdrMulF(tN, rd.z), hdrMulF(eH, kv.z)));
 }
 void main(){
     vec2 uv = (gl_FragCoord.xy + uOrigin - 0.5*uRes) / uRes.y + uJitter;   // jitter ⇒ temporal supersample/denoise
     if (uProbe == 1) uv = vec2(0.0);
     vec3 rd = normalize(uFwd + uFovScale*(uv.x*uRight + uv.y*uUp));
-    if (uProbe == 1) {
-        /* POINTWISE gate probe: de at exactly t = uProbeT on the center ray.
-           March-termination comparison is ill-conditioned (steps jump folds);
-           same-input de comparison is the meaningful §4 ground-truth check. */
-        bool pesc; OrbitOut poo;
-        vec2 pde = deAt(uProbeT, rd, uIters, pesc, poo);
-        o = vec4(pde, pesc ? 1.0 : 0.0, 0.0);
-        return;
-    }
-    if (uProbe == 2) {
-        /* POPULATION probe: one pertOrbit per grid pixel at transverse offset
-           δc = spread·(uv.x·right + uv.y·up) — measures the near-critical pixel
-           population (escape-flag flips vs the CPU referee) at view scale. */
-        vec3 cv = uv.x*uRight + uv.y*uUp;
-        Hdr3 dc = Hdr3(hdrMulF(uSpreadT, cv.x), hdrMulF(uSpreadT, cv.y), hdrMulF(uSpreadT, cv.z));
-        OrbitOut oo = pertOrbit(uOrbit, uOrbitLen, dc, uIters);
-        o = vec4(oo.de, oo.escaped ? 1.0 : 0.0, float(oo.iters));
-        return;
-    }
     float pixAng = uPixAng;                      // display-pixel cone half-angle ≈ hit epsilon / t
+    float pa = pixAng;                           // the march's name for it
     bool hit = false; int steps = 0; bool exhausted = false; bool farHit = false;
     float tF = -1.0;                             // ≥0 once the far-field f32 segment takes over
     vec2 de = vec2(0.0);
-    OrbitOut hitOrbit;
+    OrbitOut hitOrbit; hitOrbit.escaped = false; // last surface-side orbit → reused for colour
     vec2 t0 = vec2(0.0);
-    if (uGuide == 1) {
-      /* GUIDED START. Earlier jittered samples already found this pixel's surface; marching from
-         the camera again spends most of its steps getting back there. uGuideTex holds, per pixel,
-         the NEAREST near-field hit of every earlier sample (or 1e30 if any of them did not hit).
-         Start uGuideK pixel cones in front of the nearest depth in the neighbourhood (±uGuideR):
-         the jittered ray stays inside the centre pixel, and its neighbours bound what it can
-         reach. Any neighbour without a clean record ⇒ no guide (silhouettes march in full).
-         Not every sample is guided: the caller makes every few a full march (uGuide = 0), which
-         re-discovers anything thin the neighbourhood missed and feeds the step-count shading. */
-      ivec2 pc = ivec2(gl_FragCoord.xy + uOrigin), pmax = textureSize(uGuideTex, 0) - 1;
-      float ln = 1e30; bool ok = true;
-      for (int j = -uGuideR; j <= uGuideR; j++) for (int i = -uGuideR; i <= uGuideR; i++) {
-        float g = texelFetch(uGuideTex, clamp(pc + ivec2(i, j), ivec2(0), pmax), 0).x;
-        if (g > 1e29 || g < -1e29) ok = false; else ln = min(ln, g);
-      }
-      float back = 1.0 - uGuideK * pixAng * max(uLookLevel, 1.0);   // THE LOOK LEVEL: a guided ray must still start outside it
-      if (ok && back > 0.0) { float L = ln + log2(back), e = floor(L); t0 = vec2(exp2(L - e), e + uRefE); }
-    }
-    vec2 tLook;
-    vec2 t = marchNear(rd, pixAng, t0, hit, steps, de, tF, hitOrbit, tLook);   // shared near-field HDR march (orbit reused for colour)
-    bool guided = t0.x != 0.0;                    // this ray really started from the guide (its step count is not a full march's)
-#ifdef USE_STATS
-    int sOrb = gOrbits, sWork = gWork;           // march-only counts (the normal taps come after)
+    /* the march's state */
+    vec2 tLa = vec2(0.0); float rLa = 0.0; bool lookSet = false; vec2 tLook = vec2(0.0);
+    vec2 t = vec2(0.0), tPrev = vec2(0.0), cap = vec2(0.0), dePrev = vec2(0.0);
+    int budget = 0, refine = 0;
+#ifdef USE_JET
+    bool rayOn = false, rayHit = false;
 #endif
+#ifdef USE_STATS
+    int sOrb = 0, sWork = 0;                     // march-only counts (the normal taps come after)
+#endif
+    /* POINTWISE gate probe (1): de at exactly t = uProbeT on the center ray.
+       March-termination comparison is ill-conditioned (steps jump folds);
+       same-input de comparison is the meaningful §4 ground-truth check.
+       POPULATION probe (2): one pertOrbit per grid pixel at transverse offset
+       δc = spread·(uv.x·right + uv.y·up) — measures the near-critical pixel
+       population (escape-flag flips vs the CPU referee) at view scale.
+       Neither marches: each is one pass of loop B, with the kernel's globals as they start. */
+    int ph = uProbe == 1 ? PH_PROBE1 : uProbe == 2 ? PH_PROBE2 : PH_MARCH;
+    if (ph == PH_MARCH) {
+        if (uGuide == 1) {
+          /* GUIDED START. Earlier jittered samples already found this pixel's surface; marching from
+             the camera again spends most of its steps getting back there. uGuideTex holds, per pixel,
+             the NEAREST near-field hit of every earlier sample (or 1e30 if any of them did not hit).
+             Start uGuideK pixel cones in front of the nearest depth in the neighbourhood (±uGuideR):
+             the jittered ray stays inside the centre pixel, and its neighbours bound what it can
+             reach. Any neighbour without a clean record ⇒ no guide (silhouettes march in full).
+             Not every sample is guided: the caller makes every few a full march (uGuide = 0), which
+             re-discovers anything thin the neighbourhood missed and feeds the step-count shading. */
+          ivec2 pc = ivec2(gl_FragCoord.xy + uOrigin), pmax = textureSize(uGuideTex, 0) - 1;
+          float ln = 1e30; bool ok = true;
+          for (int j = -uGuideR; j <= uGuideR; j++) for (int i = -uGuideR; i <= uGuideR; i++) {
+            float g = texelFetch(uGuideTex, clamp(pc + ivec2(i, j), ivec2(0), pmax), 0).x;
+            if (g > 1e29 || g < -1e29) ok = false; else ln = min(ln, g);
+          }
+          float back = 1.0 - uGuideK * pixAng * max(uLookLevel, 1.0);   // THE LOOK LEVEL: a guided ray must still start outside it
+          if (ok && back > 0.0) { float L = ln + log2(back), e = floor(L); t0 = vec2(exp2(L - e), e + uRefE); }
+        }
+        t = t0; tPrev = t0;
+        budget = PICTURE_MARCH ? uMaxSteps : 256;      // the probes referee the plain march: 256 steps, no relaxing
+#ifdef USE_JET
+        if (PICTURE_MARCH && (uRayUse & 1) != 0) budget *= 4;   // THE RAY ESTIMATE: its steps are shorter than the page's, and never relaxed with distance
+#endif
+        refine = !PICTURE_MARCH ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);   // HIT REFINE
+#ifdef USE_JET
+        rayOn = PICTURE_MARCH && uRayUse != 0;         // THE RAY ESTIMATE: the probes that referee the page's march keep the page's
+        rayHit = rayOn && (uRayUse & 2) != 0;
+        gRay = !rayOn ? 0 : (uRayUse & 4) != 0 ? 2 : 1; gRd = rd; gCkTop = 0; gCkLast = 1048576; gCkSince = 0; gRunBase = 0; gRunPrev = 0;
+#endif
+    }
+    /* LOOP A: THE MARCH. A step: the kernel at t. It leaves by break - on a hit, at the far hand-off, when the budget is
+       spent - and where a step lands inside the surface, or on a hit with HIT REFINE on, it says in ph what loop B
+       owes this ray. */
+    for (int st = 0; st < budget; st++) {
+        steps = st;
+        /* de (HDR) at ray parameter t (HDR) along f32 dir rd: δc = t·rd.
+           An orbit that did NOT escape within budget ⇒ the point is inside the
+           n-iteration surface — its de is WRAPPED GARBAGE and must be treated as a hit,
+           never trusted for stepping (the second placement-failure mechanism). */
+        Hdr3 dp = Hdr3(hdrMulF(t, rd.x), hdrMulF(t, rd.y), hdrMulF(t, rd.z));
+#ifdef USE_JET
+        gTau = t.x * exp2(clamp(t.y - uRefE, -126.0, 126.0)); gTolN = gTau * uRayTol * uPixAng;   // RAY-COHERENT ORBITS: where this sample is, and how far off it may be evaluated
+#endif
+        OrbitOut oo = pertOrbit(uOrbit, uOrbitLen, dp, uIters);       // THE KERNEL'S FIRST CALL: a step of the march
+        bool esc = oo.escaped;
+        de = oo.de;
+        hitOrbit = oo;
+#ifdef USE_JET
+        if (rayHit && st == 0 && t0.x != 0.0 && esc && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayHit * pa) {
+            t0 = vec2(0.0); t = vec2(0.0); tPrev = vec2(0.0);    // GUIDED START re-check, by the ray hit level
+            continue;
+        }
+#endif
+        if (st == 0 && t0.x != 0.0) {
+            /* GUIDED START re-check (t0 ≠ 0 only for a guided sample). The guide is a promise that
+               nothing lies in front of t0, so the start point must be OUTSIDE the surface: escaped, and
+               not already within hit tolerance (a surface that close, this far in front of every earlier
+               hit, is one no earlier sample saw). Otherwise drop the guide — t0 is zeroed, which is
+               read as "this ray marched in full" — and march from the camera. A grazing ray
+               legitimately starts with a small de, so nothing stricter than the hit test is asked. */
+            if (!esc || de.x <= 0.0 || hdrToFloat(hdrMul(de, hdrRecip(t))) < pa) {
+                t0 = vec2(0.0); t = vec2(0.0); tPrev = vec2(0.0);
+                continue;
+            }
+        }
+        if (!esc || de.x <= 0.0) { ph = PH_BISECT; break; }      // inside: loop B bisects the last step back onto the boundary
+        if (t.x != 0.0) {
+            float ratio = hdrToFloat(hdrMul(de, hdrRecip(t)));
+            if (uLookLevel > 1.0) {                           // THE LOOK LEVEL: remember where the ray last came in through it
+                float paL = pa * uLookLevel;
+                if (ratio >= paL) { tLa = t; rLa = ratio; lookSet = false; }
+                else if (!lookSet && tLa.x != 0.0) {
+                    float uL = hdrToFloat(hdrMul(hdrSub(t, tLa), hdrRecip(tLa)));
+                    float g0 = rLa - paL, g1 = (ratio - paL) * (1.0 + uL);
+                    tLook = hdrMulF(tLa, 1.0 + uL * clamp(g0 / max(g0 - g1, 1e-30), 0.0, 1.0)); lookSet = true;
+                }
+            }
+#ifdef USE_JET
+            if (rayHit) {                                    // THE RAY ESTIMATE as the hit test: its own level, no landing, no refine
+                if (oo.rde.x > 0.0 && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayHit * pa) { hit = true; break; }
+                ratio = 1e30;
+            } else if (rayOn && uRayFloor > 0.0 && oo.rde.x > 0.0 && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayFloor * pa) {
+                /* THE CREEP FLOOR. The page's hit test stays, but where the iterate moves far faster along the ray than the
+                   scalar derivative says, the ray estimate - and with it the step - falls far below the hit level while the
+                   page's estimate does not: such a ray creeps for hundreds of steps past something it is a small part of a
+                   pixel from, and the GPU waits for it. Under the floor that is a hit. */
+                hit = true; break;
+            }
+#endif
+            if (ratio < pa) {
+                /* HIT LANDING (uLand, off by default — it moves the surface). A hit is accepted
+                   wherever the first step with de < pa·t happens to fall: anywhere in the last step,
+                   which on a grazing surface is many pixels of depth. That scatter is harmless to a
+                   normal taken from the distance field and is grain to one taken from depth. Both ends
+                   of the last step are known — tPrev with de ≥ pa·t, t with de < pa·t — so put the hit
+                   where the line through them crosses de = pa·t. No extra orbit. Everything is a ratio
+                   to tPrev, so no magnitude touches f32. */
+                if (refine == 0 && (uLand == 1 || (uLand == 2 && gl_FragCoord.x + uOrigin.x >= uLandSplit)) && tPrev.x != 0.0 && dePrev.x > 0.0) {
+                    float r0 = hdrToFloat(hdrMul(dePrev, hdrRecip(tPrev)));
+                    float u  = hdrToFloat(hdrMul(hdrSub(t, tPrev), hdrRecip(tPrev)));
+                    float g0 = r0 - pa, g1 = (ratio - pa) * (1.0 + u);
+                    t = hdrMulF(tPrev, 1.0 + u * clamp(g0 / max(g0 - g1, 1e-30), 0.0, 1.0));
+                }
+                /* HIT REFINE (uHitRefine, off by default: it moves the surface). The hit above is
+                   wherever the first step with de < pa·t fell - anywhere in the last step - and the
+                   steps of neighbouring rays fall in step with each other, so the depth comes out in
+                   terraces that shading from the depth buffer draws as cuts and contour lines (the
+                   owner's 2.76e-39 view, 2026-10-08: "slicing - a stepping issue"). Both ends of the
+                   last step are known - tPrev with de >= pa·t, t with de < pa·t - so halve that bracket n
+                   times, keeping one end on each side, and stand on the last hit-side point found: the
+                   hit is then within step / 2^n of a crossing of the level, whatever the step pattern.
+                   One orbit per halving, on rays that hit only. Measured that day, share of pixels that
+                   differ from a slow march (step 0.10, 8 halvings), one sample: an ordinary 1e-17 view
+                   9.9 % -> 0.9 % with 4 halvings (render time x1.44); the 2.76e-39 view 57 % -> 35 %,
+                   and 2.8 % with step 0.5 and 3 halvings (x1.4), where step 0.2 alone needs x2.6 for
+                   2.4 %. It cannot find a surface the march stepped clean over: that takes a smaller
+                   step. HIT LANDING is the free, one-shot form of the same idea and is skipped here.
+                   The halvings are loop B's. */
+                if (refine > 0 && tPrev.x != 0.0) { ph = PH_REFINE; break; }
+                hit = true; break;
+            }
+            if (hdrToFloat(t) > FAR_SWITCH) { tF = hdrToFloat(t); break; }   // hand off to f32 far-field (grep FAR HAND-OFF)
+        }
+        tPrev = t; dePrev = de;
+        float relax = uStepRelax > 0.0 ? uStepRelax : 0.85;
+        /* FAR RELAX. A ray that looks along the surface passes close to ridge after ridge on its way
+           to distant ground, and a step is never longer than the distance to the nearest of them: with
+           the detail slider up, a fifth of such a picture ran out of steps before it reached anything
+           (far-study.mjs). So beyond uFarFrom — a few of the camera's own surface distances out, past
+           everything an ordinary view contains — the step factor rises toward uFarRelax.x. A step
+           that lands inside the surface is still caught and bisected back (above); what can be lost
+           is a far feature thinner than the overshoot, which the ray then steps through: measured,
+           0.1–1.6 % of a deep view's pixels show the surface behind the one they should. The near
+           ground and every ordinary view are marched exactly as before. */
+        if (uFarRelax.x > 0.0 && PICTURE_MARCH && t.x != 0.0)
+            relax = mix(relax, max(relax, uFarRelax.x), clamp((log2(t.x) + (t.y - uRefE) - uFarFrom) / uFarRelax.y, 0.0, 1.0));
+#ifdef USE_JET
+        /* THE RAY ESTIMATE as the step: the bound itself (uRayFactor), never relaxed with distance */
+        bool rayStep = rayOn && (uRayUse & 1) != 0 && oo.rde.x > 0.0;
+        vec2 step = rayStep ? hdrMulF(oo.rde, uRayFactor) : hdrMulF(de, relax);
+        if (rayStep && oo.rls.x > 0.0 && hdrGtPos(oo.rls, step)) step = oo.rls;   // THE LINE AGAINST THE BALL: the longer of the two
+#else
+        vec2 step = hdrMulF(de, relax);
+#endif
+#ifdef USE_JET
+        /* The page's START CAP (first step 5 % of the estimate, growing a quarter a step: "anti-arm-skip") is there
+           because the page's estimate over-reads. The ray step does not need it: on the CPU, 1,053 rays, the cap
+           cost 57 against 51 steps a ray and kept no ray out of a solid that went in without it. */
+        if (!rayStep) {
+#endif
+        if (cap.x == 0.0) cap = hdrMulF(de, 0.05);
+        vec2 capEff = (t.x != 0.0 && hdrGtPos(t, cap)) ? t : cap;
+        if (hdrGtPos(step, capEff)) step = capEff;
+        cap = hdrMulF(cap, 1.25);
+#ifdef USE_JET
+        }
+#endif
+        t = hdrAdd(t, step);
+    }
+    /* LOOP B: WHAT THE MARCH OWES, AND THE TWO PROBES. The kernel's second call. A ray is here for one of four things:
+         PH_BISECT  its last step landed inside: the kernel at the middle of [tPrev, t], up to uBisectMax times
+         PH_REFINE  HIT REFINE: the kernel at the middle of [ra, rb], as many times as it asks
+         PH_PROBE1  the kernel once at uProbeT on the centre ray        PH_PROBE2  once at this pixel's transverse offset
+       These evaluations are still the march's (gRay is as the march set it; for the probes it is 0, as it starts). */
+    if (ph != PH_MARCH) {
+        vec2 ra = tPrev, rb = t;
+        vec3 dir = rd;
+        if (ph == PH_PROBE2) dir = uv.x*uRight + uv.y*uUp;
+        int count = ph == PH_BISECT ? uBisectMax : ph == PH_REFINE ? refine : 1;
+        int mi = ph == PH_BISECT && uBisectIters > 0 ? min(uIters, uBisectIters) : uIters;
+        for (int k = 0; k < 32; k++) {
+            if (k >= count || (ph == PH_REFINE && k >= 12)) break;
+            /* bracket [tPrev,t] starts at the LAST (capped) step, already ≪ the cone, so the
+               w<0.25·pa early-break ends most bisections in a few iters; uBisectMax (≈12) just
+               bounds the worst lane (warp divergence makes all lanes pay the slowest). */
+#ifdef USE_STATS
+            if (ph == PH_BISECT) gBis++;
+#endif
+            vec2 te = ph == PH_BISECT ? hdrMulF(hdrAdd(tPrev, t), 0.5) : ph == PH_REFINE ? hdrMulF(hdrAdd(ra, rb), 0.5) : ph == PH_PROBE1 ? uProbeT : uSpreadT;
+            Hdr3 dp = Hdr3(hdrMulF(te, dir.x), hdrMulF(te, dir.y), hdrMulF(te, dir.z));
+#ifdef USE_JET
+            if (ph != PH_PROBE2) { gTau = te.x * exp2(clamp(te.y - uRefE, -126.0, 126.0)); gTolN = gTau * uRayTol * uPixAng; }
+#endif
+            OrbitOut oo = pertOrbit(uOrbit, uOrbitLen, dp, mi);       // THE KERNEL'S SECOND CALL: what the march owes, and the probes
+            bool esc = oo.escaped;
+            if (ph == PH_BISECT) {
+                if (!esc || oo.de.x <= 0.0) t = te; else { tPrev = te; de = oo.de; hitOrbit = oo; }
+                float w = hdrToFloat(hdrMul(hdrSub(t, tPrev), hdrRecip(t)));
+                if (w < 0.25 * pa) break;
+            } else if (ph == PH_REFINE) {
+                if (!esc || oo.de.x <= 0.0) rb = te;                 // inside the n-iteration surface: the hit side, but not a point to stand on
+                else if (hdrToFloat(hdrMul(oo.de, hdrRecip(te))) < pa) { rb = te; t = te; de = oo.de; hitOrbit = oo; }
+                else ra = te;
+            } else {
+                hitOrbit = oo;                                       // a probe: written out below
+            }
+        }
+        if (ph == PH_BISECT) t = tPrev;                              // escaped-side boundary point
+        if (ph == PH_BISECT || ph == PH_REFINE) hit = true;
+    }
+    if (uProbe == 1) { o = vec4(hitOrbit.de, hitOrbit.escaped ? 1.0 : 0.0, 0.0); return; }
+    if (uProbe == 2) { o = vec4(hitOrbit.de, hitOrbit.escaped ? 1.0 : 0.0, float(hitOrbit.iters)); return; }
+#ifdef USE_JET
+    gRay = 0;                                            // the normal taps that follow run the page's orbit
+#endif
+#ifdef USE_STATS
+    sOrb = gOrbits; sWork = gWork;
+#endif
+    bool guided = t0.x != 0.0;                    // this ray really started from the guide (its step count is not a full march's)
     if (uProbe == 3) {
         /* MARCH-POPULATION probe (SLICE 6b): emit the surface position from the SAME march the
-           renderer runs (marchNear inlined ONCE) — the user-visible quantity. Output
+           renderer runs (loops A and B) — the user-visible quantity. Output
            (tHit HDR, hitFlag, steps). NOTHING ASKS FOR IT since 2026-10-11: its caller (api.marchPop)
            and the CPU referee that mirrored it (pertMarchJS, the page's march on the CPU) went with
-           the page's program. The branch stays so that the kept programs compile what they did. */
+           the page's program. The branch stays so that the kept programs answer what they did. */
         o = vec4(hit ? t : vec2(0.0), hit ? 1.0 : 0.0, float(steps));
         return;
     }
@@ -1557,27 +1645,16 @@ void main(){
             if (eH.x == 0.0) eH = de.x != 0.0 ? hdrMulF(de, 4.0) : vec2(1.0, -30.0);
             vec2 ke = hdrRecip(eH);
             int nIt = uNormalIters > 0 ? min(uIters, uNormalIters) : uIters;   // PERF LEVER: capped iters for the gradient taps
-            if (uNormalMode == 1) {
-                float base = de.x != 0.0 ? hdrToFloat(hdrMul(de, ke)) : 0.0;
-                for (int j = 0; j < 3; j++) {
-                    vec3 kv = j==0 ? vec3(1.,0.,0.) : j==1 ? vec3(0.,1.,0.) : vec3(0.,0.,1.);
-                    Hdr3 dp = Hdr3(
-                        hdrAdd(hdrMulF(t, rd.x), hdrMulF(eH, kv.x)),
-                        hdrAdd(hdrMulF(t, rd.y), hdrMulF(eH, kv.y)),
-                        hdrAdd(hdrMulF(t, rd.z), hdrMulF(eH, kv.z)));
-                    OrbitOut oo = pertOrbit(uOrbit, uOrbitLen, dp, nIt);
-                    n[j] = (oo.escaped ? hdrToFloat(hdrMul(oo.de, ke)) : 0.0) - base;
-                }
-            } else {
-                for (int j = 0; j < 4; j++) {
-                    vec3 kv = j==0 ? vec3(1.,-1.,-1.) : j==1 ? vec3(-1.,-1.,1.) : j==2 ? vec3(-1.,1.,-1.) : vec3(1.,1.,1.);
-                    Hdr3 dp = Hdr3(
-                        hdrAdd(hdrMulF(tN, rd.x), hdrMulF(eH, kv.x)),
-                        hdrAdd(hdrMulF(tN, rd.y), hdrMulF(eH, kv.y)),
-                        hdrAdd(hdrMulF(tN, rd.z), hdrMulF(eH, kv.z)));
-                    OrbitOut oo = pertOrbit(uOrbit, uOrbitLen, dp, nIt);
-                    n += kv * (oo.escaped ? hdrToFloat(hdrMul(oo.de, ke)) : 0.0);
-                }
+            bool three = uNormalMode == 1;
+            float base = three && de.x != 0.0 ? hdrToFloat(hdrMul(de, ke)) : 0.0;
+            int nTap = three ? 3 : 4;
+            /* LOOP C: BOTH TAP SETS IN ONE LOOP. The kernel's third and last call. */
+            for (int j = 0; j < 4; j++) {
+                if (j >= nTap) break;
+                vec3 kv = tapDir(j);
+                OrbitOut oo = pertOrbit(uOrbit, uOrbitLen, tapPoint(tN, eH, rd, kv), nIt);   // THE KERNEL'S THIRD CALL: a tap
+                float v = oo.escaped ? hdrToFloat(hdrMul(oo.de, ke)) : 0.0;
+                if (three) n[j] = v - base; else n += kv * v;
             }
             nPack = octPack(n);
         }
@@ -1980,7 +2057,8 @@ let deepProg = null, deepCompileErr = '', deepReady = false;
    march's was built again in full, 23.1 to 24.7 s from its kick (the Mandelbox's: 4.7 to 4.8 s), the page ready
    after 23.4 to 25.0 s. With this draw the browser writes the program to its disk as well: after the same
    restart the ray march's program was there 0.04 to 0.05 s from its kick, the Mandelbox's 0.04 s, and the page
-   ready at 0.38 to 0.39 s. A first visit pays the build as before (ready after 21 to 23 s that day).
+   ready at 0.38 to 0.39 s. A first visit pays the build as before (ready after 21 to 23 s that day; after
+   8.6 s since 2026-10-12, when the ray program's build went from 20 s to 7.6: grep THREE CALLS OF THE KERNEL).
    IT LEANS ON OBSERVED BEHAVIOUR, not on a documented rule. What is thought to happen, and was not looked
    into: on Direct3D the browser's GL layer builds a second, tiny vertex stage for the new format, and with
    that it stores the whole program. Measured on that one Chrome only, headless. A browser that does not
@@ -2010,7 +2088,9 @@ function keepOnDisk(p){
   gl.deleteFramebuffer(fbo); gl.deleteRenderbuffer(rb); gl.deleteBuffer(buf); gl.deleteVertexArray(vao);
 }
 /* Compile the heavy deep shader WITHOUT blocking page load (≈15 s on first run — ANGLE caches the
-   binary so refreshes are instant). KHR_parallel_shader_compile builds it on a driver worker thread
+   binary so refreshes are instant; the page's figure. The ray program, which is what this builds since
+   2026-10-11, took 20 s, and takes 7.6 s since 2026-10-12: grep THREE CALLS OF THE KERNEL).
+   KHR_parallel_shader_compile builds it on a driver worker thread
    while the f32 baseline keeps animating + a loading note shows; falls back to a one-time block if
    the extension is absent. __deepReady stays undefined until it's ready (gate scripts wait on it). */
 function mkProgAsync(fs, cb){
@@ -2050,7 +2130,8 @@ function mkProgAsync(fs, cb){
    no jet), which had been the readiness program and drew while the ray variant built; and the skip-table
    variants (PB, PBT: BLA, a table of composed linear steps that skipped runs of iterations, 1.3 to 2.4 times
    faster below 1e-13 under the page's march - the ray march resumes orbits instead). The page's STEP RULE is
-   still in marchNear: the Mandelbox steps by it, and so does the ray program's measuring mode (bit 8).
+   still in the march (loop A of DEEP_FRAG's main; the function marchNear until 2026-10-12, grep THREE CALLS OF
+   THE KERNEL): the Mandelbox steps by it, and so does the ray program's measuring mode (bit 8).
    The counter variants are built on first use, blocking. All gates draw through deepCtx(). */
 const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }  (null = failed to build)
 const pendingBuild = {};                                     // key → the background build in flight (mkProgAsync's handle): a blocking ask waits for IT instead of starting a second

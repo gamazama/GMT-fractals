@@ -45,7 +45,7 @@
  *   core.js), which is heavy at depth — about one BigInt evaluation per iteration — and restarts
  *   the still. The sync layer debounces these during a drag. `autoIterations` raises no flag by
  *   itself; it costs an orbit rebuild each time it raises the live count. The first switch to the
- *   Mandelbox also builds its shader variant in the background (about 5 s; the top bar says so).
+ *   Mandelbox also builds its shader variant in the background (about 2 s; the top bar says so).
  *
  * PITFALLS
  *   - AUTO ITERATIONS: `iterations` IS THE USER'S FLOOR, NOT THE LIVE COUNT. With auto on, the

@@ -88,7 +88,7 @@ export interface DeepZoomCoreOptions {
      * MARCH (grep `THE RAY ESTIMATE` in core.js). The ray march is now the bulb's only program, on from the
      * start as the shell had it: steps by the ray estimate and the line rule, orbits resumed along the ray,
      * iterations as a margin. Its shader builds in the background from the moment the module is created
-     * (about 20 s cold) and IS what `ready` waits for; nothing else draws a deep picture of the bulb meanwhile,
+     * (about 8 s cold since 2026-10-12, about 20 s before) and IS what `ready` waits for; nothing else draws a deep picture of the bulb meanwhile,
      * and a build that fails is an error (`api.dz.telemetry().error`), not another march. core.js does not
      * read the key: a JavaScript caller that still passes it gets the ray march. */
     /** Default 'mandelbulb' (the page). 'mandelbox': start on the Mandelbox (grep `THE FORMULA SEAM` in

@@ -74,7 +74,7 @@ const settle = (ctx: DzCtx, n = 24) => ctx.untilHost('host.telemetry().accumN >=
  * The bulb has one program since 2026-10-11 and the module asks the browser whether its build is complete
  * (`COMPLETION_STATUS_KHR`, the parallel-compile extension: grep `function mkProgAsync` in
  * deep-zoom/renderer/core.js). With a warm shader cache the answer is yes at once and there is no wait to look
- * at; cold, the browser's main thread stands still for the 20 s the build takes and there is nothing to look
+ * at; cold, the browser's main thread stands still for as long as the build takes (20 s when this was written, 8 s since 2026-10-12) and there is nothing to look
  * at either. So for the program whose fragment shader carries `#define USE_JET`, and for that question alone,
  * the answer is held at "no" for 8 s after the link. Nothing else is changed: the source, the build, the
  * program that is then drawn with. THE MANDELBOX'S PROGRAM IS HELD THE SAME WAY, for 6 s after ITS link (the
@@ -453,7 +453,7 @@ export const stage: DzStage = {
                         'and NOTHING DEEP IS DRAWN meanwhile: sent to a deep view, the picture is the plain one (mode ' + during.mode + ', the top bar\'s badge "' + during.badge + '")');
                     ctx.check(during.notice === 'building / ray march: building' && during.line && during.size === 'large' && during.scrim && during.shown < 1e-10 && !during.card,
                         'the top bar says "ray march: building" and the picture carries the LARGE notice at the deep view, dimmed under it (notice "' + during.notice + '", size "' + during.size + '", depth shown ' + during.shown + ')');
-                    ctx.check(/deep renderer/.test(during.text) && /the first time\./.test(during.text) && !/browser/i.test(during.text) && /half a minute/.test(during.text) && /\d+ s$/.test(during.text) && !/f32|perturbation|shader/i.test(during.text),
+                    ctx.check(/deep renderer/.test(during.text) && /the first time\./.test(during.text) && !/browser/i.test(during.text) && /ten seconds or more/.test(during.text) && /\d+ s$/.test(during.text) && !/f32|perturbation|shader/i.test(during.text),
                         'which says what is being built, that it is the first time that is slow, about how long, and counts the seconds, in plain words ("' + during.text + '")');
                     await ctx.sleep(500);
                     const later = await ev<Held>(STATE);

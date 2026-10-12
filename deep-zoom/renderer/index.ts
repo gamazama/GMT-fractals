@@ -55,7 +55,7 @@
  *     draws. After one, draws are no-ops, `thumbnail()` is black and telemetry still says ready;
  *     `instance.contextLost` / `onContextLost` are the only signal. Dispose and mount fresh.
  *   - BLOCKING COMPILES. The three small programs compile synchronously inside `createDeepZoom`,
- *     and without KHR_parallel_shader_compile so does the deep shader (about 20 s cold). These
+ *     and without KHR_parallel_shader_compile so does the deep shader (about 8 s cold since 2026-10-12, about 20 s before). These
  *     block the caller until a build that is still in flight has finished: `api.setRayMarch(bits,
  *     opt, true)` and `api.setRayDefs` (the bulb's program), `api.dz.renderFrame` on the Mandelbox
  *     (its program), `api.stats` and `api.marchProbe` (the counter variants, built on first use).
@@ -73,7 +73,7 @@
  *   - A module is strict-mode code, the page's script was not. port.mjs proves the port has no
  *     undeclared names; a later hand edit that assigns to one will throw instead of leaking a global.
  *   - The first `createDeepZoom` compiles the deep shader in the background: THE RAY MARCH's
- *     program, the bulb's only one since 2026-10-11 (about 20 s cold on the machine it was
+ *     program, the bulb's only one since 2026-10-11 (about 8 s cold since 2026-10-12, about 20 s before, on the machine it was
  *     measured on). `api.dz.telemetry().ready` turns true when it lands; until then the f32
  *     picture is shown and NOTHING draws a deep picture of the bulb. If it cannot be built,
  *     `telemetry().error` carries the compiler's log, `ready` never turns true and

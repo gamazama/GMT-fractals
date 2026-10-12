@@ -10,8 +10,9 @@
  *      after 12 s whatever happened.
  *   2. THE LOADING NOTICE. The renderer draws its plain single-precision picture from the first
  *      frame and builds the deep shader in the background: the ray march's program, the bulb's
- *      only one since 2026-10-11, 21 to 26 s cold; and the Mandelbox's from the first switch to
- *      that formula, about 5 s (4.5 to 4.8 measured). "Cold" is the first visit: the renderer gets
+ *      only one since 2026-10-11, 8.5 s cold since the kernel has three call sites (it was 21 to
+ *      26 s with seven: grep THREE CALLS OF THE KERNEL in renderer/core.js); and the Mandelbox's from the first switch to
+ *      that formula, about 2 s (it was 4.5 to 4.8). "Cold" is the first visit: the renderer gets
  *      both programs onto the browser's disk, so a later visit has them at once, also after the
  *      browser was closed (see `NOTICE`). Until telemetry says `ready` the
  *      picture carries a notice with the seconds counting; nothing is blocked, nothing is clicked,
@@ -20,7 +21,7 @@
  *      (The owner, 2026-10-11, asked whether to cover the plain picture with a calm notice: "yes
  *      we can have a 'loading' notice that gets bigger if they navigate to deep view".)
  *      Measured in the production build, 2026-10-11, cold, nine runs: the picture from 0.9 s, 60
- *      frames a second, the notice until 21 to 26 s. On the dev server React mounts twice and the
+ *      frames a second, the notice until ready (8.5 s; 21 to 26 s before 2026-10-12). On the dev server React mounts twice and the
  *      splash covers that wait instead.
  *   3. THE FAILURE CARD, only when there is no renderer: `mountDeepZoom` threw
  *      (`WebGL2 unavailable`), the host reported a fatal error (the deep shader could not be
@@ -170,7 +171,7 @@ const NOTICE: Readonly<Record<DzBuilding, { line: string; title: string; body: s
     rayMarch: {
         line: 'Deep renderer building',
         title: 'Building the deep renderer',
-        body: 'This takes about half a minute the first time. The picture comes by itself when it is ready.',
+        body: 'This can take ten seconds or more the first time. The picture comes by itself when it is ready.',
     },
     mandelbox: {
         line: 'Mandelbox renderer building',
