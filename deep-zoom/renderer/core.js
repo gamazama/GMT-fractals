@@ -534,7 +534,7 @@ const float CK_SAFE = CK_SAFE_;
 #ifndef NO_CKPT
 vec4  gCkD[CKN];                 // δ: mantissa (xyz), exponent (w)
 vec4  gCkJ[CKN];                 // zdot: mantissa (xyz), exponent (w)
-vec4  gCkA[CKN];                 // Δdr (HDR, xy) · trap (z) · the gap of THE CROSSING TEST (w; BURNING, grep)
+vec4  gCkA[CKN];                 // Δdr (HDR, xy) · trap (z)
 vec4  gCkB[CKN];                 // the t this checkpoint was made at · inherited position error · relative jet error · pass number
 vec4  gCkC[CKN];                 // Q · m · it      (t, the error and Q in units of 2^uRefE: plain floats)
 #endif
@@ -707,14 +707,13 @@ ${BOX_KERNEL}
    it then only says "the same side". Returns the folded delta on e:
        the same side      side · d
        opposite sides     side · (Z + d) − (the reference's factor) · Z       (|Z| <= |d| there: nothing cancels)
-   side = the factor of the side the PIXEL stands on (what its jet is multiplied by); gap = the pixel's distance
-   to the plane, a mantissa on e (THE CROSSING TEST). The Mandelbox's program does not hold this function. A
-   formula on that kernel which folds by abs can take it as it is: the box's rows 2 to 4, at a folding limit of
-   0, are this Z. */
-float burnFoldD(vec2 Z, float d, float e, out float side, out float gap) {
+   side = the factor of the side the PIXEL stands on (what its jet is multiplied by). The Mandelbox's program does
+   not hold this function. A formula on that kernel which folds by abs can take it as it is: the box's rows 2 to
+   4, at a folding limit of 0, are this Z. */
+float burnFoldD(vec2 Z, float d, float e, out float side) {
   float zs = Z.x * exp2(clamp(Z.y - e, -160.0, 120.0)), p = zs + d;
   float fr = Z.x < 0.0 ? uBurnNeg : 1.0;
-  side = p < 0.0 ? uBurnNeg : 1.0; gap = abs(p);
+  side = p < 0.0 ? uBurnNeg : 1.0;
   return side == fr ? side * d : side * p - fr * zs;
 }
 #endif
@@ -736,15 +735,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec4 cT0 = T00; vec2 cDR = DR00;
 #ifdef USE_JET
   vec3 jv = gRd; float ev = 0.0, jvs = 1.0, Qm = 0.0, ckErr = 0.0, ckJerr = 0.0;     // zdot_0 = v (z_0 = c); Q = Qm·2^ev; jvs = 2^-ev
-  /* THE CROSSING TEST (BURNING, grep; 2026-10-12). A resumed orbit moves a checkpoint to first order, and the fold
-     is linear only on one side of each of its three planes: the move is right while NO iterate before the
-     checkpoint changes side on the way. ckGap is the least, over the passes run so far, of (the iterate's
-     distance to its nearest plane) / |zdot|: how far along the ray the sample may move before one does, in units
-     of 2^uRefE. A checkpoint moved by S is taken only while |S| (1 + its jet error + 3 |S| Q / 2) is under the
-     gap it was written with, and the orbit goes on with the gap less that. One float a checkpoint (gCkA.w). */
-#ifdef USE_BURN
-  float ckGap = 1e30;
-#endif
   int pass = 0, ckFrom = -1;
   bool ckWr = true;                                          // does this orbit write its checkpoints
   vec3 zPv = vec3(0.0), jPv = vec3(0.0); float ePv = 0.0, qPv = 0.0;   // the iterate before the last, its zdot and Q: THE LINE AGAINST THE BALL
@@ -763,11 +753,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       float er = kb.y + CK_SAFE * (0.5 * aS * sq + aS * kb.z);
       if (!(er <= gTolN)) continue;                          // too far for this checkpoint: try an earlier one
       vec4 kd = gCkD[cs], kj = gCkJ[cs], ka = gCkA[cs];
-#ifdef USE_BURN
-      float need = aS * (1.0 + kb.z + 1.5 * sq);             // THE CROSSING TEST: what this move takes of the gap
-      if (!(need < ka.w)) continue;                          // an iterate before this checkpoint may change side on the way: try an earlier one
-      ckGap = ka.w - need;
-#endif
       vec3 Dm; float em;
       sclAdd(kd.xyz, kd.w, kj.xyz * S, uRefE + kj.w, Dm, em);
       D = Dm; e = em; sclNorm(D, e);
@@ -795,9 +780,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
         gCkD[cs] = vec4(D, e); gCkJ[cs] = vec4(jv, ev); gCkA[cs] = vec4(Ddr, trap, 0.0);
         gCkB[cs] = vec4(gTau, ckErr, ckJerr, float(pass));
         gCkC[cs] = vec4(Qm * exp2(clamp(ev + uRefE, -126.0, 126.0)), float(m), float(it), 0.0);
-#ifdef USE_BURN
-        gCkA[cs].w = ckGap;                                  // THE CROSSING TEST
-#endif
       }
       pass++;
     }
@@ -816,15 +798,11 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
            exponent (rows 4 and 5), the power below is taken at A = fold(Z) with a radius of its own, and the jet
            takes the side each of the PIXEL's coordinates stands on. */
         vec4 b4 = texelFetch(orbit, ivec2(m, 4), 0), b5 = texelFetch(orbit, ivec2(m, 5), 0);
-        float fx, fy, fz, gx, gy, gz;
-        D = vec3(burnFoldD(b4.xy, D.x, e, fx, gx), burnFoldD(b4.zw, D.y, e, fy, gy), burnFoldD(b5.xy, D.z, e, fz, gz));
+        float fx, fy, fz;
+        D = vec3(burnFoldD(b4.xy, D.x, e, fx), burnFoldD(b4.zw, D.y, e, fy), burnFoldD(b5.xy, D.z, e, fz));
         V *= vec3(b4.x < 0.0 ? uBurnNeg : 1.0, b4.z < 0.0 ? uBurnNeg : 1.0, b5.x < 0.0 ? uBurnNeg : 1.0); R = b5.z;
 #ifdef USE_JET
-        if (gRay != 0) {
-          float jl = length(jv);
-          if (jl > 0.0) ckGap = min(ckGap, min(gx, min(gy, gz)) / jl * exp2(clamp(e - ev - uRefE, -126.0, 126.0)));   // THE CROSSING TEST
-          jv *= vec3(fx, fy, fz);
-        }
+        if (gRay != 0) jv *= vec3(fx, fy, fz);
 #endif
       }
 #endif
@@ -916,11 +894,7 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
           /* BURNING (grep): the direct iteration is of the folded point (fold(0) = 0: the origin's image is still Z0) */
           vec3 fs = mix(vec3(1.0), vec3(uBurnNeg), lessThan(zf, vec3(0.0)));
 #ifdef USE_JET
-          if (gRay != 0) {
-            float jl = length(jv);
-            if (jl > 0.0) ckGap = min(ckGap, min(abs(zf.x), min(abs(zf.y), abs(zf.z))) / jl * exp2(clamp(-ev - uRefE, -126.0, 126.0)));   // THE CROSSING TEST
-            jv *= fs;
-          }
+          if (gRay != 0) jv *= fs;
 #endif
           zf *= fs; rz = length(zf);
         }
@@ -2308,9 +2282,9 @@ const pendingBuild = {};                                     // key → the back
    any more (a caller that still passes it, true or false, gets the ray march). */
 let rayAsk = 5;                                  // what was asked for; rayUse is what is in force - 0 while the box is drawn (grep THE FORMULA SEAM)
 let rayUse = rayAsk, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = 256, rayLine = 2, rayDetail = 0;
-/* BURNING (grep) under the ray march: whether orbits are resumed along the ray (bit 4, with THE CROSSING TEST) or
-   run whole, and the line rule's allowance (0 = off: the owner's call 5). api.setBurnMarch, a tool's handle. */
-let burnResume = false, burnLine = 0;
+/* BURNING (grep) under the ray march: the line rule's allowance while Burning is on (0 = off: the owner's call 5,
+   and what was measured of it - grep WHOLE ORBITS UNDER BURNING). api.setBurnMarch, a tool's handle. */
+let burnLine = 0;
 /* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep; api.setRayMarch). Its variant is DEEP_FRAG with USE_JET.
    Keys PR (the picture: built at load, see above) and PTR (with the work counters). */
 const BOX_ITER_MAX = 500;                        // the box's ceiling (grep ITERATIONS AS A MARGIN); the kernel's loop runs 512 passes at most
@@ -2366,8 +2340,8 @@ function kickBoxVariantAsync(){                  // without blocking; a no-op on
   });
 }
 /* BURNING's variant (grep BURNING): the ray march's program with USE_BURN - the fold in the kernel's pass, in its
-   direct pass after a rebase and in the far field, THE CROSSING TEST, and nothing else. Keys PRB (the picture) and
-   PTRB (with the work counters). It is a program of its own and not a uniform in the bulb's one program BECAUSE THE
+   direct pass after a rebase and in the far field, and nothing else - and without the checkpoint ring (NO_CKPT:
+   it runs whole orbits). Keys PRB (the picture) and PTRB (with the work counters). It is a program of its own and not a uniform in the bulb's one program BECAUSE THE
    PLAIN BULB MUST NOT MOVE: built as a branch on a uniform (2026-10-12, the first form) the plain bulb's own numbers
    moved in the seventh digit with Burning off - 27 of the direct proof's 100 lines printed other digits, all still
    PASS - since the compiler writes the whole pass anew around a branch. With the fold behind USE_BURN the bulb's
@@ -2377,7 +2351,7 @@ function kickBoxVariantAsync(){                  // without blocking; a no-op on
    or a study that asks first builds it at once, blocking. burnNeg is 1 without a fold (grep THE FACTOR IS THE WHOLE). */
 const burnActive = () => burnNeg !== 1;
 const bKey = (t) => 'P' + (t ? 'T' : '') + 'RB';
-const bSrc = (t) => rSrc(t).replace('\n#define USE_JET', '\n#define USE_JET\n#define USE_BURN');
+const bSrc = (t) => rSrc(t).replace('\n#define USE_JET', '\n#define USE_JET\n#define USE_BURN\n#define NO_CKPT');   // NO_CKPT: no checkpoint ring in it (grep WHOLE ORBITS UNDER BURNING)
 function ensureBurnVariant(t){
   const key = bKey(t);
   if (variants[key] === undefined && pendingBuild[key]) pendingBuild[key].finish();
@@ -3096,8 +3070,7 @@ function setJuliaC(c){
        rebase      both rebases are valid: the plain one (any row is a base for the table), and THE REBASE TO THE
                    ORIGIN (grep) - fold(0) = 0, so the image of the origin is still Z0 - with the direct
                    iteration taken of fold(z).
-       resumed     a checkpoint moved along the ray is right only while NO iterate before it crosses a fold
-                   plane on the way: THE CROSSING TEST (grep it in the kernel).
+       resumed     NOT under Burning: its orbits are run whole (grep WHOLE ORBITS UNDER BURNING).
        the ball    |fold(z)| >= |burnNeg| |z|, so every point farther than rho from the centre has escaped after
                    one iteration, with (|burnNeg| rho)^n - rho = 2 (holdBall). At mix 1 that is the plain bulb's
                    ball. Towards mix 0.5 it grows without bound, and at 0.5 there is none: the picture is then
@@ -3116,7 +3089,32 @@ function setJuliaC(c){
    - An orbit carries its factor (O.burn, absent without a fold). The CPU kernels read it there, not from
      burnNeg, so an orbit kept across a switch is iterated as it was built.
    - THE LINE AGAINST THE BALL (grep) is held off while Burning is on (setPowerUniforms): a fold plane kinks the
-     path that rule takes for straight. Measured after the build, not switched on (the owner's call 5).
+     path that rule takes for straight. Measured after the build, not switched on (the owner's call 5): below.
+   WHOLE ORBITS UNDER BURNING (2026-10-12; the owner's call 3: "milliseconds at the same picture decide"). Both
+   ways were built: whole orbits, and orbits resumed along the ray with a crossing test (the least, over the passes
+   run, of an iterate's distance to its nearest fold plane over |zdot|, kept with each checkpoint: a checkpoint
+   was moved only while its move stayed under that; the code is in the commit before this one, cac8fcd8).
+   MEASURED on the GPU (RTX 5070 Ti, ANGLE d3d11, the harness as the shell sets it; debug/scratch/burning/
+   orbits-ab.mts, git-ignored), eight burning places - the CPU study's own six (power 2 at 7.5e-4, 5.6e-9, 5.2e-18
+   and 6.0e-32, power 8 at 9.9e-17 and 1.7e-38) and two at a mix under 1 (0.5 at 1.0e-10, 0.25 at 2.3e-31):
+     - milliseconds a 384 x 384 draw, whole / resumed: 3.3 / 3.9, 7.2 / 7.0, 15.8 / 13.8, 46.6 / 58.4, 3.5 / 2.8,
+       13.9 / 11.4, 1.6 / 1.7, 4.6 / 5.3. Resumed is the faster at four places (by 3 to 20 %) and the slower at
+       four (by 6 to 25 %); over the eight, 96.5 ms whole against 104.3 resumed. Kernel passes a ray, resumed
+       over whole: 0.42 to 0.86 - half the passes, and no time for it;
+     - the same picture: of 16,384 rays, 0.00 to 0.45 % end more than 2 pixel cones of depth from where the
+       whole-orbit march ends them (at the study's power-2 place by 6.0e-32, where 9.2 % of its resumed orbits
+       had stood over their tolerance on the CPU: 0.11 %);
+     - so WHOLE ORBITS STAY (the faster over the places measured, by 7 %; no checkpoint to go wrong) and the
+       resumed form and its test went: ray bit 4 is not handed to this variant, which is built without the ring.
+       As it now stands the variant builds in 6.1 s (8.7 to 9.0 with the ring and the test in it; the bulb's own
+       program 7.9 to 8.3 that day) and draws the eight places in 3.5, 6.5, 14.8, 42.8, 3.3, 12.9, 1.6 and 4.2 ms:
+       89.6 in all.
+     - THE LINE RULE at allowance 2, measured and left off: 6 to 30 % fewer milliseconds (steps 56 -> 46, 26 -> 17),
+       and rays that end elsewhere than without it: 0.00 to 1.1 % at four places, 4.3 and 4.7 % at two, 26 % at
+       power 8 by 9.9e-17 and every ray at mix 0.25. Not safe as it stands.
+   What the plain bulb's own two ways read in the same harness (four of its dive places; the GPU was taken by
+   another program for part of that run, so these are a pointer and no more): resumed over whole 0.82 and 0.32 at
+   power 8, 1.54 and 1.27 at power 2.
    - This block is lifted as TEXT by the node checks: nothing in it may touch gl, api or options.
    @invariant the delta step under the fold on the CPU (pertOrbitJS on an orbit built with Burning on) equals a
    fixed-point orbit of the explicit point under z -> fold(z)^n + c, with pixels across a fold plane from the
@@ -3131,9 +3129,10 @@ function setJuliaC(c){
    63 of 338 points over 1e-3; power 2 at 1.8e-11: 7): one measurement says they are the orbits single precision
    does not settle (that script's header), and no more was looked into.
    @assumption the jet's sides and the gradient's pull back are right: check:deep-zoom-burning-orbit has a
-   "burning jet" and a "burning gradient" line at mix 1 and 0.5, not broken on purpose. THE CROSSING TEST, the fold
-   in the far field and in the baseline, and the ball's radius under a mix have no standing check: what was
-   measured of them is in plans/deep-zoom-shell/ADR-DRAFT-burning.md. */
+   "burning jet" and a "burning gradient" line at mix 1 and 0.5, not broken on purpose. The ray march's own step
+   under the fold (its jet's sides on the GPU), the fold in the far field and in the baseline, and the ball's
+   radius under a mix have no standing check: what was measured of them is in
+   plans/deep-zoom-shell/ADR-DRAFT-burning.md. */
 let burnOn = false;                              // Burning: the switch, kept while the Mandelbox is drawn
 let burnMix = 1;                                 // GMT's Burning Mix, 0 to 1
 let burnNeg = 1;                                 // what a negative coordinate is multiplied by, IN FORCE: 1 = no fold
@@ -3428,7 +3427,7 @@ function setPowerUniforms(x){
   gl.uniform1f(x.holdR, holdBall()); gl.uniform1i(x.farOnly, refFar(curOrbit) ? 1 : 0);   // A VIEW FROM FAR (grep); null in the Mandelbox's program: no-ops
   gl.uniform1f(x.lookLevel, normalDetail > 0 ? Math.max(1, detailNow() / normalDetail) : 1);   // THE LOOK LEVEL: how many times coarser than the hit level the normal's level is
   gl.uniform1f(x.burnNeg, burnNeg);              // BURNING (grep): the fold's factor; null but in the USE_BURN variant: a no-op
-  gl.uniform1i(x.rayUse, burnNeg !== 1 && !burnResume ? rayUse & ~4 : rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
+  gl.uniform1i(x.rayUse, burnNeg !== 1 ? rayUse & ~4 : rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops. BURNING (grep) runs whole orbits: bit 4 is not handed on
   gl.uniform1f(x.rayHit, detailNow() / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * detailNow());   // both as multiples of uPixAng, which is a display pixel ÷ detail
   gl.uniform1f(x.rayFloor, rayFloorDiv > 0 ? detailNow() / rayFloorDiv : 0);
   { const cl = juliaOn ? Math.hypot(juliaF[0], juliaF[1], juliaF[2]) : Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]); let rho = 2;       // THE LINE AGAINST THE BALL: rho^n - |c| = rho, from above (JULIA MODE: |c| is |K|, exactly)
@@ -4860,11 +4859,10 @@ api.rayMarchState = ()=>{ if (!rayUse) return 'off';
   const v = variants[burnActive() ? bKey(false) : rKey(false)];   // with BURNING (grep) on, the ray march's program is that variant
   return v ? 'on' : v === null ? 'failed' : 'building'; };
 api.rayMarch = ()=>({ bits: rayAsk, factor: rayFactor, hit: rayHitDiv, tol: rayTol, floor: rayFloorDiv, line: rayLine, detail: rayDetail });
-/* BURNING (grep), a tool's handle: how the ray march runs while Burning is on. resume (true / false): orbits resumed
-   along the ray, or whole. line: the line rule's allowance under Burning (0 = off, as it ships). Nothing in the
-   shell calls it; it is what the two were measured with. */
-api.setBurnMarch = (o)=>{ const q = o || {}; if (typeof q.resume === 'boolean') burnResume = q.resume; if (q.line >= 0) burnLine = +q.line; accumReset = true; };
-api.burnMarch = ()=>({ resume: burnResume, line: burnLine });
+/* BURNING (grep), a tool's handle: the line rule's allowance while Burning is on (0 = off, as it ships; 2 is what
+   the plain bulb marches with). Nothing in the shell calls it; it is what the rule was measured with. */
+api.setBurnMarch = (o)=>{ const q = o || {}; if (q.line >= 0) burnLine = +q.line; accumReset = true; };
+api.burnMarch = ()=>({ line: burnLine });
 /* experiments: build the ray variant with extra #defines, e.g. ['CK_WR_ 1'], ['CKN_ 16'] or ['NO_CKPT']; the built variants are dropped.
    The picture's variant IS the bulb's program since 2026-10-11 (deepProg), so it is built again here, BLOCKING,
    and deepProg / ud follow it: no draw may meet a deleted program. (The load-time build is waited for first.) */

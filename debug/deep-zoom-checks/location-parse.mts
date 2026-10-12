@@ -215,6 +215,9 @@ const EXPORTED = locationsToText(ROWS);
         'import: the same camera under the other formula, another power or another phase is another place');
     check(!dup(state({ julia: K }, { ...BULB, juliaMode: true })) && newLocations([state({ julia: K }, { ...BULB, juliaMode: true })], [state({ julia: [K[0], K[1], CAM_B[0]] }, { ...BULB, juliaMode: true })]).skipped === 0,
         'import: the same camera in Julia mode, or with another Julia constant, is another place');
+    { const burn = (mix: number, on = true) => state({}, { ...BULB, burning: on, burningMix: mix });
+      check(!dup(burn(1)) && newLocations([burn(1)], [burn(0.5)]).skipped === 0 && newLocations([burn(1)], [burn(1)]).skipped === 1 && dup(burn(0.5, false)),
+          'import: the same camera with Burning on, or at another Burning mix, is another place; with Burning off the mix says nothing'); }
     check(newLocations([state({}, BOX)], [state({}, { ...BOX, boxScale: 2 })]).skipped === 0 && newLocations([state({}, BOX)], [state({}, { ...BOX, power: 4 })]).skipped === 1,
         'import: a box of another scale is another place; the bulb\'s power does not tell two boxes apart');
     // Only what is ALREADY in the list counts. Seen in the app 2026-10-12: two starter dives begin at the same

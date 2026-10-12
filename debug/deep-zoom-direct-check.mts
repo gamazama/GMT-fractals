@@ -184,8 +184,8 @@
  *   the ten gated places have 0 to 7). So: orbits single precision does not settle, which the kernel rounds at
  *   every one of its iterations. NOT shown: that the fold adds nothing of its own there. The control - the same
  *   grid on the PLAIN bulb at six places found the same way, 9.6e-4 to 6.0e-61 - has no point over 1e-3.
- * What these lines do not hold: the ray march's own step with Burning on, its jet's sides and THE CROSSING TEST
- * (a grid's hits come from the careful march, as everywhere in this file), the f32 baseline and the far field.
+ * What these lines do not hold: the ray march's own step with Burning on and its jet's sides on the GPU (a
+ * grid's hits come from the careful march, as everywhere in this file), the f32 baseline and the far field.
  * The 100 lines above are untouched: the same to the character as before.
  * SEEN RED, 2026-10-12 (one break in deep-zoom/renderer/core.js, restored byte for byte, sha-256): the shader's
  * opposite-side case cut (`burnFoldD`: `return side == fr ? side * d : side * p - fr * zs;` -> `return side * d;`:

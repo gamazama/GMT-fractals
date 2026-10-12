@@ -18,7 +18,7 @@
  *   - Some values travel together because the module's setter takes them together: colour
  *     (`plain`, `mode`, `scale` -> one `setColor`), light type and lamp falloff (one `setLight`),
  *     the two phase angles (one `setPhase`). A row's `group` says which push carries it.
- *   - The formula, the Julia switch, the Julia constant's three numbers and the box's seven are ONE push
+ *   - The formula, the Julia switch, the Julia constant's three numbers, Burning with its mix and the box's seven are ONE push
  *     (`group: 'formula'`, one `setFormula`),
  *     and that push goes before every other push of the same patch: the renderer's iteration ceiling
  *     follows the formula (400 or 500), so an iteration count sent first would be cut to the old one.
@@ -111,6 +111,9 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     box('juliaX', (f) => f.cNum[0]),
     box('juliaY', (f) => f.cNum[1]),
     box('juliaZ', (f) => f.cNum[2]),
+    // Burning and its mix, the bulb's, ride in that call as well (renderer/core.js, BURNING).
+    box('burning', (f) => f.burning),
+    box('burningMix', (f) => f.burnMix),
     { feature: 'dzFormula', key: 'juliaConstant', cls: '-', group: null, why: 'a composed row with no state of its own: juliaX, juliaY and juliaZ carry the value' },
     { feature: 'dzFormula', key: 'boxRotation', cls: '-', group: null, why: 'a composed row with no state of its own: boxRotX, boxRotY and boxRotZ carry the value' },
     { feature: 'dzFormula', key: 'power', cls: 'O', group: 'power', read: (api) => api.dz.settings().power },

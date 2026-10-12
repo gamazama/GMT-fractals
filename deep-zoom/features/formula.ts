@@ -16,6 +16,7 @@
  *     juliaMode       api.setFormula(kind, { julia })   in the same call as the kind (see JULIA MODE)
  *     juliaX / Y / Z  api.setFormula(kind, { c })       in that call too, and ONLY when the three differ
  *                     from the constant the renderer holds (see THE CONSTANT'S ROW)
+ *     burning, burningMix  api.setFormula(kind, { burning, burnMix })   in that call too (see BURNING)
  *     power           api.setPower(n)            clamps to 2..16 and truncates (`n|0`)
  *     phaseTheta      api.setPhase(theta, phi)   ABSOLUTE, always both arguments, theta first
  *     phasePhi        api.setPhase(theta, phi)   (the page's own panel lists phi first)
@@ -55,6 +56,19 @@
  *   and moves the camera to the whole set, in the same undo step (`deep-zoom/locations.ts`, the
  *   `juliaMode` subscription). Anything saved before this day has no `juliaMode` and is in
  *   Mandelbrot mode.
+ *
+ * BURNING (2026-10-12)
+ *   `burning` is a switch of the Mandelbulb and `burningMix` a row under it, shown while the switch
+ *   is on: GMT's Burning Mode and its mix (grep BURNING in renderer/core.js - at the top of every
+ *   iteration a negative coordinate is multiplied by 1 - 2 mix; mix 1 is the plain abs). They are
+ *   formula values like Power: two of `FORMULA_CHOICE_KEYS`, so a place, Back, Home, a scene, a link,
+ *   pasted text and undo carry them, and a place without them - everything saved before this day -
+ *   is not burning. The switch does NOT move the camera: the burning bulb lies in the bulb's own
+ *   ball, the place stays and the shape under it changes, as with Power. The first switch builds a
+ *   variant of the deep renderer in the background (about ten seconds; the top bar and the notice
+ *   over the picture say so, as they do at start); dragging the mix builds nothing. Both rows are
+ *   kept while the Mandelbox is drawn and apply again on the bulb. With Julia mode it works as it
+ *   stands (the direct proof has two lines for it).
  *
  * THE CONSTANT'S ROW (2026-10-12, later the same day; the owner, having flown the mode: "I dont
  *   see how to set the julia constant's coordinate")
@@ -239,6 +253,21 @@ export const DzFormulaFeature = {
             label: 'Phase phi',
             condition: onBulb,
         },
+        // ── Burning, the bulb's (see BURNING in the header) ──
+        burning: {
+            type: 'boolean',
+            default: false,
+            label: 'Burning',
+            condition: onBulb,
+            description: 'GMT\'s Burning Mode: at the top of every iteration each negative coordinate is mirrored to the positive side. It is another shape than the Mandelbulb, at the same place. The first switch builds its renderer, about ten seconds.',
+        },
+        burningMix: {
+            type: 'float',
+            default: 1, min: 0, max: 1, step: 0.01,
+            label: 'Burning mix',
+            condition: [onBulb, { param: 'burning', bool: true }],
+            description: 'How far a negative coordinate is mirrored: 1 is the whole mirror, 0 none. In between the shape is another one again; around 0.5 much of it is flat ground that shows nothing more with depth.',
+        },
         // ── the Mandelbox: GMT's rows (engine-gmt/formulas/AmazingBox.ts), see THE TWO FORMULAS ──
         boxScale: {
             type: 'float',
@@ -321,16 +350,18 @@ export const DzFormulaFeature = {
     },
 } satisfies FeatureDefinition;
 
-/** The keys that say WHICH formula a place is of, the box's parameters, and whether it is a Julia set.
- *  A place, a jump and the renderer's `setFormula` all carry exactly these. (The Julia CONSTANT is not
- *  among them: it is part of the view, and its three number rows follow the view. See JULIA MODE and THE
- *  CONSTANT'S ROW in the header.) */
-export const FORMULA_CHOICE_KEYS = ['kind', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotX', 'boxRotY', 'boxRotZ', 'juliaMode'] as const;
+/** The keys that say WHICH formula a place is of, the box's parameters, whether it is a Julia set, and the
+ *  bulb's Burning with its mix. A place, a jump and the renderer's `setFormula` all carry exactly these. (The
+ *  Julia CONSTANT is not among them: it is part of the view, and its three number rows follow the view. See
+ *  JULIA MODE and THE CONSTANT'S ROW in the header.) */
+export const FORMULA_CHOICE_KEYS = ['kind', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotX', 'boxRotY', 'boxRotZ', 'juliaMode', 'burning', 'burningMix'] as const;
 type DzFormulaChoiceKey = (typeof FORMULA_CHOICE_KEYS)[number];
-/** `juliaMode` may be left out (every choice written before 2026-10-12): it then means off. */
+/** The keys a choice written before they existed does not have: `juliaMode` (off), `burning` (off) and
+ *  `burningMix` (both 2026-10-12). */
+type DzFormulaLateKey = 'juliaMode' | 'burning' | 'burningMix';
 export type DzFormulaChoice =
-    Pick<SliceFromParams<typeof DzFormulaFeature['params']>, Exclude<DzFormulaChoiceKey, 'juliaMode'>>
-    & Partial<Pick<SliceFromParams<typeof DzFormulaFeature['params']>, 'juliaMode'>>;
+    Pick<SliceFromParams<typeof DzFormulaFeature['params']>, Exclude<DzFormulaChoiceKey, DzFormulaLateKey>>
+    & Partial<Pick<SliceFromParams<typeof DzFormulaFeature['params']>, DzFormulaLateKey>>;
 
 /* Compile-time guard for the @invariant in the header. `AnyKeys` is the union of the slice keys
    typed `any` (never when there are none); `MustBeNever` refuses anything else, so tsc names the

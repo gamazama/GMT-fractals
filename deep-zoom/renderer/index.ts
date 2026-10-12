@@ -451,9 +451,15 @@ export interface DeepZoomApi {
      *  @invariant in Julia mode both GPU kernels compute what the CPU orbits compute, and what a fixed-point
      *  orbit of the explicit point under z -> f(z) + K gives - proven by: npm run smoke:deep-zoom-direct (the
      *  seven gated "julia, ..." lines) and npm run check:deep-zoom-julia-orbit. Falsification records in
-     *  debug/deep-zoom-direct-check.mts and debug/deep-zoom-checks/julia-orbit.mts. */
-    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number]; julia: boolean; c: [string, string, string]; cNum: [number, number, number] };
-    /** Whether the deep shader of the SELECTED formula is there. */
+     *  debug/deep-zoom-direct-check.mts and debug/deep-zoom-checks/julia-orbit.mts.
+     *  `burning`, `burnMix`: BURNING (grep the name in core.js), the bulb's switch and its mix as they are held.
+     *  @invariant with Burning on the bulb's kernel computes what the CPU orbit computes, and what a fixed-point
+     *  orbit of the explicit point under z -> fold(z)^n + c gives - proven by: npm run smoke:deep-zoom-direct (the
+     *  ten gated "burning, ..." lines) and npm run check:deep-zoom-burning-orbit. Falsification records in
+     *  debug/deep-zoom-direct-check.mts and debug/deep-zoom-checks/burning-orbit.mts. */
+    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number]; julia: boolean; c: [string, string, string]; cNum: [number, number, number]; burning: boolean; burnMix: number };
+    /** Whether the deep shader of the SELECTED formula is there: the Mandelbox's variant, or with BURNING (grep the
+     *  name in core.js) on, the bulb's variant with the fold. */
     formulaState(): 'building' | 'on' | 'failed';
     setAutoIters(on: boolean): void;
     autoIters(): boolean;

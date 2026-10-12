@@ -29,7 +29,7 @@
  *     `setLight` reads a missing first one as Direct: both are always called with both values.
  *   - `setNormalMode` does not restart the still; the empty `setLook({})` after it does.
  *   - An id with no row, or a row with `group: null`, is not pushed. Unknown ids are named once.
- *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind, the Julia switch, the box's seven numbers and
+ *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind, the Julia switch, Burning and its mix, the box's seven numbers and
  *     (see THE CONSTANT) sometimes the Julia constant, and
  *     it is sent before any other push of the same patch: `setIters` clamps to the ceiling of the
  *     formula IN FORCE (400 for the bulb, 500 for the box), so a box place's 450 iterations sent
@@ -56,6 +56,10 @@
  *   check:deep-zoom-param-map ("constant: rows that equal what the renderer holds send no
  *   constant ...", "constant: rows put back onto a constant that came with a view send its exact
  *   strings ..."). Falsification record in that check's header (2026-10-12, the Constant row).
+ * @invariant Burning and its mix reach the module in the formula's own call, as `burning` and `burnMix` - proven
+ *   by: npm run check:deep-zoom-param-map ("push: Burning and its mix go as setFormula(kind, { ..., burning:
+ *   true, burnMix: 0.5 }), one call and nothing else"). Falsified 2026-10-12: the `burning` line of the push
+ *   left out -> 7 red (the record is in that check's header).
  * @assumption Only the last `EXACT_CONSTANTS_KEPT` are remembered, the oldest forgotten first: the
  *   check has a line for it ("constant: the ninth ..."), not broken on purpose.
  */
@@ -115,6 +119,8 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
             fixedR: num('dzFormula', 'boxFixedRadius'),
             rot: [num('dzFormula', 'boxRotX'), num('dzFormula', 'boxRotY'), num('dzFormula', 'boxRotZ')],
             julia: flag('dzFormula', 'juliaMode'),
+            burning: flag('dzFormula', 'burning'),
+            burnMix: num('dzFormula', 'burningMix'),
             ...constant(),                             // only when the rows say another constant than the renderer holds
         }),
         power: () => api.setPower(num('dzFormula', 'power')),

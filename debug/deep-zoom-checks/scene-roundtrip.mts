@@ -141,7 +141,7 @@ console.log('[1] scene     getPreset -> text -> parseSceneJson -> loadPreset');
 const first = fakeHost(VIEW_A, true);
 setHost(first.host);
 await tick();
-store().setDzFormula({ juliaMode: true, power: 6, phaseTheta: 0.125, phasePhi: -0.25, iterations: 61 });
+store().setDzFormula({ juliaMode: true, burning: true, burningMix: 0.75, power: 6, phaseTheta: 0.125, phasePhi: -0.25, iterations: 61 });
 store().setDzLight({ lampFalloff: 2.5 });
 store().setDzQuality({ detail: 3.5 });
 const ROW: DzLocation = {
@@ -168,7 +168,7 @@ check((written as unknown as { dzSceneVersion?: number }).dzSceneVersion === DZ_
 
 // Somewhere else entirely, then the scene back.
 function elsewhere(host: Fake | null): void {
-    store().setDzFormula({ juliaMode: false, power: 8, phaseTheta: 0, phasePhi: 0, iterations: 14 });
+    store().setDzFormula({ juliaMode: false, burning: false, burningMix: 1, power: 8, phaseTheta: 0, phasePhi: 0, iterations: 14 });
     store().setDzLight({ lampFalloff: 4 });
     store().setDzQuality({ detail: 1 });
     useEngineStore.setState({ savedLocations: [] });
@@ -195,6 +195,7 @@ check((JSON.parse(TEXT) as { features: { dzFormula: { juliaX?: number } } }).fea
     'scene: the Constant row follows the loaded view - the constant\'s three doubles, though the scene itself held the rows as 0', `${rowsNow()} for ${ROWS_TEXT}`);
 check(store().dzFormula.juliaMode === true && store().dzFormula.power === 6 && store().dzFormula.phaseTheta === 0.125 && store().dzFormula.phasePhi === -0.25
     && store().dzLight.lampFalloff === 2.5 && store().dzQuality.detail === 3.5, 'scene: the formula - Julia mode with it - and the look values come back');
+check(store().dzFormula.burning === true && store().dzFormula.burningMix === 0.75, 'scene: Burning and its mix come back with the formula', `${store().dzFormula.burning} ${store().dzFormula.burningMix}`);
 check(!!got && got.power === 6 && got.phase[0] === 0.125, 'scene: the view handed to the renderer takes its look fields from the loaded scene, not from where the app stood');
 const rows = store().savedLocations ?? [];
 check(rows.length === 1 && rows[0].id === 'row-1' && rows[0].label === 'A Julia place' && sameTriple(rows[0].state.view.cam, CAM_B) && sameTriple(rows[0].state.view.julia, JULIA)

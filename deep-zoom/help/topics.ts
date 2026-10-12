@@ -203,6 +203,7 @@ The **Formula** tab chooses what is drawn. Switching the formula shows the whole
 ## Mandelbulb
 - **Power** is the exponent in the formula, 2 to 16. 8 is the classic Mandelbulb. \`-\` \`=\` change it by 1.
 - **Phase theta** and **Phase phi** shift the formula's two angles.
+- **Burning** mirrors every negative coordinate to the positive side at each iteration: another shape at the same place. **Burning mix** says how far, from 0 to 1. The first switch takes about ten seconds, while its renderer is built.
 
 ## Mandelbox
 - **Scale** is how much each fold scales space. Negative values give another family of shapes. Between -1.02 and 1.02 there is nothing to draw, and the slider passes over that band.

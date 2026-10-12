@@ -221,6 +221,7 @@ function applyFormula(state: DzLocationState): void {
     useEngineStore.getState().setDzFormula({
         kind: FORMULA_BULB,
         juliaMode: false,                                            // every place from before Julia mode, and every card
+        burning: false,                                              // and from before Burning (its mix stays as the row has it)
         ...saved,
         ...(v.julia ? juliaRowsOf(v.julia) : {}),
     });
@@ -261,13 +262,21 @@ const fixed = (x: number): string => String(BigInt(Math.round(x * 2 ** 40)) << B
 
 /**
  * The whole of a formula from outside: where a switch of formula puts the camera. The bulb's is the
- * first starter's view (the start of the sample flight). The box's follows its scale - the set fills
+ * first starter's view (the start of the sample flight), and with Burning on that view from 1.3 times as
+ * far. The box's follows its scale - the set fills
  * a cube of half-side 2 L (s + 1) / (s - 1) for a positive scale s (6 at scale 2) and about 2.2 L for
  * a negative one (measured at -1.5) - seen from 6.5 half-sides away along a fixed diagonal (at 5 the
  * cube's corners left a square frame).
  */
 function formulaHome(choice: DzFormulaChoice): DzView {
-    if (choice.kind !== FORMULA_BOX) return STARTERS[0].view;
+    if (choice.kind !== FORMULA_BOX) {
+        // With Burning on (features/formula.ts, BURNING) the bulb fills the ball it lies in (radius 1.155 at power 8),
+        // where the plain bulb leaves room: from the first starter's 3.23 its top and bottom are cut off (seen
+        // 2026-10-12). So the camera stands 1.3 times as far out, on the same line through the centre.
+        const home = STARTERS[0].view;
+        if (!choice.burning) return home;
+        return { ...home, cam: [0, 1, 2].map((i) => String(BigInt(home.cam[i]) * 13n / 10n)) as [string, string, string] };
+    }
     const s = choice.boxScale, a = Math.abs(s);
     const half = s > 0 ? 2 * choice.boxFold * (a + 1) / Math.max(a - 1, 0.02) : 2.2 * choice.boxFold;
     const dir = [0.66, 0.43, 0.61], len = Math.hypot(dir[0], dir[1], dir[2]), d = 6.5 * half / len;

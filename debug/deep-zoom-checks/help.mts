@@ -185,6 +185,8 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Power', 'deep-zoom/features/formula.ts', "label: 'Power'"],
     ['Phase theta', 'deep-zoom/features/formula.ts', "label: 'Phase theta'"],
     ['Phase phi', 'deep-zoom/features/formula.ts', "label: 'Phase phi'"],
+    ['Burning', 'deep-zoom/features/formula.ts', "label: 'Burning'"],
+    ['Burning mix', 'deep-zoom/features/formula.ts', "label: 'Burning mix'"],
     ['Scale', 'deep-zoom/features/formula.ts', "label: 'Scale'"],
     ['Min Radius', 'deep-zoom/features/formula.ts', "label: 'Min Radius'"],
     ['Folding Limit', 'deep-zoom/features/formula.ts', "label: 'Folding Limit'"],

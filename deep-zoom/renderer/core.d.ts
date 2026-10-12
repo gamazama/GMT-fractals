@@ -19,6 +19,11 @@ export interface DeepZoomBoxParams {
     fixedR?: number;
     /** Pre-rotation about x, y, z in radians, applied in that order every iteration. */
     rot?: [number, number, number];
+    /** BURNING (grep the name in core.js), the Mandelbulb's: at the top of every iteration a negative coordinate
+     *  is multiplied by 1 - 2 `burnMix` (0 to 1; 1 = the plain abs). Kept from call to call, also while the box
+     *  is drawn. The first time it is on, a variant of the ray program builds in the background. */
+    burning?: boolean;
+    burnMix?: number;
     /** JULIA MODE (grep the name in core.js), for EITHER formula: true = c is one constant and the point looked
      *  at starts the orbit; false = c is the point itself. Kept from call to call. */
     julia?: boolean;

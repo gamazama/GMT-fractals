@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-12T17:01:44.461Z",
+  "generated_at": "2026-10-12T17:48:42.053Z",
   "repo_root": "H:/GMT/workspace-gmt/stable/.claude/worktrees/deep-zoom",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
-    "files": 3920,
-    "bytes": 94563679,
-    "tokens": 14890769,
-    "loadable_tokens": 14762279,
-    "context_worthy_tokens": 7183098,
-    "source_of_truth_tokens": 5850081,
+    "files": 3921,
+    "bytes": 94602052,
+    "tokens": 14902054,
+    "loadable_tokens": 14773564,
+    "context_worthy_tokens": 7194251,
+    "source_of_truth_tokens": 5861233,
     "orientation_tokens": 26484,
-    "architecture_tokens": 1306533,
+    "architecture_tokens": 1306534,
     "reachable_union_files": 1212,
-    "reachable_union_tokens": 4022141,
+    "reachable_union_tokens": 4023794,
     "dead_context_files": 24,
     "dead_context_tokens": 72448
   },
@@ -57,7 +57,7 @@
     "deep-zoom": {
       "entry": "deep-zoom/main.tsx",
       "files": 579,
-      "tokens": 1843440
+      "tokens": 1845093
     }
   },
   "dead_context": [
@@ -184,7 +184,7 @@
   ],
   "by_tier": {
     "root": {
-      "tokens": 1413170,
+      "tokens": 1414933,
       "files": 354
     },
     "app-gmt": {
@@ -196,8 +196,8 @@
       "files": 259
     },
     "tooling": {
-      "tokens": 6158945,
-      "files": 633
+      "tokens": 6168467,
+      "files": 634
     },
     "demo": {
       "tokens": 8972,
@@ -234,15 +234,15 @@
   },
   "by_context_class": {
     "source": {
-      "tokens": 4199852,
+      "tokens": 4201615,
       "files": 1276
     },
     "architecture": {
-      "tokens": 1306533,
+      "tokens": 1306534,
       "files": 338
     },
     "data": {
-      "tokens": 6319325,
+      "tokens": 6319457,
       "files": 927
     },
     "config": {
@@ -258,8 +258,8 @@
       "files": 620
     },
     "source-tooling": {
-      "tokens": 1636814,
-      "files": 373
+      "tokens": 1646203,
+      "files": 374
     },
     "reference-legacy": {
       "tokens": 1259856,
@@ -272,15 +272,15 @@
   },
   "by_load_policy": {
     "on-demand": {
-      "tokens": 5850081,
-      "files": 1661
+      "tokens": 5861233,
+      "files": 1662
     },
     "read-for-area": {
-      "tokens": 1306533,
+      "tokens": 1306534,
       "files": 338
     },
     "skip": {
-      "tokens": 4781339,
+      "tokens": 4781471,
       "files": 314
     },
     "read-first": {
@@ -298,7 +298,7 @@
   },
   "tier_policy_matrix": {
     "root": {
-      "on-demand": 1242654,
+      "on-demand": 1244417,
       "read-for-area": 21614,
       "skip": 10824,
       "read-first": 9588
@@ -311,9 +311,9 @@
       "on-demand": 727660
     },
     "tooling": {
-      "on-demand": 1636875,
-      "skip": 3591820,
-      "read-for-area": 927305,
+      "on-demand": 1646264,
+      "skip": 3591952,
+      "read-for-area": 927306,
       "read-first": 2945
     },
     "demo": {
@@ -366,7 +366,7 @@
     },
     {
       "path": "deep-zoom/renderer/core.js",
-      "tokens": 118567,
+      "tokens": 118786,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -498,7 +498,7 @@
     },
     {
       "path": "debug/deep-zoom-direct-check.mts",
-      "tokens": 21904,
+      "tokens": 21901,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -941,6 +941,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "deep-zoom/renderer/index.ts",
+      "tokens": 12095,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "utils/CurveFitting.ts",
       "tokens": 11976,
       "tier": "gmt-app",
@@ -950,12 +956,6 @@
       "path": "debug/test-palette-exportsubjects.mts",
       "tokens": 11920,
       "tier": "tooling",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "deep-zoom/renderer/index.ts",
-      "tokens": 11893,
-      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -989,6 +989,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "deep-zoom/locations.ts",
+      "tokens": 11398,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine/features/audioMod/AudioPanel.tsx",
       "tokens": 11375,
       "tier": "engine-core",
@@ -998,12 +1004,6 @@
       "path": "engine-gmt/components/timeline/RenderPopup/exportRunner.ts",
       "tokens": 11331,
       "tier": "engine-gmt",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "deep-zoom/locations.ts",
-      "tokens": 11189,
-      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -1223,6 +1223,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "debug/deep-zoom-checks/param-map.mts",
+      "tokens": 9132,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "components/vector-input/BaseVectorInput.tsx",
       "tokens": 9069,
       "tier": "gmt-app",
@@ -1313,8 +1319,8 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/deep-zoom-checks/param-map.mts",
-      "tokens": 8600,
+      "path": "debug/deep-zoom-checks/burning-orbit.mts",
+      "tokens": 8621,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -1385,14 +1391,14 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/deep-zoom-checks/fly-camera.mts",
-      "tokens": 8196,
+      "path": "debug/deep-zoom-checks/help.mts",
+      "tokens": 8230,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/deep-zoom-checks/help.mts",
-      "tokens": 8187,
+      "path": "debug/deep-zoom-checks/fly-camera.mts",
+      "tokens": 8196,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -1485,6 +1491,12 @@
       "tokens": 7756,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "deep-zoom/features/formula.ts",
+      "tokens": 7727,
+      "tier": "root",
+      "loadPolicy": "on-demand"
     },
     {
       "path": "docs/UI_PERF_HANDOFF.md",
@@ -1739,12 +1751,6 @@
       "loadPolicy": "read-for-area"
     },
     {
-      "path": "deep-zoom/features/formula.ts",
-      "tokens": 7063,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "engine-gmt/utils/mb3d/loadMB3DScene.ts",
       "tokens": 7058,
       "tier": "engine-gmt",
@@ -1841,6 +1847,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "debug/deep-zoom-checks/scene-roundtrip.mts",
+      "tokens": 6443,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "plans/ge-v2-research/gradient-browsers.md",
       "tokens": 6428,
       "tier": "tooling",
@@ -1877,15 +1889,15 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "engine/AnimationEngine.ts",
-      "tokens": 6371,
-      "tier": "engine-core",
+      "path": "debug/deep-zoom-checks/location-parse.mts",
+      "tokens": 6378,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/deep-zoom-checks/scene-roundtrip.mts",
-      "tokens": 6364,
-      "tier": "tooling",
+      "path": "engine/AnimationEngine.ts",
+      "tokens": 6371,
+      "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
@@ -1922,12 +1934,6 @@
       "path": "mesh-export/algorithms/sparse-grid.ts",
       "tokens": 6299,
       "tier": "mesh-export",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "debug/deep-zoom-checks/location-parse.mts",
-      "tokens": 6261,
-      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -2753,6 +2759,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "deep-zoom/help/topics.ts",
+      "tokens": 4706,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine-gmt/formulas/Phoenix.ts",
       "tokens": 4703,
       "tier": "engine-gmt",
@@ -2819,12 +2831,6 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "deep-zoom/help/topics.ts",
-      "tokens": 4637,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "palette/core/curveSpaces.ts",
       "tokens": 4635,
       "tier": "root",
@@ -2873,6 +2879,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "deep-zoom/locationParse.ts",
+      "tokens": 4592,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine/animation/zoomPath.ts",
       "tokens": 4584,
       "tier": "engine-core",
@@ -2905,12 +2917,6 @@
     {
       "path": "palette/core/dcc/templates.generated.ts",
       "tokens": 4533,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "deep-zoom/locationParse.ts",
-      "tokens": 4521,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -8436,6 +8442,21 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/deep-zoom-checks/burning-orbit.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 29367,
+      "lines": 391,
+      "tokens": 8621,
+      "structuralTokens": 10878,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/deep-zoom-checks/depth-format.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
@@ -8472,10 +8493,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 29013,
-      "lines": 342,
-      "tokens": 8187,
-      "structuralTokens": 10783,
+      "bytes": 29161,
+      "lines": 344,
+      "tokens": 8230,
+      "structuralTokens": 10845,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -8532,10 +8553,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 21380,
-      "lines": 232,
-      "tokens": 6261,
-      "structuralTokens": 7668,
+      "bytes": 21779,
+      "lines": 235,
+      "tokens": 6378,
+      "structuralTokens": 7824,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -8577,10 +8598,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 29944,
-      "lines": 381,
-      "tokens": 8600,
-      "structuralTokens": 10893,
+      "bytes": 31752,
+      "lines": 397,
+      "tokens": 9132,
+      "structuralTokens": 11582,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -8622,10 +8643,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 22477,
-      "lines": 277,
-      "tokens": 6364,
-      "structuralTokens": 7773,
+      "bytes": 22746,
+      "lines": 278,
+      "tokens": 6443,
+      "structuralTokens": 7880,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -8652,10 +8673,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 74488,
+      "bytes": 74480,
       "lines": 688,
-      "tokens": 21904,
-      "structuralTokens": 25997,
+      "tokens": 21901,
+      "structuralTokens": 25995,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -14209,10 +14230,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 24051,
-      "lines": 340,
-      "tokens": 7063,
-      "structuralTokens": 6925,
+      "bytes": 26318,
+      "lines": 371,
+      "tokens": 7727,
+      "structuralTokens": 7543,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -14396,10 +14417,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 15767,
-      "lines": 279,
-      "tokens": 4637,
-      "structuralTokens": 4647,
+      "bytes": 16002,
+      "lines": 280,
+      "tokens": 4706,
+      "structuralTokens": 4713,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -14464,10 +14485,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 11288,
-      "lines": 179,
-      "tokens": 3320,
-      "structuralTokens": 3540,
+      "bytes": 11810,
+      "lines": 185,
+      "tokens": 3474,
+      "structuralTokens": 3712,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -14498,10 +14519,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 12327,
-      "lines": 193,
-      "tokens": 3614,
-      "structuralTokens": 4267,
+      "bytes": 12523,
+      "lines": 196,
+      "tokens": 3672,
+      "structuralTokens": 4341,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -14549,10 +14570,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 15473,
-      "lines": 263,
-      "tokens": 4521,
-      "structuralTokens": 4835,
+      "bytes": 15714,
+      "lines": 265,
+      "tokens": 4592,
+      "structuralTokens": 4911,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -14566,10 +14587,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 38927,
-      "lines": 671,
-      "tokens": 11189,
-      "structuralTokens": 11543,
+      "bytes": 39637,
+      "lines": 680,
+      "tokens": 11398,
+      "structuralTokens": 11741,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -14651,10 +14672,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 4021,
+      "bytes": 4046,
       "lines": 72,
-      "tokens": 1183,
-      "structuralTokens": 1334,
+      "tokens": 1190,
+      "structuralTokens": 1345,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -14702,10 +14723,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 8640,
-      "lines": 129,
-      "tokens": 2540,
-      "structuralTokens": 2486,
+      "bytes": 9013,
+      "lines": 134,
+      "tokens": 2650,
+      "structuralTokens": 2598,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -14717,10 +14738,10 @@
       "loadPolicy": "on-demand",
       "ext": ".js",
       "reason": "app-source",
-      "bytes": 405501,
-      "lines": 5753,
-      "tokens": 118567,
-      "structuralTokens": 137129,
+      "bytes": 406246,
+      "lines": 5751,
+      "tokens": 118786,
+      "structuralTokens": 137404,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -14749,10 +14770,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 40442,
-      "lines": 561,
-      "tokens": 11893,
-      "structuralTokens": 11521,
+      "bytes": 41130,
+      "lines": 567,
+      "tokens": 12095,
+      "structuralTokens": 11729,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -50651,10 +50672,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1701800,
-      "lines": 67749,
-      "tokens": 586828,
-      "structuralTokens": 561430,
+      "bytes": 1702184,
+      "lines": 67764,
+      "tokens": 586960,
+      "structuralTokens": 561559,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -50666,9 +50687,9 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 11424,
+      "bytes": 11428,
       "lines": 165,
-      "tokens": 2925,
+      "tokens": 2926,
       "structuralTokens": 4496,
       "cpt": 3.9,
       "heavy": false,

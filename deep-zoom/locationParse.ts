@@ -240,7 +240,9 @@ export function locationKey(state: DzLocationState): string {
     const shape = kind === FORMULA_BOX
         ? [choice?.boxScale, choice?.boxMinRadius, choice?.boxFold, choice?.boxFixedRadius, choice?.boxRotX, choice?.boxRotY, choice?.boxRotZ]
         : saved ? [saved.power, saved.phaseTheta, saved.phasePhi] : [v.power, v.phase[0], v.phase[1]];
-    return JSON.stringify([v.cam, v.julia ?? null, kind, choice?.juliaMode === true, shape.map((n) => (typeof n === 'number' ? n : null))]);
+    // Burning is the bulb's: on, the place is another one, and so is the same camera at another mix; off, the mix says nothing
+    const burning = kind !== FORMULA_BOX && choice?.burning === true ? (choice.burningMix ?? 1) : null;
+    return JSON.stringify([v.cam, v.julia ?? null, kind, choice?.juliaMode === true, shape.map((n) => (typeof n === 'number' ? n : null)), burning]);
 }
 
 /** Which of `incoming` are not yet in `have` (by `locationKey`), as indexes into `incoming`, and how
