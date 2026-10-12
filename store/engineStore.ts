@@ -83,23 +83,79 @@ export const registerRunWrittenPath = (
     if (at >= 0) _runWrittenPaths[at] = entry; else _runWrittenPaths.push(entry);
 };
 /** `obj` without the value at `keys`: copied along the path only, the original untouched.
- *  A path that is not there changes nothing. */
+ *  A path that is not there changes nothing. A key may be an index into a list (the
+ *  element is then left as a hole, the list keeps its length). */
 const _withoutPath = (obj: Record<string, unknown>, keys: string[]): Record<string, unknown> => {
     const [head, ...rest] = keys;
     if (head === undefined || !(head in obj)) return obj;
-    const clone = { ...obj };
+    const clone = (Array.isArray(obj) ? [...obj] : { ...obj }) as Record<string, unknown>;
     if (rest.length === 0) { delete clone[head]; return clone; }
     const child = obj[head];
-    if (!child || typeof child !== 'object' || Array.isArray(child)) return obj;
+    if (!child || typeof child !== 'object') return obj;
     clone[head] = _withoutPath(child as Record<string, unknown>, rest);
     return clone;
 };
-/** What the export version compares: the preset without its volatile {version, name}
- *  and without the paths a render is writing by itself just now. */
+
+// ── What the TIMELINE writes into the scene (the export version, 2026-10-12) ──
+// A value that has a track with a key on it is not the scene's own: it is whatever
+// the playhead last put there. The scene's content is the TRACK, and the comparison
+// keeps that (the preset's `sequence`). Counted as content, a playhead moved between
+// two exports read as "the scene has changed": a new version, new file names, and a
+// render that had been cancelled could not be continued (measured in app-gmt
+// 2026-10-11: version 2 with the playhead where it was, 3 with it on frame 30).
+//
+// So the target of every track that holds a key is left out of the comparison, the
+// way a run's own writing is, above. WHERE a track writes:
+//   - a feature param's own track (`<featureId>.<param>`; one axis of a vector as
+//     `_x` or `.x`) writes that param. Worked out here, by the rule the tracks are
+//     named by (`trackScenePath` in engine/animation/trackBinding.ts);
+//   - a track bound BY HAND (an app's binder, engine/animation/binderRegistry.ts)
+//     writes wherever that binder writes, which only the app knows. The app DECLARES
+//     it: `registerTrackWrittenPaths`. Engine-core names no track and no path here.
+// A track nobody can place leaves nothing out: for that track the version still
+// moves with the playhead, as it did for every track until that day.
+// WHAT STILL COUNTS: a key added, moved, retimed or deleted (the sequence changed),
+// and every value that has no key. WHAT NO LONGER COUNTS: a keyed value typed over
+// without keying it - the timeline puts the keyed value back at the next frame, so
+// no export ever showed it.
+//
+// @invariant While a track holds a key, the value it drives is left out of the export
+//   version's comparison (the playhead may move; the version holds), a value with no
+//   track still raises it, and so does a change to a key - proven by: npm run
+//   test:export-naming (the "[13] ..." lines). Falsified 2026-10-12: see that test's
+//   header.
+type TrackPathResolver = (trackId: string) => readonly string[] | null;
+const _trackPathResolvers = new Map<string, TrackPathResolver>();
+/** Declare where an app's hand-bound tracks write (see above). `resolve` answers, for a
+ *  track id, the preset paths its binder writes ('features.<featureId>.<param>', a root
+ *  field, a list's element by its index) - or null for a track that is not its own.
+ *  The first resolver that answers wins. Registering a key again replaces it (a module
+ *  evaluated twice). */
+export const registerTrackWrittenPaths = (key: string, resolve: TrackPathResolver): void => {
+    _trackPathResolvers.set(key, resolve);
+};
+/** The paths the timeline is writing: one or more for every track that holds a key. */
+const _timelineWrittenPaths = (content: Record<string, unknown>): string[][] => {
+    const paths: string[][] = [];
+    const features = (content.features ?? {}) as Record<string, unknown>;
+    for (const track of Object.values(useAnimationStore.getState().sequence.tracks ?? {})) {
+        if (track.keyframes.length === 0) continue;                  // no key: the timeline writes nothing there
+        let declared: readonly string[] | null = null;
+        for (const resolve of _trackPathResolvers.values()) { declared = resolve(track.id); if (declared) break; }
+        if (declared) for (const path of declared) paths.push(path.split('.').filter(Boolean));
+        else { const own = trackScenePath(track.id, features); if (own) paths.push(own); }
+    }
+    return paths;
+};
+
+/** What the export version compares: the preset without its volatile {version, name},
+ *  without the paths a render is writing by itself just now, and without what the
+ *  timeline drives. */
 const _exportContentHash = (s: EngineStoreState & EngineActions): string => {
     const { version: _version, name: _name, ...rest } = s.getPreset({ includeScene: true }) as unknown as Record<string, unknown>;
     let content: Record<string, unknown> = rest;
     for (const entry of _runWrittenPaths) if (entry.when(s)) content = _withoutPath(content, entry.keys);
+    for (const keys of _timelineWrittenPaths(rest)) content = _withoutPath(content, keys);
     return JSON.stringify(content);
 };
 /** The version the next export gets, and whether that is a new one. Takes nothing. */
@@ -127,6 +183,7 @@ import '../engine/features'; // Ensure features are registered
 // stores at runtime — animationStore depends only on its own slice
 // files, no cycle back into here.
 import { useAnimationStore } from './animationStore';
+import { trackScenePath } from '../engine/animation/trackBinding';
 
 import { compileGate } from './CompileGate';
 

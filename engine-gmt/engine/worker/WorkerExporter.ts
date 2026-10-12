@@ -59,7 +59,9 @@
  *     - Interrupt then Finish: a file of the 13 frames made, which plays;
  *       Discard: the stream aborted, an empty file left under a new name
  *       (this worker has no handle to remove it with), a file picked to be
- *       replaced keeps its bytes.
+ *       replaced keeps its bytes. (Since 2026-10-12 the RUNNER, which has the
+ *       handle, removes that empty file once this worker has aborted the
+ *       stream: `handOverPickedFile` in engine/export/pickedFile.ts.)
  *   BROKEN ON PURPOSE twice: `fastStart: 'in-memory'` for a stream again ->
  *   all four writes of the 51 MiB file after its last frame, the index at the
  *   front; a keyframe for frame 0 alone -> one keyframe in each of the four
@@ -80,7 +82,7 @@
  */
 
 import * as THREE from 'three';
-import { exportFrameFileTag, exportFrameFiles } from './exportFrameNaming';
+import { exportFrameFileTag, exportFrameFiles, exportFrameSampleBase } from './exportFrameNaming';
 import type { FractalEngine } from '../FractalEngine';
 import type { VideoExportConfig, ExportPass } from '../../../engine/codec/VideoExportTypes';
 import type { EngineRenderState } from '../FractalEngine';
@@ -518,7 +520,7 @@ export class WorkerExporter {
      *   on a real GPU; the smoke runs on SwiftShader, which has no meaningful
      *   asynchronous queue.
      */
-    private renderOnePass(sess: ExportSession, frameIndex: number): THREE.WebGLRenderTarget {
+    private renderOnePass(sess: ExportSession, frameIndex: number, passIndex = 0, passCount = 1): THREE.WebGLRenderTarget {
         // Clear accumulation ping-pong
         this.renderer.setRenderTarget(sess.accumA);
         this.renderer.clear();
@@ -526,6 +528,11 @@ export class WorkerExporter {
         this.renderer.clear();
 
         const N = sess.config.samples;
+        // THE GRAIN IS THE FRAME'S OWN (exportFrameNaming.ts, THE GRAIN OF ONE FRAME): the sample
+        // count that seeds the shader starts from where an unbroken run had got to at this frame
+        // and pass, whatever this session made before it. Counted on through the session, as it
+        // was until 2026-10-12, a continued render had another grain from its first frame on.
+        sess.internalFrameCounter = exportFrameSampleBase(frameIndex, passIndex, passCount, N);
         // Heartbeat schedule — see the JSDoc above and EXPORT_HEARTBEAT_MS.
         let nextBeatAfter = 1;   // beat once sample 0 is done: that measures a sample's cost
         let beatIssuedAt = performance.now();
@@ -669,11 +676,11 @@ export class WorkerExporter {
         const passBuffers: Map<ExportPass, Uint8Array> = new Map();
         let lastWrite: THREE.WebGLRenderTarget | null = null;
 
-        for (const pass of passes) {
+        for (const [passIndex, pass] of passes.entries()) {
             const passCode = pass === 'alpha' ? 1.0 : pass === 'depth' ? 2.0 : 0.0;
             this.engine.mainUniforms.uOutputPass.value = passCode;
 
-            lastWrite = this.renderOnePass(sess, frameIndex);
+            lastWrite = this.renderOnePass(sess, frameIndex, passIndex, passes.length);
 
             // Focus-lock probe on the beauty pass only (alpha writes binary coverage to alpha;
             // depth writes distance too but we don't need to re-probe it every pass).

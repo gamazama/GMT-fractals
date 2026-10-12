@@ -31,9 +31,18 @@
  *     file that was picked to be REPLACED keeps what it held before.
  *   - AFTER `discard()` NO WRITE REACHES THE FILE: the encoder's muxer may still be working
  *     through frames it had been handed, and their bytes are dropped here.
- *   - GMT'S EXPORT WORKER does the same thing in its own way and does not use this file: its
- *     stream has crossed to a worker, where there is a writer but no handle (grep `fileWriter` in
- *     engine-gmt/engine/worker/WorkerExporter.ts).
+ *   - AN ENCODER ON ANOTHER THREAD (GMT's export worker) gets `handOverPickedFile` instead. The
+ *     file's stream cannot cross to a worker; what crosses forwards to it, and the worker ends a
+ *     cancelled session by aborting its end (grep `fileWriter` in
+ *     engine-gmt/engine/worker/WorkerExporter.ts), which arrives here a moment LATER. The worker has
+ *     a writer and no handle, so until 2026-10-12 a discarded GMT video left the empty file the
+ *     picker had made. `discard()` there waits for that abort (the file cannot be removed while
+ *     its stream is open), aborts the file itself if the worker never lets go, and then takes
+ *     the empty file away as `forwardToPickedFile` does.
+ *   - THE PICKER MAKES THE FILE, not the first write: a picked name is an empty file on disk from
+ *     the moment the picker answers. There is no later moment to make it at; it can only be
+ *     removed, and only where the browser has `remove()` (Chromium). Without it an empty file is
+ *     left, and `discard()` says so ('empty') for the runner to tell the user.
  *
  * @assumption Measured in the two apps that use it, Chrome on the real GPU, 2026-10-11, the
  *   picker stood in for by a real File System Access file in the origin's private file system
@@ -44,6 +53,15 @@
  *   picked to be replaced keeps its bytes. BROKEN ON PURPOSE once in fluid-toy's runner (the
  *   cancel path closing the stream instead of calling `discard()`): "aborted false, closed false".
  *   NO STANDING GUARD: no smoke starts a render into a picked file.
+ * @assumption `handOverPickedFile().discard()` removes nothing before the other thread's abort has
+ *   arrived, removes an empty file, keeps one that holds bytes, answers 'empty' where the handle
+ *   has no `remove()`, and aborts the file itself when the other thread never does - `npm run
+ *   test:export-naming` (the "[14] ..." lines, fakes for the handle and the stream), green and not
+ *   broken on purpose. In app-gmt, 2026-10-12, the same stand-in file system
+ *   (debug/scratch/small-three/gmt-four.mts, git-ignored), an H.264 video interrupted after 12
+ *   frames and discarded: no file under the picked name (before: one of 0 bytes); a file of
+ *   4,321 bytes picked to be replaced keeps them; a handle with no `remove()` leaves the empty
+ *   file and the toast says so.
  */
 
 /** The part of a File System Access file stream a video uses. (The project's DOM types do not
@@ -76,6 +94,46 @@ export interface PickedFile {
      *  be replaced stays as it was), and the empty file the picker made is taken away where the
      *  browser can. Cancel the encoder first. Never rejects. */
     discard(): Promise<void>;
+}
+
+/** What `HandedOverFile.discard` left under the picked name: nothing ('removed'), the bytes a
+ *  file picked to be replaced held before ('kept'), or an empty file this browser cannot remove
+ *  ('empty'). */
+export type DiscardedFile = 'removed' | 'kept' | 'empty';
+
+export interface HandedOverFile {
+    /** What the other thread's encoder is handed in place of the file's own stream: every call
+     *  goes on to the file, and the file's end (closed, or aborted) is noted here. */
+    readonly stream: SaveFileStream;
+    /** Nothing of this run stays, as `PickedFile.discard`. Call it AFTER the other thread was told
+     *  to cancel: it waits for that thread to let go of the file, for `patienceMs` at most, and
+     *  aborts the file itself if it has not. Never rejects. */
+    discard(): Promise<DiscardedFile>;
+}
+
+/** A picked file for an encoder on another thread (see PITFALLS: AN ENCODER ON ANOTHER THREAD). */
+export function handOverPickedFile(handle: SaveFileHandle, file: SaveFileStream, patienceMs = 3000): HandedOverFile {
+    let ended = false;
+    let letGo: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => { letGo = resolve; });
+    const end = (): void => { ended = true; letGo(); };
+    return {
+        stream: {
+            write: (chunk) => file.write(chunk),
+            close: () => file.close().finally(end),
+            abort: () => file.abort().finally(end),
+        },
+        async discard() {
+            await Promise.race([released, new Promise<void>((resolve) => { setTimeout(resolve, patienceMs); })]);
+            // The other thread never let go (it crashed, or never took the stream): the file is still ours to drop.
+            if (!ended) await file.abort().catch(() => undefined);
+            let size: number;
+            try { size = (await handle.getFile()).size; } catch { return 'removed'; }   // there is no such file
+            if (size > 0) return 'kept';
+            if (!handle.remove) return 'empty';
+            try { await handle.remove(); return 'removed'; } catch { return 'empty'; }
+        },
+    };
 }
 
 export function forwardToPickedFile(handle: SaveFileHandle, file: SaveFileStream): PickedFile {

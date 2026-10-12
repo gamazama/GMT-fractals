@@ -51,6 +51,33 @@
  *   measured in app-gmt with real renders on 2026-10-11
  *   (debug/scratch/gmt-export/gmt-sequence.mts, git-ignored): the files in the
  *   folder after a render are exactly the names the look asks for.
+ *
+ * THE GRAIN OF ONE FRAME (`exportFrameSampleBase`, 2026-10-12). The shader's
+ * random numbers are seeded by a count of samples (`uFrameCount`). The worker
+ * used to count on from sample to sample through a session, so the grain of a
+ * frame depended on how many frames the session had made before it: a run
+ * that CONTINUED from frame K counted from 0 there, and every frame from K on
+ * came out with another grain than one run gives it (measured: 11.4 % of the
+ * pixels, 0.15 of a level on average). Now the count a frame's pass starts
+ * from is worked out from the frame's own place in the range - the very
+ * number an unbroken run had reached there. So a single run counts exactly as
+ * it always did, and a continued run counts as the single run would.
+ * THE PLACE IS THE FRAME'S INDEX IN THE RANGE, not its timeline number: a
+ * range that starts at frame 690 has always counted from 0, and still does.
+ * Two renders of the same frames under DIFFERENT ranges (another first frame,
+ * another step) therefore still differ in grain, as they always did.
+ *
+ * @assumption `exportFrameSampleBase` is the count an unbroken run had reached,
+ *   for one pass a frame and for several, and does not depend on which frames
+ *   were made before - `npm run test:export-naming` ("[11] ..." lines), green
+ *   and not broken on purpose. What it buys was measured in app-gmt on
+ *   2026-10-12 (debug/scratch/small-three/gmt-four.mts, git-ignored; 640 x 360,
+ *   16 samples, the power keyed): a run cancelled at frame 9 and continued is
+ *   the single run pixel for pixel, 24 frames of 24 (before the change, the
+ *   same script: 10 of 24, the 14 continued ones 11.4 % of their pixels off);
+ *   and a single run is what it was before the
+ *   change - 36 files (24 of one pass, 6 frames of two) with the same pixels,
+ *   hash for hash.
  */
 import type { ExportPass } from '../../../engine/codec/VideoExportTypes';
 
@@ -75,6 +102,26 @@ export const exportFrameFileTag = (
     frameStep: number,
     pad = 5,
 ): string => String(exportFrameFileNumber(frameIndex, startFrame, frameStep)).padStart(pad, '0');
+
+/**
+ * The sample count a frame's pass STARTS from (see THE GRAIN OF ONE FRAME in
+ * the header): what a run that made every frame of the range, every pass of
+ * each, had counted when it reached this one. The worker counts on from here,
+ * one a sample.
+ */
+export const exportFrameSampleBase = (
+    /** 0-based position within the export range (NOT the timeline frame). */
+    frameIndex: number,
+    /** Which of the frame's passes this is, in the order they are rendered. */
+    passIndex: number,
+    /** How many passes a frame renders in this session (a video: 1). */
+    passCount: number,
+    /** Samples a pass (`VideoExportConfig.samples`). */
+    samples: number,
+): number => {
+    const whole = (n: number, least: number): number => Math.max(least, Math.floor(n) || 0);
+    return (whole(frameIndex, 0) * whole(passCount, 1) + whole(passIndex, 0)) * whole(samples, 0);
+};
 
 /** One file of a frame: its name, and the pass (or the two passes merged into
  *  one RGBA picture) it holds. */

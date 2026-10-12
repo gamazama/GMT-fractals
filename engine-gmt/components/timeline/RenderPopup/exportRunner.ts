@@ -42,14 +42,20 @@
  * THE JOIN (measured 2026-10-11, 640 x 360, the range once in one run and once
  * as a cancelled run plus Continue; `K` is the first continued frame)
  *   Two single runs of an unchanged scene are the same pixel for pixel, and so
- *   are the frames before K. From K on a continued render is NOT what one run
- *   makes, which is what the question's last line says:
- *   - THE GRAIN. Every continued frame, not only the first, has another grain:
- *     the worker's sample counter starts again with a session. A plain scene
- *     at 16 samples: 11 % of the pixels differ, 2 % by more than 2 levels of
- *     255, at most 39 to 65, on average 0.15 of a level. (For scale: a frame
- *     against the next one of the animation differs by 2.9 on average.) With
- *     depth of field at 0.5 the grain is the blur's: 6 to 8 levels on average.
+ *   are the frames before K. From K on a continued render is what one run
+ *   makes for a PLAIN scene, and is not in the two cases the question's last
+ *   line names:
+ *   - THE GRAIN (FIXED 2026-10-12). Until that day every continued frame had
+ *     another grain: the worker's sample counter started again with a session.
+ *     A plain scene at 16 samples: 11 % of the pixels differed, 2 % by more
+ *     than 2 levels of 255, at most 39 to 65, on average 0.15 of a level; with
+ *     depth of field at 0.5 the grain was the blur's, 6 to 8 levels on average.
+ *     (For scale: a frame against the next one of the animation differs by
+ *     2.9.) The counter now starts each frame from the frame's own place in
+ *     the range (`exportFrameSampleBase`, engine/worker/exportFrameNaming.ts):
+ *     the same plain scene, cancelled at frame 9 and continued, is the single
+ *     run pixel for pixel, 24 frames of 24. Depth of field was not measured
+ *     again.
  *   - FOCUS LOCK. Frame K is focused where the VIEWPORT is focused (the frame
  *     the playhead sits on), not where frame K-1 was. With the camera flying
  *     40 % of the way to the object over 24 frames: 20 to 23 % off at K, 8 to
@@ -88,20 +94,41 @@
  *   What stands behind the names and "wholly there": `npm run
  *   test:export-naming` (blocks [7] to [10]). NO STANDING GUARD for the look,
  *   the question or the skip.
- * @assumption THE VERSION DOES NOT HOLD STILL IN EVERY SCENE, and where it
- *   moves the next run gets new names and finds nothing (measured the same
- *   day, the same script, step 8). In a keyed scene the keyed values in the
- *   store are the playhead's: with the playhead moved between two runs the
- *   scene reads as changed (back where it was, the old version again). And a
- *   camera keyed by hand and not scrubbed since is left a hair off by the
- *   run's own scrubbing (1e-16), which reads as changed once. Neither was
- *   asked for and neither is fixed; the same registry could carry them.
+ * @assumption THE VERSION HOLDS STILL UNDER A MOVING PLAYHEAD (2026-10-12). In a
+ *   keyed scene the keyed values in the store are the playhead's. Until that
+ *   day they counted: with the playhead moved between two runs the scene read
+ *   as changed, the next run got new names and found nothing (version 2 where
+ *   it was, 3 on frame 30); and a camera keyed by hand and not scrubbed since
+ *   was left a hair off by the run's own scrubbing (1e-16), which read as
+ *   changed once. Now what a track with a key drives is left out of the
+ *   comparison (`registerTrackWrittenPaths`, the block under the imports, and
+ *   the store's own rule for a feature param's track). The rule itself has a
+ *   standing test (`npm run test:export-naming`, block [13]); GMT's own list
+ *   below it - the camera's six, the gradient's four, a light's - was driven
+ *   in the app once, the same day (debug/scratch/small-three/gmt-four.mts,
+ *   git-ignored, steps 2 and 5), and has no standing guard.
+ *
+ * A VIDEO (2026-10-12)
+ *   - THE VERSION IS TAKEN AFTER THE SAVE PICKER, not before it: a picker
+ *     backed out of leaves the version where it was. (Before: a changed scene
+ *     at version 1, Start, Cancel in the picker: version 2 and no file.)
+ *   - A PASS THAT ENDS WITHOUT A VIDEO LEAVES NO FILE. Discard, or a failed
+ *     export, used to leave the empty file the picker had made (0 bytes). The
+ *     runner keeps the handle (`handOverPickedFile`, engine/export/
+ *     pickedFile.ts) and removes it once the worker has let go. A file picked
+ *     to be REPLACED keeps what it held. Where the browser has no `remove()`
+ *     the empty file stays and a toast says so: the picker makes the file the
+ *     moment it answers, so there is no later moment to make it at.
+ * @assumption A VIDEO above: driven in app-gmt once, 2026-10-12, Chrome on the
+ *   real GPU, the pickers stood in for as on 2026-10-11 (debug/scratch/
+ *   small-three/gmt-four.mts, git-ignored, steps 3 and 4). No standing guard:
+ *   no smoke starts a render into a picked file.
  */
 
 import * as THREE from 'three';
 import { getProxy } from '../../../engine/worker/WorkerProxy';
 import { useAnimationStore } from '../../../../store/animationStore';
-import { registerRunWrittenPath, useEngineStore } from '../../../../store/engineStore';
+import { registerRunWrittenPath, registerTrackWrittenPaths, useEngineStore } from '../../../../store/engineStore';
 import { showToast } from '../../../../engine/store/toastStore';
 import { VIDEO_FORMATS } from '../../../../data/constants';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
@@ -121,6 +148,8 @@ import type {
 import { calcEtaRange } from '../exportHelpers';
 import { mixAudioClipsForExport } from '../../../../engine/animation/audioExportMix';
 import { exportFrameFileTag, exportFrameFiles, exportFrameState } from '../../../engine/worker/exportFrameNaming';
+import { handOverPickedFile } from '../../../../engine/export/pickedFile';
+import type { HandedOverFile } from '../../../../engine/export/pickedFile';
 
 // THE LOCKED FOCUS IS NOT A CHANGE OF THE SCENE. While Focus lock is on, the frame pump below
 // (and the viewport's own probe, engine-gmt/navigation/usePhysicsProbe.ts) writes the distance
@@ -129,9 +158,41 @@ import { exportFrameFileTag, exportFrameFiles, exportFrameState } from '../../..
 // and the next run finds the frames it made (see `registerRunWrittenPath` in the store).
 registerRunWrittenPath('features.optics.dofFocus', (state) => !!state.focusLock);
 
-/** The last line of the question: what a continued render cannot promise. Its three clauses
- *  are measured, not supposed (grep THE JOIN in the header for the numbers). */
-const CONTINUE_IS_NOT_EXACT = 'A continued render is not exact: its frames get another grain than one run gives them, with Focus lock the first frame or two can be focused elsewhere, and smoothed modulation can jump where it joins.';
+// WHAT GMT'S HAND-BOUND TRACKS WRITE. A keyed value is the playhead's, not the scene's, and the
+// export version leaves it out (`registerTrackWrittenPaths` in the store): otherwise the playhead
+// moved between two runs is "a changed scene", and a cancelled render cannot be continued. A
+// feature param's own track needs no word here; these do, because they write somewhere else:
+//   - the camera's six (engine-gmt/animation/cameraBinders.ts): ONE teleport a frame, which
+//     writes the scene offset and the rotation whichever of the six hold keys (and leaves a
+//     camera keyed by hand a hair off where it was, 1e-16: that no longer counts either);
+//   - the gradient's phase and repeats (coloringBinders.ts): each also writes the offset or the
+//     scale derived from it;
+//   - a light's (`lighting.light<N>_<prop>`, and the older `lights.<N>.<prop>`, both bound in
+//     engine/AnimationEngine.ts): one field of one light of the list.
+const GMT_TRACK_PATHS: Record<string, readonly string[]> = {
+    'coloring.phase':    ['features.coloring.phase', 'features.coloring.offset'],
+    'coloring.phase2':   ['features.coloring.phase2', 'features.coloring.offset2'],
+    'coloring.repeats':  ['features.coloring.repeats', 'features.coloring.scale'],
+    'coloring.repeats2': ['features.coloring.repeats2', 'features.coloring.scale2'],
+};
+const GMT_CAMERA_TRACK = /^camera\.(?:unified|rotation)\.[xyz]$/;
+const GMT_LIGHT_TRACK = /^(?:lighting\.light(\d+)_(intensity|falloff|pos[XYZ]|rot[XYZ])|lights\.(\d+)\.(intensity|falloff|position\.[xyz]))$/;
+registerTrackWrittenPaths('gmt', (trackId) => {
+    if (GMT_CAMERA_TRACK.test(trackId)) return ['sceneOffset', 'cameraRot'];
+    const light = GMT_LIGHT_TRACK.exec(trackId);
+    if (light) {
+        const prop = light[2] ?? light[4];
+        const field = /^pos|^position/.test(prop) ? 'position' : prop.startsWith('rot') ? 'rotation' : prop;
+        const axis = field === 'position' || field === 'rotation' ? `.${prop.slice(-1).toLowerCase()}` : '';
+        return [`features.lighting.lights.${light[1] ?? light[3]}.${field}${axis}`];
+    }
+    return GMT_TRACK_PATHS[trackId] ?? null;
+});
+
+/** The last line of the question: what a continued render cannot promise. Its two clauses
+ *  are measured, not supposed (grep THE JOIN in the header for the numbers). Until 2026-10-12 it
+ *  had a third, the grain; a continued plain render is now the single run pixel for pixel. */
+const CONTINUE_IS_NOT_EXACT = 'A continued render is exact for a plain scene. In two cases it is not: with Focus lock the first frame or two can be focused elsewhere, and smoothed modulation can jump where it joins.';
 
 // app-gmt's app-specific config bag — fed by the plugin's
 // `extraFormFields` slot and threaded into the runner via deps.extra.
@@ -568,9 +629,24 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
     }
 
     const state = useEngineStore.getState();
-    const exportVersion = state.prepareExport();
+    // The version the run's files are named by. It is TAKEN (`prepareExport`) only once the
+    // first file of the run is certain - below, after the save picker has answered - and until
+    // then only looked at (`peekExportVersion`): a picker backed out of must not leave a
+    // version number behind with no file to show for it. (Until 2026-10-12 it was taken here.)
+    let exportVersion: number | null = null;
     const baseProjectName = state.projectSettings.name;
     const isMultiPass = passesToExport.length > 1;
+    /** The picked file of the pass being rendered: dropped when the pass ends without a video. */
+    let picked: HandedOverFile | null = null;
+    let pickedName = '';
+    /** Nothing of the pass's file stays (see `handOverPickedFile`): call after the worker was told to cancel, or has failed. */
+    const dropPickedFile = async (): Promise<void> => {
+        const file = picked;
+        picked = null;
+        if (file && (await file.discard()) === 'empty') {
+            showToast(`"${pickedName}" is left empty: this browser cannot remove a file it has made`, 'info', 6000);
+        }
+    };
 
     status.setIsRendering(true);
     status.setIsStopping(false);
@@ -601,9 +677,9 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
             // Multi-pass runs suffix the project name with `_{pass}` so the N files
             // end up as e.g. `MyScene_beauty_v3.mp4`, `MyScene_alpha_v3.mp4`, ….
             const projectNameForFile = isMultiPass ? `${baseProjectName}_${pass}` : baseProjectName;
-            const exportFilename = getExportFileName(
+            const fileNameFor = (version: number): string => getExportFileName(
                 projectNameForFile,
-                exportVersion,
+                version,
                 selectedFormat.ext,
                 `${cfg.vidRes.w}x${cfg.vidRes.h}`,
             );
@@ -615,13 +691,18 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
                 try {
                     // @ts-expect-error — File System Access API not in all TS lib targets
                     const handle = await window.showSaveFilePicker({
-                        suggestedName: exportFilename,
+                        // The name the run WILL get: the version is not taken before the picker answers.
+                        suggestedName: fileNameFor(exportVersion ?? useEngineStore.getState().peekExportVersion()),
                         types: [{
                             description: selectedFormat.label,
                             accept: { [selectedFormat.mime]: [`.${selectedFormat.ext}`] },
                         }],
                     });
-                    fileStream = await handle.createWritable();
+                    // What crosses to the worker forwards to the file, and this side keeps the
+                    // handle: a pass that ends without a video drops the file (`dropPickedFile`).
+                    picked = handOverPickedFile(handle, await handle.createWritable());
+                    pickedName = handle.name;
+                    fileStream = picked.stream;
                 } catch (err) {
                     if (err instanceof DOMException && err.name === 'AbortError') {
                         flags.cancelledRef.current = true;
@@ -643,6 +724,11 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
                     }
                 }
             }
+
+            // The run is certain now (a file is picked, or it goes to memory): the version is taken,
+            // once for all the passes of the run.
+            if (exportVersion === null) exportVersion = useEngineStore.getState().prepareExport();
+            const exportFilename = fileNameFor(exportVersion);
 
             // Per-pass UI reset.
             status.setProgress(0);
@@ -696,6 +782,9 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
 
             if (outcome === 'cancelled') {
                 engine.cancelExport();
+                // The worker aborts the file's stream; the empty file the picker made is then
+                // taken away (a file picked to be replaced keeps what it held).
+                await dropPickedFile();
                 status.setStatusText(passPrefix + 'Cancelled.');
                 break;
             }
@@ -703,6 +792,7 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
             // Finalize this pass.
             status.setStatusText(passPrefix + 'Finalizing video...');
             const blob = await engine.finishExport();
+            picked = null;                                           // the file is whole and closed: it stays
 
             if (blob && !effectiveDiskMode) {
                 const blobObj = new Blob([blob], { type: selectedFormat.mime });
@@ -732,6 +822,9 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
         }
     } catch (e) {
         console.error('RenderPopup: Export failed', e);
+        // A pass that failed has no video: its file is dropped as a discarded one is. Not
+        // awaited before the alert - the worker has ended the session by then, or never will.
+        void dropPickedFile();
         alert(`Export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
         status.setIsRendering(false);
