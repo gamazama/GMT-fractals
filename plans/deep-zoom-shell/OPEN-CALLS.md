@@ -380,3 +380,14 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
   rule first (an elastic band pulled tight round the solid at a clearance that follows the
   route's own depth, then cut into keyframes by the trail's fitter) and writes
   `ROUTE-AROUND.md`; the build follows it.
+  **THE STUDY IS BACK (`ROUTE-AROUND.md`, eight calls at its foot; pictures
+  `debug/scratch/route-around/bulb-keep.png` and beside it).** It works for a leg whose two
+  keyframes are at about one depth: every test solid, and his own case (two new keyframes,
+  667 estimates, 0.19 s; the fixed leg is 0.83 of the length of his five keyframes and passes
+  2.1 from the bulb's centre at a share of 0.5, where he flew at 3.0 to 3.2). At 1e-6 it works
+  but asks 33,000 estimates: 46 s through `estimateAtPoint`, about 0.1 s through an estimate
+  from one reference orbit that the host does not offer yet. It does NOT fix a leg that changes
+  depth (1e-2 to 1e-6, 1e-2 to 1e-20); three corrections tried, not settled. The clearance had
+  to become a share of the depth times the keyframes' own estimate-to-depth ratio. Found beside
+  it: a keyframe exactly on the bulb's axis reads an estimate of 0 from `estimateAtPoint`.
+  Not built: his answers first.
