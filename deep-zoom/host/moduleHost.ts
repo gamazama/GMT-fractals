@@ -116,6 +116,11 @@
  *   module's own handles unchanged, and a view's `julia` strings pass through `setView` /
  *   `getView` byte for byte. The check has lines for all three ("input: lookPoint ...", "input:
  *   wholeObject ...", "views: a view's Julia constant ..."); none was broken on purpose.
+ * @assumption `setView` tells the param pusher of a Julia constant the view BROUGHT (one that is not
+ *   the constant the module already held), so the Constant row put back onto its doubles sends its
+ *   strings (host/looseParams.ts, THE CONSTANT). The check has one line ("views: a Julia constant
+ *   that came with a view is kept exact ..."), not broken on purpose; the pusher's own half is
+ *   proven in check:deep-zoom-param-map.
  * @invariant A dive closes on the free distance AHEAD (the nearest of seven rays about the view
  *   axis), not on the estimate at the camera: with a wall close behind and the surface ahead far
  *   away it flies; inside the solid, or with nothing ahead at all, it ends at once; rays that ran
@@ -491,7 +496,13 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         getView: () => dz.getView(),
         setView(v) {
             dive.cancel();
+            const brought = Array.isArray(v.julia) ? v.julia.join() : null;
+            const held = brought === null ? null : api.formula().c.join();
             dz.setView(v);
+            // A Julia constant this view BROUGHT is kept exact for the Constant row's undo (looseParams.ts, THE
+            // CONSTANT). One the renderer already held is not noted again: a route's frame hands back the view it
+            // read, and a keyed constant would otherwise fill the eight places in eight frames.
+            if (brought !== null && brought !== held) params.constantArrived();
             emit('viewSet', null);
         },
         setPendingView(v) {

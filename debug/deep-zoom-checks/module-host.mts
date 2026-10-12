@@ -55,6 +55,9 @@
  * be built is worded as any other shader's failure -> 2 red: "boot: a ray march that cannot be
  * built is the boot failure ..." and "... rejects ready with that line, not with the wording of
  * another shader's failure ...". The other three lines of that block passed in that run too.
+ * ADDED 2026-10-12, NOT SEEN RED: "views: a Julia constant that came with a view is kept exact ..."
+ * in [2] (`setView` tells the param pusher of a constant the view brought; the pusher's half is
+ * falsified in param-map.mts). The fake module took a Julia constant and a `setFormula` for it.
  *
  * FALSIFIED 2026-10-08: 54 breaks, each applied alone to `moduleHost.ts` or `dive.ts` (45 are
  * listed here since 2026-10-11: see WENT above). The check
@@ -302,6 +305,13 @@ function makeRig() {
     const calls: Record<string, unknown[][]> = {};
     const note = (name: string, ...args: unknown[]): void => { (calls[name] ??= []).push(args); log.push(name); };
     const count = (name: string): number => calls[name]?.length ?? 0;
+    // The Julia constant as the module holds it: 256-bit numbers as text, and the doubles they read as
+    // (core.js: `let juliaHP`, `let juliaF`, `function setJuliaC`).
+    const K = { c: ['0', '0', '0'], num: [0, 0, 0] };
+    const setK = (c: readonly string[] | readonly number[]): void => {
+        if (typeof c[0] === 'string') { K.c = [...c] as string[]; K.num = (c as string[]).map((s) => Number(BigInt(s)) / 2 ** 256); }
+        else { K.num = [...c] as number[]; K.c = (c as number[]).map((x) => String(BigInt(x * 2 ** 256))); }
+    };
 
     const doc = new FakeDocument(log);
     const frame = new FakeFrame(doc, log);
@@ -357,6 +367,7 @@ function makeRig() {
                 note('setView', v);
                 state.view = { ...v, cam: [v.cam[0], v.cam[1], v.cam[2]] };
                 state.settings.power = v.power;   // the module's setView writes look values too
+                if (v.julia) setK(v.julia);       // and takes the Julia constant, which then stays whatever the next view says
             },
             thumbnail: (size?: number): string => { note('thumbnail', size); return 'data:image/png;base64,AAAA'; },
             snapshot: (): HTMLCanvasElement | null => { note('snapshot'); return SNAPSHOT_CANVAS; },
@@ -413,7 +424,8 @@ function makeRig() {
         compileMs: () => ({ S: 9.5, PR: 8400, X: undefined }),
         gate: { relT: 1.25e-7, tGPU: 1.244, tCPU: 1.2440001, when: 0 },
         rayMarchState: () => state.rayState,
-        formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number], julia: false, c: ['0', '0', '0'] as [string, string, string] }),
+        setFormula: (kind: string, p?: { c?: string[] | number[] }): void => { note('setFormula', kind, p); if (p?.c) setK(p.c); },
+        formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number], julia: false, c: [...K.c] as [string, string, string], cNum: [...K.num] as [number, number, number] }),
         formulaState: () => state.formulaState,
         normalDetail: () => 0,
     };
@@ -516,6 +528,15 @@ console.log('[2] views     the cam strings, byte for byte');
     check(sameCam(sent?.julia, K) && sameCam(host.getView().julia, K), 'views: a view\'s Julia constant reaches the module and comes back, three strings byte-identical', JSON.stringify(sent?.julia));
     host.setView(view(CAM_B));
     check(!('julia' in host.getView()), 'views: a view without a Julia constant has no such key');
+    // THE CONSTANT (2026-10-12; deep-zoom/host/looseParams.ts): a constant a view brought is remembered exact, so the
+    // Constant row put back onto its doubles (the undo of a drag) sends its strings, not the doubles.
+    const D = K.map((s) => Number(BigInt(s)) / 2 ** 256);
+    host.setParams({ 'dzFormula.juliaX': D[0], 'dzFormula.juliaY': D[1], 'dzFormula.juliaZ': D[2] });   // the rows, written with the view
+    host.setParams({ 'dzFormula.juliaX': 0.5 });                                                         // a drag
+    host.setParams({ 'dzFormula.juliaX': D[0] });                                                        // its undo
+    const sentC = (rig.calls.setFormula ?? []).map((args) => (args[1] as { c?: unknown } | undefined)?.c);
+    check(sentC.length === 3 && sentC[0] === undefined && JSON.stringify(sentC[1]) === JSON.stringify([0.5, D[1], D[2]]) && sameCam(sentC[2] as string[], K),
+        'views: a Julia constant that came with a view is kept exact: rows that show it send nothing, a drag sends numbers, and the rows put back send its strings', JSON.stringify(sentC));
     host.dispose();
 }
 

@@ -29,15 +29,35 @@
  *     `setLight` reads a missing first one as Direct: both are always called with both values.
  *   - `setNormalMode` does not restart the still; the empty `setLook({})` after it does.
  *   - An id with no row, or a row with `group: null`, is not pushed. Unknown ids are named once.
- *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind, the Julia switch and the box's seven numbers, and
+ *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind, the Julia switch, the box's seven numbers and
+ *     (see THE CONSTANT) sometimes the Julia constant, and
  *     it is sent before any other push of the same patch: `setIters` clamps to the ceiling of the
  *     formula IN FORCE (400 for the bulb, 500 for the box), so a box place's 450 iterations sent
  *     ahead of its formula would arrive as 400.
+ *   - THE CONSTANT (2026-10-12). The Julia constant has two writings: the renderer's own, exact
+ *     (three 256-bit numbers that arrive as strings with a VIEW), and the store's three doubles
+ *     (`dzFormula.juliaX` / `Y` / `Z`, the Constant row). The doubles must never overwrite the
+ *     strings merely by being pushed, so the formula push carries `c`:
+ *       - not at all, while the three rows equal the renderer's constant read back as doubles
+ *         (`api.formula().cNum`). A deep constant that came with a view stays as it came;
+ *       - as the exact STRINGS, when the rows equal the doubles of a constant that came with a
+ *         view before (the last `EXACT_CONSTANTS_KEPT`, noted by `constantArrived()`, which
+ *         `host/moduleHost.ts` calls from `setView`). That is an undo of a drag: the rows go back
+ *         onto the old doubles, and the old 77 digits come back with them;
+ *       - as the three numbers otherwise: a row was dragged, typed or keyframed.
+ *     Two exact constants with the same three doubles: the later one is the one remembered.
  *
  * @invariant A value reaches the module through the setter its row names, converted with the
  *   feature's own converter, and an unchanged value is not sent again - proven by:
  *   npx tsx debug/deep-zoom-checks/param-map.mts (the "push: ..." lines). Falsification record in
  *   that check's header.
+ * @invariant Rows that equal the renderer's constant send no constant, and rows put back onto the
+ *   doubles of a constant that came with a view send that constant's strings - proven by: npm run
+ *   check:deep-zoom-param-map ("constant: rows that equal what the renderer holds send no
+ *   constant ...", "constant: rows put back onto a constant that came with a view send its exact
+ *   strings ..."). Falsification record in that check's header (2026-10-12, the Constant row).
+ * @assumption Only the last `EXACT_CONSTANTS_KEPT` are remembered, the oldest forgotten first: the
+ *   check has a line for it ("constant: the ninth ..."), not broken on purpose.
  */
 import type { DeepZoomApi } from '../renderer';
 import type { DzParamId, DzParamValue, DzParams } from './DeepZoomHost';
@@ -54,17 +74,35 @@ export interface ParamPusher {
     push(patch: DzParams): void;
     /** The values last pushed, by id (the defaults for anything never pushed). */
     values(): DzParams;
+    /** A view has just brought the renderer a Julia constant: remember it, exact (see THE CONSTANT). */
+    constantArrived(): void;
     dispose(): void;
 }
+
+/** How many constants that came with a view are remembered exact (see THE CONSTANT). */
+export const EXACT_CONSTANTS_KEPT = 8;
+
+type Triple<T> = [T, T, T];
+const sameNumbers = (a: readonly number[], b: readonly number[]): boolean => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
 export function createParamPusher(api: DeepZoomApi): ParamPusher {
     const v = defaultParams();
     const pushed = new Set<DzParamId>();
     const unknownSaid = new Set<DzParamId>();
+    /** Constants that came with a view, the newest last: their strings, and the doubles they read as. */
+    const exact: Array<{ c: Triple<string>; num: Triple<number> }> = [];
     let disposed = false;
 
     const num = (feature: string, key: string): number => v[paramId(feature, key)] as number;
     const flag = (feature: string, key: string): boolean => !!v[paramId(feature, key)];
+
+    /** The `c` of a formula push: none, a remembered constant's strings, or the rows' numbers (see THE CONSTANT). */
+    const constant = (): { c?: Triple<string> | Triple<number> } => {
+        const rows: Triple<number> = [num('dzFormula', 'juliaX'), num('dzFormula', 'juliaY'), num('dzFormula', 'juliaZ')];
+        if (sameNumbers(rows, api.formula().cNum)) return {};
+        const known = exact.find((e) => sameNumbers(e.num, rows));
+        return { c: known ? known.c : rows };
+    };
 
     /** One push per group; `look` is called per field. */
     const PUSH: Record<Exclude<DzPushGroup, 'look'>, () => void> = {
@@ -76,7 +114,8 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
             fold: num('dzFormula', 'boxFold'),
             fixedR: num('dzFormula', 'boxFixedRadius'),
             rot: [num('dzFormula', 'boxRotX'), num('dzFormula', 'boxRotY'), num('dzFormula', 'boxRotZ')],
-            julia: flag('dzFormula', 'juliaMode'),     // the mode only: the constant is the view's (host.setView)
+            julia: flag('dzFormula', 'juliaMode'),
+            ...constant(),                             // only when the rows say another constant than the renderer holds
         }),
         power: () => api.setPower(num('dzFormula', 'power')),
         phase: () => api.setPhase(num('dzFormula', 'phaseTheta'), num('dzFormula', 'phasePhi')),
@@ -125,6 +164,14 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
             if (anyLook) api.setLook(lookFields);
         },
         values: () => ({ ...v }),
+        constantArrived() {
+            if (disposed) return;
+            const held = api.formula();
+            const at = exact.findIndex((e) => sameNumbers(e.num, held.cNum));
+            if (at >= 0) exact.splice(at, 1);
+            exact.push({ c: held.c, num: held.cNum });
+            if (exact.length > EXACT_CONSTANTS_KEPT) exact.shift();
+        },
         dispose() {
             disposed = true;
         },

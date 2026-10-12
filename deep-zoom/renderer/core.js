@@ -2745,7 +2745,9 @@ let boxP = boxDerive();
    step(0.5, uJuliaMode));`): the point looked at STARTS the orbit in both modes, and what is added every
    iteration is the point itself (Mandelbrot mode) or one constant K for the whole picture (Julia mode).
    K is held as the camera is: three 256-bit fixed-point numbers (juliaHP). It travels as three decimal
-   STRINGS (dz.getView's `julia`, api.setFormula's `c`), never as numbers.
+   STRINGS (dz.getView's `julia`, api.setFormula's `c`). A view never carries it as numbers. A host's number
+   rows may SET it from three doubles (api.setFormula's `c` as numbers, since 2026-10-12: setJuliaC) and read
+   it back as doubles (api.formula().cNum); that K is the doubles, exactly, and no deeper than a double.
    THE MATHS (derived). The camera at P, a pixel at P + d0:
        reference   Z0 = P,  Z' = f(Z) + K              the camera's own orbit; only the added vector changes
        pixel       d0 = the pixel's offset,  d' = (the delta step of f at Z, d)     no "+ dc": K is the same for
@@ -2822,23 +2824,32 @@ let boxP = boxDerive();
    smoke:deep-zoom-direct (the seven "julia, ... PASS" lines). Falsified 2026-10-12: the factor left at 1 in
    Julia mode -> all seven FAIL (the record is in debug/deep-zoom-direct-check.mts).
    @assumption the bulb's kernel in Julia mode is as right at a constant ON the bulb's surface: the four lines
-   that would say so are printed and not gated (the plain rebase's grain, above). */
+   that would say so are printed and not gated (the plain rebase's grain, above).
+   @assumption three finite numbers given as the constant become the fixed-point numbers of those doubles, and
+   juliaF (what api.formula().cNum hands out) reads them back the same: npm run check:deep-zoom-julia-orbit has
+   two "seam: three finite numbers ..." lines for it, not broken on purpose (added 2026-10-12 for a host's rows). */
 let juliaOn = false;                             // Julia mode: c is the constant K, not the point
 let juliaHP = [0n, 0n, 0n];                      // K, 256-bit fixed point, as the camera
 let juliaF = [0, 0, 0];                          // K as doubles: the f32 copies' uniform, the ball, the box's extent
 const cOfHP = (P) => (juliaOn ? juliaHP : P);    // what a fixed-point orbit of the point P adds each iteration
-/* K from three fixed-point decimal strings (as dz.getView's `cam`). Returns true when it changed; anything that
-   is not three whole numbers written as text is refused and changes nothing. */
+/* K from three fixed-point decimal strings (as dz.getView's `cam`), or from three finite numbers (a host's number
+   rows: each becomes the fixed-point number of that double, hp.fromNum). Returns true when it changed; anything
+   else - a mix of the two, a number that is not finite, text that is not a whole number - is refused and
+   changes nothing. */
 function setJuliaC(c){
-  if (!Array.isArray(c) || c.length !== 3 || !c.every((v) => typeof v === 'string' && /^-?\d+$/.test(v))) return false;
-  const k = c.map(BigInt);
+  if (!Array.isArray(c) || c.length !== 3) return false;
+  let k;
+  if (c.every((v) => typeof v === 'string' && /^-?\d+$/.test(v))) k = c.map(BigInt);
+  else if (c.every((v) => typeof v === 'number' && isFinite(v))) k = c.map(hp.fromNum);
+  else return false;
   if (k[0] === juliaHP[0] && k[1] === juliaHP[1] && k[2] === juliaHP[2]) return false;
   juliaHP = k; juliaF = k.map(hp.toNum);
   return true;
 }
 /* Set the formula. params (all optional): the box's scale (|scale| held at or above 1.02: at 1 the
    orbit of every point is bounded and there is no surface), minR, fold, fixedR, rot [x, y, z] in radians;
-   and, for either formula, julia (true / false: JULIA MODE, grep) and c (its constant: three strings).
+   and, for either formula, julia (true / false: JULIA MODE, grep) and c (its constant: three strings, or
+   three numbers - setJuliaC).
    Returns true when anything changed. Pure state: the caller restarts the orbit and the still. */
 function applyFormula(kind, params){
   const was = JSON.stringify([dzFormula, box, juliaOn]);
@@ -4322,7 +4333,7 @@ function setFormulaNow(kind, params){
   orbitDirty = true; accumReset = true; snapDist = true;
 }
 api.setFormula = setFormulaNow;
-api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), julia: juliaOn, c: juliaHP.map(String) });
+api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), julia: juliaOn, c: juliaHP.map(String), cNum: juliaF.slice() });   // cNum: the constant as doubles, for a host's number rows
 api.formulaState = ()=>{ if (!boxOn()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
   const v = variants[xKey(false)]; return v ? 'on' : v === null ? 'failed' : 'building'; };
 // Shell setters (not in the historical page, added 2026-10-08): what the page's `iters` and

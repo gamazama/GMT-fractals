@@ -210,8 +210,9 @@ The **Formula** tab chooses what is drawn. Switching the formula shows the whole
 - The **Kleinian** card on the Locations tab is the Mandelbox with no inner radius.
 
 ## Julia mode
-- **Julia mode** on: the picture is the Julia set of one point. Switching it on takes the point at the centre of the view and shows the whole of its set from outside.
-- **Julia from this place** is the same step as a button. Pressed inside a Julia set, it takes the next point from there.
+- **Julia mode** on: the picture is the Julia set of one point. Switching it on brings back the last point you had and shows the whole of its set from outside. The first time, it takes the point at the centre of the view.
+- **Constant** shows that point as three numbers, while Julia mode is on. Drag or type one and the set changes as you go; the camera stays where it is. Each can be keyframed.
+- **Julia from this place** always takes the point at the centre of the view and shows the whole of its set. Pressed inside a Julia set, it takes the next point from there.
 - Undo, or \`Backspace\`, brings back the place you were at.
 
 ## Iterations

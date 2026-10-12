@@ -22,8 +22,9 @@ export interface DeepZoomBoxParams {
     /** JULIA MODE (grep the name in core.js), for EITHER formula: true = c is one constant and the point looked
      *  at starts the orbit; false = c is the point itself. Kept from call to call. */
     julia?: boolean;
-    /** The Julia constant: three fixed-point decimal strings, as a view's `cam`. Anything else is refused. */
-    c?: [string, string, string];
+    /** The Julia constant: three fixed-point decimal strings, as a view's `cam` - or three finite numbers (a
+     *  host's number rows; the constant is then those doubles, exactly). Anything else is refused. */
+    c?: [string, string, string] | [number, number, number];
 }
 
 export interface DeepZoomCoreOptions {

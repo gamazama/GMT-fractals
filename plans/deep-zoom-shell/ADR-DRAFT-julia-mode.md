@@ -72,9 +72,71 @@ Julia mode, the second reference not now; Kleinian as a card on the box; a route
 - The Kleinian card's whole view is 0.1 to 0.3 % off the CPU twin on 16 of 338 points, over the
   bar and printed ungated; its deep line passes at 9.3e-31.
 - Not done: a smoke step for Julia mode (the app's behaviour is scratch-proven:
-  `debug/scratch/formula-next/step4/`), the constant on the timeline, GMT's picker, the status chip
-  saying which mode it is, the plain picture before ready in Julia mode, a route played or rendered
-  in Julia mode.
+  `debug/scratch/formula-next/step4/`), ~~the constant on the timeline~~ (built later the same day:
+  the section below), GMT's picker, the status chip saying which mode it is, the plain picture
+  before ready in Julia mode, a route played or rendered in Julia mode.
+
+## 2026-10-12, later: rows for the constant
+
+The owner flew the mode and said: "I dont see how to set the julia constant's coordinate." Asked
+whether he wanted three rows under the switch, live and keyable, with a deep constant kept exact
+until a row is touched and the button kept, he said: "2f yes". So the term above, "no number rows
+for the constant", is withdrawn. Decision 2 stands: the renderer's three 256-bit numbers ARE the
+constant, and a view carries them as strings.
+
+What was built:
+
+1. Three params of `dzFormula`, `juliaX`, `juliaY`, `juliaZ` (doubles, default 0), shown as one
+   row, "Constant", between the switch and the button while Julia mode is on (`juliaConstant`,
+   composed as Pre-Rotation is). The slider runs from -4 to 4 in steps of 0.001; that is a range,
+   not a limit. Track ids `dzFormula.juliaX` / `Y` / `Z`: they keyframe like any row.
+2. The renderer's seam, two lines: `setJuliaC` also takes three finite numbers (each becomes the
+   fixed-point number of that double), and `api.formula()` also hands the constant out as three
+   doubles (`cNum`). A view's `julia` is strings only, as before.
+3. The precision rule. The formula push sends the rows only when they differ from the constant the
+   renderer holds, read back as doubles. Rows that merely show a deep constant send nothing.
+4. The rows follow the view. A jump (a place, Back, Home, pasted text), the button, the switch and
+   a loaded scene, link or session write the three rows from the constant's strings in the same
+   store write or undo step. Without it a scene from before the rows existed (rows 0, 0, 0) and a
+   share link (numbers rounded to four decimals) would overwrite their own constant a frame later.
+5. Undo stays exact. The last eight constants that came with a view are remembered with their
+   doubles; rows put back onto one of them send its strings.
+6. A row moves neither the camera nor the iteration floor. A drag is one undo step.
+7. The switch and the button are no longer the same step (Decision 4 said they were). The owner,
+   the same day, to "the switch re-enters with the last constant when there is one; the button
+   takes the point": "2c - yes". Switched on, the mode comes back to the last constant - the
+   Constant row is not 0, 0, 0, or the renderer still holds one - exact, and shows the whole of
+   its set; the floor goes back to 14 as before. With no constant yet it takes the point at the
+   centre of the view. "Julia from this place" always takes the point. So that a jump to a place
+   in Mandelbrot mode does not change which constant is the last one, a jump writes the rows from
+   the view's constant only and no longer reads the three numbers a saved place's formula holds.
+
+Measured in the app (2026-10-12, RTX 5070 Ti, headless Chrome on the real GPU, one run,
+`debug/scratch/julia-rows/app-rows.mts`):
+
+- A fresh app at the kept place "Slicing" (2.8e-39 deep), no constant yet: the switch took the
+  point looked at (rows -0.38813, -0.00062, 0.99194), one undo step, the floor at 14.
+- Switched off, a jump to the kept place "Power 2" (5e-20 deep), switched on: the same three
+  77-digit strings to the character, at once and eight frames later, not the point looked at
+  there; the camera moved to the set; one undo step, and its undo put the camera back.
+- The button, pressed there with that constant in force, took the point looked at instead (rows
+  -0.35667, 0.69670, 0.37024); eight frames later its strings were the same to the character.
+- A drag of X by 0.02 in five steps was followed by the renderer at every step, left the camera
+  and the floor alone and made one undo step; its undo brought the strings back to the character,
+  redo the dragged constant, undo the strings again.
+- 5.5 typed into the X cell was taken as 5.5, outside the slider's range.
+- With a route of two keyframes and `juliaX` keyed over 60 frames, the renderer held the row's
+  value straight after each scrub, before a frame had passed, at four frames tried.
+
+Guards: `npm run check:deep-zoom-param-map` (the "constant: ..." lines; the precision rule and the
+exact undo were each seen red), `check:deep-zoom-julia-orbit` ("rows: ...", seen red; the two
+"seam: three finite numbers ..." lines), `check:deep-zoom-scene-roundtrip` and
+`check:deep-zoom-module-host` (one or two lines each, none seen red for its own subject). Which
+constant the switch takes, and the button and the switch writing the rows, have no check line: the
+run above is all that says so.
+
+Left as it was: a constant set by the rows is three doubles and no deeper, so a deep Julia place
+whose row is touched is no longer that place (undo brings it back). No picker in the viewport.
 
 ---
 
@@ -90,6 +152,8 @@ Julia mode, the second reference not now; Kleinian as a card on the box; a route
    outside has another, unknown cause.
 3. **The row's switch takes the point looked at, as the button does.** Wanted, or should the
    switch only re-enter with the last constant?
+   ANSWERED 2026-10-12 ("2c - yes") and built: the switch re-enters with the last constant when
+   there is one; the button takes the point. See "2026-10-12, later: rows for the constant".
 4. **Switching Julia on puts the iteration floor back to 14.** Without it the whole set drew as
    static at a deep place's count of 98.
 5. **The Kleinian card**, with its whole-view proof line over the bar: keep?

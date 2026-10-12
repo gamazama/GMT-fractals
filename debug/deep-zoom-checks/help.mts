@@ -190,6 +190,7 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Fixed Radius', 'deep-zoom/features/formula.ts', "label: 'Fixed Radius'"],
     ['Pre-Rotation', 'deep-zoom/features/formula.ts', "label: 'Pre-Rotation'"],
     ['Julia mode', 'deep-zoom/features/formula.ts', "label: 'Julia mode'"],
+    ['Constant', 'deep-zoom/features/formula.ts', "label: 'Constant',"],
     ['Iterations', 'deep-zoom/features/formula.ts', "label: 'Iterations'"],
     ['Auto iterations', 'deep-zoom/features/formula.ts', "label: 'Auto iterations'"],
     ['Kleinian', 'deep-zoom/data/boxStarters.ts', 'name: "Kleinian'],

@@ -442,12 +442,13 @@ export interface DeepZoomApi {
      *  floats (only the fold-plane line FAILS). The record is in that script's header. */
     setFormula(kind: DzFormulaKind, params?: DeepZoomBoxParams): void;
     /** What is selected, and the box's parameters as they are held (after the limits); `julia` and `c`: JULIA
-     *  MODE (grep the name in core.js) and its constant, for either formula.
+     *  MODE (grep the name in core.js) and its constant, for either formula. `cNum` is the same constant as
+     *  three doubles (each the nearest double of its 256-bit number): what a host's number rows show.
      *  @invariant in Julia mode both GPU kernels compute what the CPU orbits compute, and what a fixed-point
      *  orbit of the explicit point under z -> f(z) + K gives - proven by: npm run smoke:deep-zoom-direct (the
      *  seven gated "julia, ..." lines) and npm run check:deep-zoom-julia-orbit. Falsification records in
      *  debug/deep-zoom-direct-check.mts and debug/deep-zoom-checks/julia-orbit.mts. */
-    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number]; julia: boolean; c: [string, string, string] };
+    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number]; julia: boolean; c: [string, string, string]; cNum: [number, number, number] };
     /** Whether the deep shader of the SELECTED formula is there. */
     formulaState(): 'building' | 'on' | 'failed';
     setAutoIters(on: boolean): void;

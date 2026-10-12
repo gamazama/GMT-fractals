@@ -68,15 +68,42 @@
  *     it, and `viewForHost` hands it through untouched - so a saved place, an undo entry, a scene
  *     and a pasted text all hold it string for string. A place of one mode is nowhere in the
  *     other, as with the two formulas: a jump sets the mode before it hands over the view, and a
- *     switch of mode that is not a jump moves the camera - on: to the whole Julia set of the point
- *     that was looked at (`juliaHome`); off: to the formula's whole-object view - in the same undo
- *     bracket as the row's own write. "Julia from this place" (`juliaFromThisPlace`) is that jump
- *     as a button. THE POINT IS LOOKED AT BEFORE THE MODE IS PUSHED: afterwards the renderer
+ *     switch of mode that is not a jump moves the camera - on: to the whole Julia set of the
+ *     constant in force (`juliaHome`); off: to the formula's whole-object view - in the same undo
+ *     bracket as the row's own write. WHICH CONSTANT (the owner, 2026-10-12): the SWITCH comes
+ *     back to the last one when there is one (`hasConstant`: the Constant row is not 0, 0, 0, or
+ *     the renderer still holds one) and takes the point looked at only when there is none; the
+ *     BUTTON, "Julia from this place" (`juliaFromThisPlace`), always takes the point looked at.
+ *     THE POINT IS LOOKED AT BEFORE THE MODE IS PUSHED: afterwards the renderer
  *     would march the ray through the Julia set, not through the picture the user was looking at.
+ *   - THE CONSTANT'S ROWS FOLLOW THE VIEW (2026-10-12; features/formula.ts, THE CONSTANT'S ROW). The
+ *     store holds the constant a second time, as three doubles (`dzFormula.juliaX` / `Y` / `Z`),
+ *     and the sync pushes them whenever they differ from what the renderer holds. So every view
+ *     that carries a constant is handed over WITH its rows, in the same store write or undo
+ *     bracket: `applyFormula` (a place, Back, Home, pasted text) and `showJuliaSet` (the button,
+ *     the switch). Leave one out and the rows it left behind overwrite the constant a frame
+ *     later - with the last place's, or with 0, 0, 0 for a place saved before the rows existed.
+ *     And the rows are written from a view ONLY: the three numbers in a saved place's formula
+ *     (the whole slice is saved) are not read, so a jump to a place in Mandelbrot mode leaves
+ *     the last constant standing.
+ *     An undo needs nothing: the store it puts back already holds the rows of the view it puts back.
+ *     `showJuliaSet` writes the store from inside the `juliaMode` subscription. That is safe here:
+ *     a listener registered after it is called once, with the rows already written (seen
+ *     2026-10-12 in the app with a listener of our own; zustand hands every listener the store's
+ *     CURRENT state, not the state of the write that woke it).
  *   - A JUMP AND A SWITCH OF FORMULA OR OF MODE END THE TRAIL (`trailEnds` in deep-zoom/trail.ts: what the app
  *     remembers of how the camera was flown), and both call it BEFORE the view is set: the trail's
  *     last point is the camera as it stood. An undo calls nothing: the view it puts back is one the
  *     trail has usually been at, and the trail takes it from there.
+ *
+ * @assumption Which constant the switch takes, and the Constant row written by the switch and by
+ *   the button, have no check line. Seen once in the real app, 2026-10-12 (headless Chrome on the
+ *   GPU, debug/scratch/julia-rows/app-rows.mts, git-ignored): with no constant yet the switch took
+ *   the point looked at; switched off, a jump to another kept place and switched on again, the
+ *   renderer held the same three strings to the character and not the point looked at there; the
+ *   button pressed there took that point. The jump's own write of the rows has a line in
+ *   check:deep-zoom-scene-roundtrip ("place: a jump to a Julia place writes the Constant row
+ *   ..."), which is not known to go red for a jump that forgets them.
  */
 import { useEngineStore } from '../store/engineStore';
 import { installStateLibrary } from '../engine/store/installStateLibrary';
@@ -87,7 +114,7 @@ import { getHost, subscribeHost } from './host/current';
 import type { DzView } from './host/DeepZoomHost';
 import { lightTypeToRenderer } from './features/light';
 import { colourToRenderer } from './features/colour';
-import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS } from './features/formula';
+import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS, juliaRowsOf } from './features/formula';
 import type { DzFormulaChoice } from './features/formula';
 import { paramId } from './host/paramMap';
 import type { DeepZoomHost, DzParams } from './host/DeepZoomHost';
@@ -160,23 +187,41 @@ function formulaChoiceNow(): DzFormulaChoice {
 /** Tell the renderer the store's formula NOW, ahead of the sync's own (delayed) push, so that the
  *  view handed over next is taken under it. A host that is not ready yet is told nothing: at ready
  *  the sync sends everything, and nothing may reach the renderer before then (useHostSync.ts). */
-function pushFormulaNow(host: DeepZoomHost): void {
+const JULIA_ROW_KEYS = ['juliaX', 'juliaY', 'juliaZ'] as const;
+function pushFormulaNow(host: DeepZoomHost, withConstant = false): void {
     if (!host.bootParams()) return;
     const patch: DzParams = {};
     for (const [key, value] of Object.entries(formulaChoiceNow())) patch[paramId('dzFormula', key)] = value;
+    // The Constant row too, for the switch that re-enters a Julia set: the constant it shows is in force before
+    // the renderer is asked where that set is. (The host sends it only if it differs from the one it holds.)
+    if (withConstant) for (const key of JULIA_ROW_KEYS) patch[paramId('dzFormula', key)] = useEngineStore.getState().dzFormula[key];
     host.setParams(patch);
+}
+
+/** Whether there is a Julia constant to come back to: the Constant row is not 0, 0, 0, or the renderer still
+ *  holds one from the last time the mode was on. (The origin as a constant cannot be told from none.) */
+function hasConstant(host: DeepZoomHost): boolean {
+    const row = useEngineStore.getState().dzFormula, held = host.getParams();
+    return JULIA_ROW_KEYS.some((key) => (row[key] ?? 0) !== 0 || (held[paramId('dzFormula', key)] ?? 0) !== 0);
 }
 
 /** All a jump writes to the store: the formula. A place's saved one; for a bare view the fields the
  *  view itself carries (power, phase, iterations) with the formula it came with. Without a formula
  *  choice - every place and view from before 2026-10-09 - it is the Mandelbulb. A view's own light,
- *  colour and detail fields are not read. */
+ *  colour and detail fields are not read. The Constant row is written from the VIEW's Julia constant
+ *  and from nothing else: the three numbers a saved formula holds are left out, so a place without a
+ *  constant leaves the last one where it is (PITFALLS: THE CONSTANT'S ROWS FOLLOW THE VIEW). */
 function applyFormula(state: DzLocationState): void {
     const v = state.view;
+    const whole: Partial<DzFormulaSlice> = state.look
+        ? state.look.dzFormula
+        : { ...state.formula, power: v.power, phaseTheta: v.phase[0], phasePhi: v.phase[1], iterations: v.iters };
+    const { juliaX: _x, juliaY: _y, juliaZ: _z, ...saved } = whole;   // a saved place's formula is the whole slice: these are in it
     useEngineStore.getState().setDzFormula({
         kind: FORMULA_BULB,
         juliaMode: false,                                            // every place from before Julia mode, and every card
-        ...(state.look ? state.look.dzFormula : { ...state.formula, power: v.power, phaseTheta: v.phase[0], phasePhi: v.phase[1], iterations: v.iters }),
+        ...saved,
+        ...(v.julia ? juliaRowsOf(v.julia) : {}),
     });
 }
 
@@ -249,12 +294,14 @@ function juliaHome(host: DeepZoomHost): DzView | null {
     };
 }
 
-/** Put the constant in force and the camera where the whole of its Julia set is seen (the renderer is
- *  already in Julia mode). False when the constant has no set: the camera then stays where it was. */
+/** Put the constant in force - the Constant row with it - and the camera where the whole of its Julia set
+ *  is seen (the renderer is already in Julia mode). False when the constant has no set: the camera then
+ *  stays where it was. Without a constant the one the renderer holds stays, and the row already shows it. */
 function showJuliaSet(host: DeepZoomHost, constant: [string, string, string] | undefined): boolean {
     const here = viewForHost(host.getView());
     const julia = constant ? { julia: constant } : {};
     host.setView({ ...here, ...julia });                             // the constant first: the renderer says where ITS set is
+    if (constant) useEngineStore.getState().setDzFormula(juliaRowsOf(constant));   // PITFALLS: THE CONSTANT'S ROWS FOLLOW THE VIEW
     const home = juliaHome(host);
     if (home) host.setView({ ...viewForHost(home), ...julia });
     return !!home;
@@ -555,17 +602,19 @@ export function installLocations(): void {
         if (!(formulaChoiceNow().juliaMode && showJuliaSet(host, undefined))) host.setView(viewForHost(formulaHome(formulaChoiceNow())));
     });
 
-    // A switch of Julia mode by its row (PITFALLS: JULIA MODE). On: the point looked at becomes the constant - when
-    // nothing is looked at, the constant the renderer holds stays - and the whole of its set is shown. Off: the whole
-    // of the formula's own object. No toast here: an undo and a scene load pass through too, and their own view,
-    // restored after the store, is the one that stays.
+    // A switch of Julia mode by its row (PITFALLS: JULIA MODE). On, with a constant to come back to (the owner,
+    // 2026-10-12): that constant stays, exact, and the whole of its set is shown. On, with none yet: the point looked
+    // at becomes the constant - when nothing is looked at, the renderer's 0, 0, 0 stays. Off: the whole of the
+    // formula's own object. No toast here: an undo and a scene load pass through too, and their own view, restored
+    // after the store, is the one that stays.
     useEngineStore.subscribe((s) => s.dzFormula?.juliaMode, (on, was) => {
         const host = getHost();
         if (jumping || !!on === !!was || !host || !host.bootParams()) return;
-        const look = on ? host.lookPoint({ maxSteps: 600 }) : null;  // before the push: the picture as the user sees it
+        const back = !!on && hasConstant(host);
+        const look = on && !back ? host.lookPoint({ maxSteps: 600 }) : null;  // before the push: the picture as the user sees it
         backStack.push({ view: host.getView(), formula: { ...formulaChoiceNow(), juliaMode: !!was } });
         trailEnds();
-        pushFormulaNow(host);
+        pushFormulaNow(host, back);
         jumpSeq++;
         if (on) showJuliaSet(host, look && look.kind === 'hit' ? look.point : undefined);
         else host.setView(viewForHost(formulaHome(formulaChoiceNow())));

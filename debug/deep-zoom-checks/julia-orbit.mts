@@ -41,6 +41,11 @@
  *       none of them runs a reference orbit in Julia mode against the referee.
  *   Not broken on purpose here (the build's three breaks were spent): the pixel's "+ dc" left in (`pertOrbitJS`,
  *   `boxOrbitJS`), the jet's "+ v", the gradient's sum. The GPU's factor was: debug/deep-zoom-direct-check.mts.
+ * 2026-10-12, THE CONSTANT'S ROW (deep-zoom/features/formula.ts), one break, restored byte for byte (sha-256):
+ *   - `juliaRowsOf` (the shell's three numbers for a constant held as strings) made to answer 0, 0, 0
+ *     -> 1 red of 89: "rows: what the Constant row shows for a deep constant is the three doubles the renderer
+ *       reads it as ..." (0 0 0 against 0.3 -1.25 1e-9).
+ *   Not broken on purpose: the two "seam: three finite numbers ..." lines (`setJuliaC` taking numbers).
  * BEFORE IT WAS A CHECK the same comparison ran as a study (debug/scratch/formula-next/julia-twin.mts, 2026-10-11,
  * on text patches of the kernel as it then was): 54 box places and 62 bulb places.
  */
@@ -48,6 +53,7 @@ import { readFileSync } from 'node:fs';
 import { PLACES } from '../../deep-zoom/data/places.ts';
 import { STARTERS } from '../../deep-zoom/data/starters.ts';
 import { BOX_STARTERS } from '../../deep-zoom/data/boxStarters.ts';
+import { juliaRowsOf } from '../../deep-zoom/features/formula.ts';
 
 let failed = 0;
 function check(ok: boolean, label: string, detail = ''): void {
@@ -68,7 +74,7 @@ interface Lib {
     rayFreeJS(O: Orbit, rd: V3, maxIter: number, tol: number, maxSteps: number): { t: number; kind: number; steps: number };
     applyFormula(kind: string, params?: FormulaParams): boolean;
     boxFar(): number;
-    julia(): { on: boolean; c: string[] };
+    julia(): { on: boolean; c: string[]; f: number[] };
     setBulb(power: number): void;
     setCam(c: bigint[], iters: number): void;
 }
@@ -90,7 +96,7 @@ const lib = new Function(`"use strict";
     ${cut('function makeHP(P) {', '/* ════════ uniforms set before each deep draw')}
     ${cut('/* ════════ CPU f64 perturbed march', '/* probe FBO: 1×1 RGBA32F readback')}
     return { buildRefOrbit, pertOrbitJS, pertOrbitJetJS, rayFreeJS, applyFormula, boxFar,
-        julia: () => ({ on: juliaOn, c: juliaHP.map(String) }),
+        julia: () => ({ on: juliaOn, c: juliaHP.map(String), f: juliaF.slice() }),
         setBulb: (power) => { nPower = power; phaseTheta = 0; phasePhi = 0; },
         setCam: (c, iters) => { camHP = c.slice(); cam.iters = iters; } };
 `)() as Lib;
@@ -241,9 +247,20 @@ const printPlace = (name: string, formula: Record<string, unknown>, K: bigint[],
     check(lib.applyFormula('mandelbulb', { julia: true, c: str(K) }) === false, 'seam: the same mode and constant again report none');
     check(lib.julia().c.join() === str(K).join(), 'seam: the constant comes back string for string');
     check(lib.buildRefOrbit([fix(0.3), fix(0.2), fix(0.1)], 20).julia === true, 'seam: an orbit built in Julia mode carries its mode');
-    check(lib.applyFormula('mandelbulb', { c: ['1', '2'] }) === false && lib.applyFormula('mandelbulb', { c: [0.25, 0.1, 0.05] }) === false
+    check(lib.applyFormula('mandelbulb', { c: ['1', '2'] }) === false && lib.applyFormula('mandelbulb', { c: [0.3, '1', 2] }) === false && lib.applyFormula('mandelbulb', { c: [0.3, NaN, 0.05] }) === false
         && lib.applyFormula('mandelbulb', { c: ['0.25', '1', '2'] }) === false && lib.julia().c.join() === str(K).join(),
-        'seam: a constant that is not three whole numbers written as text is refused and changes nothing');
+        'seam: a constant that is neither three whole numbers written as text nor three finite numbers is refused and changes nothing');
+    // THE CONSTANT'S ROW (2026-10-12; deep-zoom/features/formula.ts): a host's number rows set the constant from doubles
+    // and show it as doubles. Until that day three numbers were refused.
+    const N: V3 = [0.3, -1.25, 1e-9];
+    check(lib.applyFormula('mandelbulb', { c: N }) === true && lib.julia().c.join() === str(N.map(fix)).join() && lib.julia().f.join() === N.join(),
+        'seam: three finite numbers are taken as the constant - each the fixed-point number of that double - and read back as the same doubles', lib.julia().c.join());
+    check(lib.applyFormula('mandelbulb', { c: N }) === false, 'seam: the same three numbers again report no change');
+    const DEEP = [fix(0.3) + 12345n, fix(-1.25) - 7n, fix(1e-9) + 3n], rows = juliaRowsOf(str(DEEP) as [string, string, string]);
+    check(lib.applyFormula('mandelbulb', { c: str(DEEP) }) === true && lib.julia().c.join() === str(DEEP).join()
+        && rows.juliaX === lib.julia().f[0] && rows.juliaY === lib.julia().f[1] && rows.juliaZ === lib.julia().f[2] && rows.juliaX === 0.3,
+        'rows: what the Constant row shows for a deep constant is the three doubles the renderer reads it as (rows that show it send nothing)',
+        `${rows.juliaX} ${rows.juliaY} ${rows.juliaZ} against ${lib.julia().f.join(' ')}`);
     check(lib.applyFormula('mandelbulb', { c: str([fix(0.3), fix(0.1), fix(0.05)]) }) === true, 'seam: a new constant alone reports a change');
     check(lib.applyFormula('mandelbulb', { julia: false }) === true && lib.buildRefOrbit([fix(0.3), fix(0.2), fix(0.1)], 20).julia === false, 'seam: back in Mandelbrot mode an orbit carries none');
 }

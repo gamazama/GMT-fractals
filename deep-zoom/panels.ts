@@ -6,8 +6,9 @@
  * (stage 3); Route (the camera move on the timeline: one widget, `dz-route`). No
  * `component: 'panel-X'` of our own: a panel is features, sections and registered widgets.
  *
- * Formula also holds the Julia switch (`dzFormula.juliaMode`) and the `dz-julia-here` button; the Julia
- * CONSTANT has no row (it travels with the view: features/formula.ts, JULIA MODE).
+ * Formula also holds the Julia switch (`dzFormula.juliaMode`), under it the Constant row
+ * (`juliaConstant`: the Julia constant's three coordinates, there while the mode is on) and the
+ * `dz-julia-here` button (features/formula.ts, JULIA MODE and THE CONSTANT'S ROW).
  *
  * Diagnostics (2026-10-12) is the last tab of the right dock and is there in ADVANCED MODE ONLY
  * (`showIf: 'advancedMode'`, the engine's own switch: this app's Settings row and the backtick
@@ -40,9 +41,10 @@ export const DeepZoomPanels: PanelManifest = [
     { id: 'Formula', dock: 'left', order: 2, items: [
         // One formula's rows at a time: each row carries its own condition on `kind` (features/formula.ts).
         { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation'] },
-        // Julia mode, for either formula: the switch, and the button that takes the constant from the place looked at.
+        // Julia mode, for either formula: the switch, the constant's three numbers while it is on, and the button
+        // that takes the constant from the place looked at.
         { type: 'section', label: 'Julia' },
-        { type: 'feature', id: 'dzFormula', whitelistParams: ['juliaMode'] },
+        { type: 'feature', id: 'dzFormula', whitelistParams: ['juliaMode', 'juliaConstant'] },
         { type: 'widget', id: 'dz-julia-here' },
         { type: 'section', label: 'Iterations' },
         { type: 'widget', id: 'dz-iteration-readout' },

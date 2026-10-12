@@ -41,6 +41,13 @@
  *     saved in those seconds held the start view, and with the session's autosave (deep-zoom/
  *     session.ts) a reload within seconds of a boot would have written the start view over the
  *     place just restored - the place lost by pressing F5 twice.
+ *   - THE CONSTANT'S ROW FOLLOWS THE VIEW (2026-10-12; deep-zoom/features/formula.ts, THE CONSTANT'S
+ *     ROW). The `dzFormula` slice holds the Julia constant a second time, as three doubles
+ *     (`juliaX` / `Y` / `Z`), and the sync pushes them whenever they differ from the renderer's.
+ *     A scene's own three can disagree with its view's strings: a scene from before the rows
+ *     existed has none (they load as 0), and a share link rounds every number to four decimals.
+ *     So `dzView` writes the three from the view's strings before it hands the view over; left
+ *     out, the loaded constant would be overwritten by the rows a frame after it arrived.
  *
  * @invariant a view that was loaded and has not been taken by a ready renderer is what a scene
  *   written meanwhile holds, string for string; and a view's Julia constant goes through a
@@ -50,6 +57,10 @@
  *   back, three strings byte for byte, and reaches the renderer"). Falsified 2026-10-12: the
  *   parked line taken out of `serialize` -> 2 red; the constant left out of what `serialize`
  *   writes -> 5 red. The record is in that check's header.
+ * @assumption a loaded view that carries a Julia constant leaves the store's three number rows as
+ *   that constant's doubles (THE CONSTANT'S ROW FOLLOWS THE VIEW): the check's line "scene: the
+ *   Constant row follows the loaded view ..." passes and is not known to go red for a `dzView`
+ *   that forgets the rows (that check's header says why).
  * @assumption The rest of what that check reads - the camera strings and the angles of the view,
  *   a saved location's row, every keyframe's payload, the version stamp, a renderer that mounts
  *   later being handed the parked view - is its other "scene: ..." and "parked: ..." lines, which
@@ -64,6 +75,7 @@ import type { DzView } from './host/DeepZoomHost';
 import { lightTypeToRenderer } from './features/light';
 import { colourToRenderer } from './features/colour';
 import { normalsIndex } from './features/quality';
+import { juliaRowsOf } from './features/formula';
 
 export const DZ_SCENE_VERSION = 1;
 
@@ -155,10 +167,13 @@ presetFieldRegistry.register({
         };
         return saved;
     },
-    deserialize: (preset, _set, get) => {
+    deserialize: (preset, set, get) => {
         const saved = (preset as { dzView?: unknown }).dzView;
         if (!isSavedView(saved)) return;
         trailEnds();                                    // a loaded scene is not flown to: the trail ends where the camera stands
+        // THE CONSTANT'S ROW FOLLOWS THE VIEW (see PITFALLS), before the view is built and handed over.
+        const formula = (get() as Slices).dzFormula;
+        if (formula && isTriple(saved.julia)) set({ dzFormula: { ...formula, ...juliaRowsOf(saved.julia) } });
         parked = viewFromSaved(saved, get() as Slices);
         parkedSaved = saved;
         offer();   // a ready host applies it at once; otherwise the next ready one does

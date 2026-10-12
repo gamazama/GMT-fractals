@@ -12,7 +12,9 @@
  *                 location and a route of three keyframes go through `getPreset` -> the scene's
  *                 text -> `parseSceneJson` -> `loadPreset`: the camera, the constant, the
  *                 location's row and every keyframe's payload come back string for string, the
- *                 angles to the last digit, and the scene carries its version stamp.
+ *                 angles to the last digit, and the scene carries its version stamp. The store's
+ *                 three number rows for the constant come back as the loaded constant's doubles,
+ *                 and a jump to the saved place writes them too.
  *   [2] parked    a view that was loaded and that no ready renderer has taken yet is what a scene
  *                 written meanwhile holds; once a ready renderer has it, the renderer's own view is.
  *   [3] session   the session's body is the scene `getPreset` writes, without the documents; it
@@ -33,6 +35,15 @@
  * NOT broken on purpose, so not known to be able to go red: the camera strings and the angles of
  * [1], the saved location's row, "scene: every keyframe's payload comes back byte for byte" (the
  * sequence is the engine's to carry), the version stamp, and the session's other refusals.
+ * THE CONSTANT'S ROW (2026-10-12, later; deep-zoom/features/formula.ts): two lines of [1] say the
+ * store's three number rows follow a view that carries a Julia constant - "scene: the Constant row
+ * follows the loaded view ..." (deep-zoom/presetFields.ts) and "place: a jump to a Julia place
+ * writes the Constant row from its view ..." (deep-zoom/locations.ts). NEITHER IS KNOWN TO GO RED
+ * FOR A HAND-OVER THAT FORGETS THE ROWS. The one break spent near them (`juliaRowsOf` made to
+ * answer 0, 0, 0) turned the "scene: ..." line red only through its side test that the wanted
+ * doubles are not 0, and left the "place: ..." line green: both then took the wanted doubles from
+ * the function under test. They work them out themselves now, and that form was not run against
+ * a break.
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -52,6 +63,7 @@ import { DZ_SCENE_VERSION } from '../../deep-zoom/presetFields';
 import type { DzSavedView } from '../../deep-zoom/presetFields';
 import { installRoute, noteMove, routeKeys, setKeyframe } from '../../deep-zoom/route';
 import { installShare } from '../../deep-zoom/share';
+import { jumpTo } from '../../deep-zoom/locations';
 import type { DzLocation } from '../../deep-zoom/locations';
 import { DZ_SESSION_FORMAT, dzSessionAdapter } from '../../deep-zoom/session';
 import type { Preset } from '../../types';
@@ -174,6 +186,13 @@ const got = first.sets[first.sets.length - 1];
 check(first.sets.length === 1 && sameTriple(got?.cam, CAM_A), 'scene: the view comes back to the renderer, the three camera strings byte for byte', JSON.stringify(got?.cam));
 check(!!got && got.yaw === VIEW_A.yaw && got.pitch === VIEW_A.pitch && got.roll === VIEW_A.roll, 'scene: yaw, pitch and roll come back to the last digit', `${got?.yaw} ${got?.pitch} ${got?.roll}`);
 check(sameTriple(got?.julia, JULIA), 'scene: the Julia constant comes back, three strings byte for byte, and reaches the renderer', JSON.stringify(got?.julia));
+// THE CONSTANT'S ROW (2026-10-12): the scene above was written with the three rows at 0 - what a scene from before
+// the rows existed loads as. Left at 0 they would be pushed a frame later and overwrite the loaded constant.
+const rowsNow = (): string => JSON.stringify([store().dzFormula.juliaX, store().dzFormula.juliaY, store().dzFormula.juliaZ]);
+/** The constant's three doubles, worked out here (the renderer's rule: the nearest double of the 256-bit number). */
+const ROWS_WANTED = JULIA.map((s) => Number(BigInt(s)) / 2 ** 256), ROWS_TEXT = JSON.stringify(ROWS_WANTED);
+check((JSON.parse(TEXT) as { features: { dzFormula: { juliaX?: number } } }).features.dzFormula.juliaX === 0 && ROWS_WANTED.every((x) => x !== 0) && rowsNow() === ROWS_TEXT,
+    'scene: the Constant row follows the loaded view - the constant\'s three doubles, though the scene itself held the rows as 0', `${rowsNow()} for ${ROWS_TEXT}`);
 check(store().dzFormula.juliaMode === true && store().dzFormula.power === 6 && store().dzFormula.phaseTheta === 0.125 && store().dzFormula.phasePhi === -0.25
     && store().dzLight.lampFalloff === 2.5 && store().dzQuality.detail === 3.5, 'scene: the formula - Julia mode with it - and the look values come back');
 check(!!got && got.power === 6 && got.phase[0] === 0.125, 'scene: the view handed to the renderer takes its look fields from the loaded scene, not from where the app stood');
@@ -186,6 +205,14 @@ check(keysAfter.length === 3 && keysAfter.every((k, i) => sameTriple(k.view.cam,
     'scene: every keyframe\'s payload comes back byte for byte', `${keysAfter.length} keys: ${JSON.stringify(keysAfter.map((k) => k.view.cam[0].slice(-6)))}`);
 check(keysAfter.every((k, i) => k.view.yaw === KEYED[i].yaw && k.view.pitch === KEYED[i].pitch && (k.view.roll ?? 0) === (KEYED[i].roll ?? 0) && k.frame === keysBefore[i].frame && k.depth === keysBefore[i].depth),
     'scene: and each keyframe\'s angles, time and depth to the last digit');
+// A jump does the same (deep-zoom/locations.ts, `applyFormula`): the saved place's formula holds the rows as 0 too.
+store().setDzFormula({ juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0 });
+first.sets.length = 0;
+const undoBefore = store().paramUndoStack.length;
+jumpTo(rows[0].state);
+check(sameTriple(first.sets[0]?.julia, JULIA) && store().dzFormula.juliaMode === true && rowsNow() === ROWS_TEXT && store().paramUndoStack.length === undoBefore + 1,
+    'place: a jump to a Julia place writes the Constant row from its view, in the jump\'s one undo step', `${rowsNow()} for ${ROWS_TEXT}; ${store().paramUndoStack.length - undoBefore} undo steps`);
+useEngineStore.setState({ paramUndoStack: [], paramRedoStack: [] });      // [3] counts the undo stack after a session is applied
 
 // ── [2] a loaded view that no ready renderer has taken yet ───────────────────────────────────────
 console.log('[2] parked    a scene written before the renderer is ready');

@@ -5,7 +5,10 @@
  * becomes the constant, Julia mode goes on, and the camera goes to where the whole of that Julia set
  * is seen from outside. One undo step; Back returns to the place. The work, and what it says when it
  * cannot (nothing is looked at, the camera is inside the solid), is `juliaFromThisPlace` in
- * `deep-zoom/locations.ts`; the mode itself is the `dzFormula.juliaMode` row above this button.
+ * `deep-zoom/locations.ts`; the mode itself is the `dzFormula.juliaMode` row above this button, and the
+ * Constant row between the two shows the point this button took (features/formula.ts, THE CONSTANT'S ROW).
+ * The switch is not the same step: switched on, it comes back to the last constant when there is one.
+ * This button always takes the point looked at.
  *
  * Pressed while Julia mode is already on it takes the point looked at in the Julia set as the next
  * constant: the same action, on the picture as it stands.

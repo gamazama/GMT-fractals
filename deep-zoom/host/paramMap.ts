@@ -18,7 +18,8 @@
  *   - Some values travel together because the module's setter takes them together: colour
  *     (`plain`, `mode`, `scale` -> one `setColor`), light type and lamp falloff (one `setLight`),
  *     the two phase angles (one `setPhase`). A row's `group` says which push carries it.
- *   - The formula, the Julia switch and the box's seven numbers are ONE push (`group: 'formula'`, one `setFormula`),
+ *   - The formula, the Julia switch, the Julia constant's three numbers and the box's seven are ONE push
+ *     (`group: 'formula'`, one `setFormula`),
  *     and that push goes before every other push of the same patch: the renderer's iteration ceiling
  *     follows the formula (400 or 500), so an iteration count sent first would be cut to the old one.
  *   - `group: null` means no push of `looseParams.ts` carries the value: it is shell-only, it
@@ -89,7 +90,7 @@ const look = (key: string, field: string): DzParamRow => ({
     feature: 'dzLight', key, cls: 'A', group: 'look', look: field, read: (api) => lookNumber(api, field),
 });
 
-/** One of the eight values `api.setFormula` takes, read back as the store would hold it. */
+/** One of the values `api.setFormula` takes, read back as the store would hold it. */
 const box = (key: string, read: (f: ReturnType<DeepZoomApi['formula']>) => DzParamValue | undefined): DzParamRow => ({
     feature: 'dzFormula', key, cls: 'O', group: 'formula', read: (api) => read(api.formula()),
 });
@@ -104,8 +105,13 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     box('boxRotX', (f) => f.rot[0]),
     box('boxRotY', (f) => f.rot[1]),
     box('boxRotZ', (f) => f.rot[2]),
-    // The Julia switch rides in the same call. Its CONSTANT is no param: it travels with the view (features/formula.ts, JULIA MODE).
+    // The Julia switch rides in the same call. So does its constant as numbers, but only when the three differ from
+    // what the renderer holds: the exact constant travels with the view (looseParams.ts, THE CONSTANT).
     box('juliaMode', (f) => f.julia),
+    box('juliaX', (f) => f.cNum[0]),
+    box('juliaY', (f) => f.cNum[1]),
+    box('juliaZ', (f) => f.cNum[2]),
+    { feature: 'dzFormula', key: 'juliaConstant', cls: '-', group: null, why: 'a composed row with no state of its own: juliaX, juliaY and juliaZ carry the value' },
     { feature: 'dzFormula', key: 'boxRotation', cls: '-', group: null, why: 'a composed row with no state of its own: boxRotX, boxRotY and boxRotZ carry the value' },
     { feature: 'dzFormula', key: 'power', cls: 'O', group: 'power', read: (api) => api.dz.settings().power },
     { feature: 'dzFormula', key: 'phaseTheta', cls: 'O', group: 'phase', read: (api) => api.dz.settings().phase[0] },

@@ -14,6 +14,8 @@
  *   value through these handles of `instance.api` (read in `deep-zoom/renderer/core.js`):
  *     kind            api.setFormula(kind, params)   'mandelbulb' | 'mandelbox' (formulaToRenderer)
  *     juliaMode       api.setFormula(kind, { julia })   in the same call as the kind (see JULIA MODE)
+ *     juliaX / Y / Z  api.setFormula(kind, { c })       in that call too, and ONLY when the three differ
+ *                     from the constant the renderer holds (see THE CONSTANT'S ROW)
  *     power           api.setPower(n)            clamps to 2..16 and truncates (`n|0`)
  *     phaseTheta      api.setPhase(theta, phi)   ABSOLUTE, always both arguments, theta first
  *     phasePhi        api.setPhase(theta, phi)   (the page's own panel lists phi first)
@@ -43,15 +45,39 @@
  *
  * JULIA MODE (2026-10-12)
  *   `juliaMode` is a switch for either formula: on, one constant is added every iteration and the
- *   point looked at starts the orbit (grep JULIA MODE in renderer/core.js). THE CONSTANT IS NOT A
- *   PARAM (the owner: no number rows for it in this build). It is taken from the place looked at
- *   ("Julia from this place", `juliaFromThisPlace` in `deep-zoom/locations.ts`) or comes with a
- *   pasted or loaded view, lives in the renderer as the camera does, and travels with the VIEW as
- *   three 256-bit decimal strings (`DzView.julia`): a place, a scene, a link and pasted text carry
- *   it there, never as numbers. So this slice says only WHETHER the mode is on. Switching it by
- *   its row takes the point at the centre of the view as the constant and moves the camera to the
- *   whole set, in the same undo step (`deep-zoom/locations.ts`, the `juliaMode` subscription).
- *   Anything saved before this day has no `juliaMode` and is in Mandelbrot mode.
+ *   point looked at starts the orbit (grep JULIA MODE in renderer/core.js). The constant is taken
+ *   from the place looked at ("Julia from this place", `juliaFromThisPlace` in
+ *   `deep-zoom/locations.ts`) or comes with a pasted or loaded view, lives in the renderer as the
+ *   camera does, and travels with the VIEW as three 256-bit decimal strings (`DzView.julia`): a
+ *   place, a scene, a link and pasted text carry it there, never as numbers. Switching the mode
+ *   on by its row comes back to the LAST constant when there is one (the owner, 2026-10-12; with
+ *   none yet it takes the point at the centre of the view, which is what the button always does)
+ *   and moves the camera to the whole set, in the same undo step (`deep-zoom/locations.ts`, the
+ *   `juliaMode` subscription). Anything saved before this day has no `juliaMode` and is in
+ *   Mandelbrot mode.
+ *
+ * THE CONSTANT'S ROW (2026-10-12, later the same day; the owner, having flown the mode: "I dont
+ *   see how to set the julia constant's coordinate")
+ *   `juliaX`, `juliaY`, `juliaZ` are the constant as three doubles, shown as ONE row, "Constant"
+ *   (`juliaConstant`, composed as `boxRotation` is), while Julia mode is on. Dragged, typed or
+ *   keyframed they change the set; the camera and the iteration floor stay. THE RENDERER'S
+ *   STRINGS REMAIN THE CONSTANT. The rows are a second, coarser writing of it, and three rules
+ *   keep the two from fighting:
+ *     the precision rule  the formula push sends the rows only when they DIFFER from the constant
+ *                         the renderer holds, read back as doubles. Rows that merely show a deep
+ *                         constant send nothing, and its 77 digits stay
+ *                         (`deep-zoom/host/looseParams.ts`, THE CONSTANT).
+ *     the rows follow     whoever hands the renderer a view that carries a constant writes these
+ *                         three with it, as that constant's doubles (`juliaRowsOf`): a jump and
+ *                         the button (`deep-zoom/locations.ts`), a scene, a link and the session
+ *                         (`deep-zoom/presetFields.ts`). A place or a scene from before the rows
+ *                         existed, and a share link (which rounds numbers to four decimals), would
+ *                         otherwise arrive with rows that disagree and overwrite its constant.
+ *     undo stays exact    a constant that came with a view is remembered exact (the last 8), so
+ *                         rows put back onto its doubles - an undo of a drag - send its strings.
+ *   A constant set by the rows is those doubles and no deeper: enough for a whole set, not for a
+ *   deep place (grep `the constant must be exact` in renderer/core.js). The track ids are
+ *   `dzFormula.juliaX` / `Y` / `Z`.
  *
  * INVALIDATION
  *   Every param here is class O: the renderer rebuilds its reference orbit (grep `orbitDirty` in
@@ -96,6 +122,13 @@
  *   - `boxRotation` is a COMPOSED row: it has no state of its own (the slice holds `boxRotX`,
  *     `boxRotY`, `boxRotZ`), no push and no track. A scene load can leave a stale `boxRotation`
  *     key in the slice (the loader writes every declared param's default); nothing reads it.
+ *     `juliaConstant` over `juliaX`, `juliaY`, `juliaZ` is the same.
+ *   - THE CONSTANT'S ROWS ARE NOT WHAT A PLACE IS. `FORMULA_CHOICE_KEYS` does not hold them and
+ *     `locationKey` (deep-zoom/locationParse.ts) does not read them: the view's strings say which
+ *     constant. A saved place's formula does hold the three numbers (it is the whole slice); a
+ *     jump does not read them and writes the rows from the view alone (`applyFormula` in
+ *     deep-zoom/locations.ts), so a place in Mandelbrot mode leaves the last constant where it is
+ *     for the switch to come back to.
  *
  * @invariant No key of the `dzFormula` slice is typed `any`: `SliceFromParams` over this feature's
  *   params gives `number` for the numeric keys and `boolean` for `autoIterations` — proven by:
@@ -104,6 +137,22 @@
  *   `: FeatureDefinition` annotation (the fluid-toy idiom), tsc reported "Type 'string' does not
  *   satisfy the constraint 'never'" on that line; the annotation widens `params` to
  *   `Record<string, ParamConfig>` and every slice key becomes `any`.
+ * @invariant `juliaRowsOf` gives, for a constant held as strings, the three doubles the renderer
+ *   itself reads that constant as - so rows written from it equal `api.formula().cNum` and the
+ *   formula push sends no constant - proven by: npm run check:deep-zoom-julia-orbit ("rows: what
+ *   the Constant row shows for a deep constant is the three doubles the renderer reads it as").
+ *   Falsified 2026-10-12: the function made to answer 0, 0, 0 -> that line red (0 0 0 against
+ *   0.3 -1.25 1e-9).
+ * @assumption Every hand-over of a view that carries a constant writes the rows with it (THE
+ *   CONSTANT'S ROW, "the rows follow"). Two check lines say so and neither is known to go red for
+ *   a hand-over that forgets: npm run check:deep-zoom-scene-roundtrip ("scene: the Constant row
+ *   follows the loaded view ...", "place: a jump to a Julia place writes the Constant row ...";
+ *   that check's header says why). "Julia from this place" and the switch by its row have no
+ *   check line: seen once in the real app, 2026-10-12 (the button pressed at a kept place 5e-20
+ *   deep: the rows were the constant's doubles, the 77-digit strings were the same eight frames
+ *   later, a row dragged and undone brought them back to the character; a keyed `juliaX` under
+ *   a route of two keyframes was in the renderer straight after each scrub; 5.5 typed into the X
+ *   cell was taken as 5.5).
  * @assumption Every default, range and step here equals the renderer's own (read 2026-10-08 in
  *   core.js: `let nPower`, `let phaseTheta`, `const cam = {` for `iters: 14`, `let autoIters`, and
  *   the `CTLS` rows 'power n', 'phase', 'iters'; 2026-10-09: `const box = {` and `applyFormula`).
@@ -140,6 +189,19 @@ const onBulb = { param: 'kind', eq: FORMULA_BULB };
 const onBox = { param: 'kind', eq: FORMULA_BOX };
 /** Radians as a share of pi: the box's rotation row reads like GMT's. */
 const BOX_ROT = { type: 'float', default: 0, min: -6.28, max: 6.28, step: 0.001, scale: 'pi', hidden: true, condition: onBox } as const;
+
+const onJulia = { param: 'juliaMode', bool: true };
+/** One coordinate of the Julia constant. -4 to 4 is the slider's range, not a limit: neither the store nor the
+ *  renderer holds a value to it, and a constant that came with a view can lie outside it. */
+const JULIA_AXIS = { type: 'float', default: 0, min: -4, max: 4, step: 0.001, hidden: true, condition: onJulia } as const;
+
+/** The three values of the Constant row for a constant held as strings: each coordinate as the renderer itself
+ *  reads it as a double (grep `const toNum` in renderer/core.js: the nearest double of the 256-bit number).
+ *  Written wherever a view that carries a constant is handed over (see THE CONSTANT'S ROW in the header). */
+export function juliaRowsOf(c: readonly [string, string, string]): { juliaX: number; juliaY: number; juliaZ: number } {
+    const double = (text: string): number => Number(BigInt(text)) / 2 ** 256;
+    return { juliaX: double(c[0]), juliaY: double(c[1]), juliaZ: double(c[2]) };
+}
 
 export const DzFormulaFeature = {
     id: 'dzFormula',
@@ -230,7 +292,18 @@ export const DzFormulaFeature = {
             // place "Slicing") draws that set as a ball of grain - seen 2026-10-12. A write that carries its own
             // `iterations` (a place, a scene, a link) keeps it: `onSet` never overrides a value given with it.
             onSet: (next: boolean, slice: { juliaMode?: boolean }) => (next && !slice.juliaMode ? { iterations: 14 } : {}),
-            description: 'On: one constant is added every iteration and the point you look at starts the orbit - the Julia set of that constant. Switching it on takes the point at the centre of the view as the constant and shows the whole set from outside. Undo, or Back, brings back the place you were at.',
+            description: 'On: one constant is added every iteration and the point you look at starts the orbit - the Julia set of that constant. Switching it on brings back the last constant and shows the whole of its set from outside; with no constant yet, the point at the centre of the view is taken. Undo, or Back, brings back the place you were at. The Constant row under this switch shows the constant; drag or type its numbers to change the set.',
+        },
+        // ── the Julia constant as numbers: one composed row (see THE CONSTANT'S ROW in the header) ──
+        juliaX: { ...JULIA_AXIS, label: 'Constant X' },
+        juliaY: { ...JULIA_AXIS, label: 'Constant Y' },
+        juliaZ: { ...JULIA_AXIS, label: 'Constant Z' },
+        juliaConstant: {
+            type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Constant',
+            composeFrom: ['juliaX', 'juliaY', 'juliaZ'],
+            min: -4, max: 4, step: 0.001,
+            condition: onJulia,
+            description: 'The point whose Julia set is drawn. Drag or type a coordinate and the set changes as you go; the camera stays where it is. Each coordinate can be keyframed. A constant taken from a deep place is kept exact until one of these numbers is changed.',
         },
         iterations: {
             type: 'int',
@@ -250,7 +323,8 @@ export const DzFormulaFeature = {
 
 /** The keys that say WHICH formula a place is of, the box's parameters, and whether it is a Julia set.
  *  A place, a jump and the renderer's `setFormula` all carry exactly these. (The Julia CONSTANT is not
- *  among them: it is part of the view. See JULIA MODE in the header.) */
+ *  among them: it is part of the view, and its three number rows follow the view. See JULIA MODE and THE
+ *  CONSTANT'S ROW in the header.) */
 export const FORMULA_CHOICE_KEYS = ['kind', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotX', 'boxRotY', 'boxRotZ', 'juliaMode'] as const;
 type DzFormulaChoiceKey = (typeof FORMULA_CHOICE_KEYS)[number];
 /** `juliaMode` may be left out (every choice written before 2026-10-12): it then means off. */
