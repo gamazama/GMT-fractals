@@ -2,7 +2,7 @@
  * burning-orbit check: BURNING on the Mandelbulb on the CPU (grep BURNING in deep-zoom/renderer/core.js) - the
  * per-pixel delta orbit (`pertOrbitJS` on a reference built with Burning on) against exact fixed-point orbits
  * of the same points under z -> fold(z)^n + c, fold(x) = x for x >= 0 and (1 - 2 mix) x below it (mix 1: abs).
- * Node only: no browser, no GPU, about a minute.
+ * Node only: no browser, no GPU, about two minutes.
  *
  *   npx tsx debug/deep-zoom-checks/burning-orbit.mts        (npm run check:deep-zoom-burning-orbit)
  *   BURN_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/burning-orbit.mts     also prints every place found, as the
