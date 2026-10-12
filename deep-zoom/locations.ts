@@ -115,7 +115,7 @@ import { getHost, subscribeHost } from './host/current';
 import type { DzView } from './host/DeepZoomHost';
 import { lightTypeToRenderer } from './features/light';
 import { colourToRenderer } from './features/colour';
-import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS, juliaRowsOf } from './features/formula';
+import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS, FORMULA_KALI, juliaRowsOf } from './features/formula';
 import type { DzFormulaChoice } from './features/formula';
 import { paramId } from './host/paramMap';
 import type { DeepZoomHost, DzParams } from './host/DeepZoomHost';
@@ -267,8 +267,21 @@ const fixed = (x: number): string => String(BigInt(Math.round(x * 2 ** 40)) << B
  * a cube of half-side 2 L (s + 1) / (s - 1) for a positive scale s (6 at scale 2) and about 2.2 L for
  * a negative one (measured at -1.5) - seen from 6.5 half-sides away along a fixed diagonal (at 5 the
  * cube's corners left a square frame).
+ * KaliBox with the point added has NO WHOLE (an octant without end; features/formula.ts, KALIBOX): its home is
+ * ONE FIXED VIEW of the octant's tip, whatever its numbers - the camera the CPU study drew its first still from
+ * (plans/deep-zoom-shell/BURNING-KALIBOX.md: 8.5 from the middle of the shapes at Scale 1.8). A negative scale
+ * puts the octant on the other side of the origin, and the same view is then taken from there.
  */
+const KALI_HOME = { cam: [2.8400989489522894, 2.523655503975011, 3.141106044453628], yaw: -2.3249546567620767, pitch: -0.4342807733694343 };
 function formulaHome(choice: DzFormulaChoice): DzView {
+    if (choice.kind === FORMULA_KALI) {
+        const far = (choice.kaliScale ?? 1.8) < 0;                   // the octant is the opposite one: stand opposite, look back
+        return {
+            cam: KALI_HOME.cam.map((x) => fixed(far ? -x : x)) as [string, string, string],
+            yaw: far ? KALI_HOME.yaw + Math.PI : KALI_HOME.yaw, pitch: far ? -KALI_HOME.pitch : KALI_HOME.pitch,
+            iters: 14, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1,
+        };
+    }
     if (choice.kind !== FORMULA_BOX) {
         // With Burning on (features/formula.ts, BURNING) the bulb fills the ball it lies in (radius 1.155 at power 8),
         // where the plain bulb leaves room: from the first starter's 3.23 its top and bottom are cut off (seen
@@ -277,8 +290,8 @@ function formulaHome(choice: DzFormulaChoice): DzView {
         if (!choice.burning) return home;
         return { ...home, cam: [0, 1, 2].map((i) => String(BigInt(home.cam[i]) * 13n / 10n)) as [string, string, string] };
     }
-    const s = choice.boxScale, a = Math.abs(s);
-    const half = s > 0 ? 2 * choice.boxFold * (a + 1) / Math.max(a - 1, 0.02) : 2.2 * choice.boxFold;
+    const s = choice.boxScale ?? 2, a = Math.abs(s), fold = choice.boxFold ?? 1;   // (a choice may leave out a number: the row's default)
+    const half = s > 0 ? 2 * fold * (a + 1) / Math.max(a - 1, 0.02) : 2.2 * fold;
     const dir = [0.66, 0.43, 0.61], len = Math.hypot(dir[0], dir[1], dir[2]), d = 6.5 * half / len;
     return {
         cam: [fixed(dir[0] * d), fixed(dir[1] * d), fixed(dir[2] * d)],

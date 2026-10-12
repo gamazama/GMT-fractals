@@ -2924,6 +2924,8 @@ function makeHP(P) {
 const hp = makeHP(256);
 
 /* ════════ THE FORMULA SEAM (2026-10-09) — a second formula, the Mandelbox ════════
+   (A THIRD since 2026-10-12, KaliBox, on this same kernel: grep KALIBOX. What is said of "the box" below - what it
+   is drawn by, what it does not use - is said of both; boxOn() is true for both.)
    The renderer draws one of two formulas: 'mandelbulb' (the default; everything outside this seam is
    the page's, and with it selected the shader's active text, every uniform and every number are what
    they were) and 'mandelbox' - GMT's AmazingBox (engine-gmt/formulas/AmazingBox.ts) in Mandelbrot
@@ -3239,7 +3241,8 @@ function burnDeltaJS(Z, d, neg){
      - the preset's numbers with c = the point draw NOTHING (the estimate is never under 5e-2 anywhere).
      - Scale 1.8 with c = the point has a solid that holds its shapes: `kali` starts as that set.
      - WITH c = THE POINT THE SET IS AN OCTANT WITHOUT END: there is no whole object and no ball about it. A ray is
-       followed KALI_OPEN from the origin, a number set by hand (boxExtent). In Julia mode there is a ball: beyond
+       followed KALI_OPEN from the origin, a number set by hand (boxExtent), and from a camera far out KALI_REACH
+       times that camera's own distance (boxFar: grep "the octant has no end"). In Julia mode there is a ball: beyond
        |z| = max((|s| |T| + |K|) / (|s| - 1), |T| + 1) the fold and the translation shorten a vector by at most
        |T|, the sphere fold does nothing, and |z| grows every iteration (derived as the box's own, grep boxExtent).
    THE NAVIGATION'S RAY steps by HALF the estimate on KaliBox, as the box did until 2026-10-12 (rayFreeJS): the
@@ -3259,10 +3262,24 @@ function burnDeltaJS(Z, d, neg){
    nine "kalibox, ... GPU vs twin: 0 over 1e-3 ... GPU vs direct: 0 over 1e-3 ... PASS" lines). Falsified
    2026-10-12: the opposite-side case cut in the shader's kaliFoldD -> all nine FAIL, exit 1 (the record is in
    debug/deep-zoom-direct-check.mts).
-   @assumption the rotation's matrix, MinRad2 held at 1, the two formulas' numbers kept apart and the two far
+   @assumption the rotation's matrix, MinRad2 held at 1, the two formulas' numbers kept apart and the far
    distances are right: that check has a line for each ("rotation: ...", "seam: ...", "far: ..."), none broken
-   on purpose. */
+   on purpose.
+   WHAT THE GPU MEASURED OF THE VIEW FROM FAR (2026-10-12; debug/scratch/kalibox/far.mts, git-ignored: the tools of
+   A VIEW FROM FAR - grep - turned on this formula; 128 x 128 rays as a 1080-row picture against GMT's map marched
+   in f64 on the CPU, and the kernel on a 256 x 256 slice against the direct orbit). Neither rule of the bulb's is
+   needed here (api.farView() says none, as for the Mandelbox):
+     - GMT's preset in Julia mode (the column), from 8 to 300 away: no stray hit, 0.00 to 0.01 % of rays a hole,
+       0 to 0.92 % of hits more than 2 pixels of depth off, every hit the f32 far field's; the kernel on the slice:
+       0 of 65,536 points wrong at each of six distances.
+     - Scale 1.8 with the point added, from 8.5 to 400 away: 0.00 % stray, 0.00 % holes, 0 to 0.42 % of hits more
+       than 2 pixels off, against a referee that follows the octant 50 camera distances out; the kernel on the
+       slice: 0 to 32 of 65,536 estimates off by more than a factor of 2, 0 to 93 points read inside where the
+       direct orbit says outside (the Mandelbox's own figures from far: 0 to 2, and 4 to 24).
+     - WITH THE FAR DISTANCE HELD AT KALI_OPEN ALONE (the first build) that referee counted 22.0 % of rays as holes
+       from 60 away, 69.9 % from 150 and 93.8 % from 400. That is what KALI_REACH is for. */
 const KALI_OPEN = 40;                            // KaliBox with c = the point: how far from the origin a ray is followed (by hand: there is no bound)
+const KALI_REACH = 8;                            // ... and at least this many times the camera's own distance from the origin (boxFar; by hand too)
 /* KALIBOX's rotation as one matrix (rows): by the angle a about the axis (1, 1, 0) / sqrt 2. GMT builds the same
    nine numbers as a mat3 and writes `p *= uKB_rot` - the vector on the LEFT, so each row here is a column there. */
 function kaliRotMat(a){
@@ -3313,7 +3330,13 @@ function boxExtent(){
   return 1.8 * (2 * box.fold * (aS + 1) / (aS - 1) + box.fixedR);
 }
 function boxFar(){
-  return Math.hypot(hp.toNum(camHP[0]), hp.toNum(camHP[1]), hp.toNum(camHP[2])) + boxExtent();
+  const d = Math.hypot(hp.toNum(camHP[0]), hp.toNum(camHP[1]), hp.toNum(camHP[2]));
+  /* KALIBOX (grep) with c = the point: the octant has no end, so a far distance that stays put cuts it into a
+     corner with a round back as soon as the camera stands far out (seen 2026-10-12: from 60 the corner filled 78 %
+     of the picture, from 400 it was a small pyramid on sky). It is the same at every size, so the reach follows
+     the camera: KALI_REACH times its own distance from the origin, and never under KALI_OPEN. */
+  if (kaliOn() && !juliaOn) return d + Math.max(KALI_OPEN, KALI_REACH * d);
+  return d + boxExtent();
 }
 /* The box's reference orbit at the camera, and its rows (grep BOX_KERNEL for how the shader reads them):
      row 0   V (xyz), |V|                                  as the bulb's row 0

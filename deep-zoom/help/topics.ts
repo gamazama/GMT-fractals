@@ -114,9 +114,9 @@ The column at the right edge of the picture is the whole range, 1e0 at the top a
 A place is where the camera is and which formula it is in. Light, colour and quality are not part of a place: jumping to one leaves them as they are.
 
 ## Ready-made
-The **Locations** tab opens with three sets of cards.
+The **Locations** tab opens with four sets of cards.
 - **Starter dives** jump to a start view and dive from there to the depth on the card.
-- **Mandelbox** and **Kept places** are places to jump to.
+- **Mandelbox**, **KaliBox** and **Kept places** are places to jump to.
 
 ## Your own
 - \`B\`, or **Save this view**, adds the view to **My locations**, with a picture and its depth as the name. Double-click the name to change it.
@@ -211,6 +211,10 @@ The **Formula** tab chooses what is drawn. Switching the formula shows the whole
 - The first switch to the Mandelbox takes a few seconds, while its renderer is built.
 - The **Kleinian** card on the Locations tab is the Mandelbox with no inner radius.
 
+## KaliBox
+- GMT's Kali Box, with its own **Scale**, **MinRad2**, **Translation** and **Rotation**. It has no whole to show: switching to it lands near its tip. The first switch takes a few seconds, while its renderer is built.
+- The **GMT's preset** card on the Locations tab is its Julia set as GMT ships it. It holds its shapes at Detail 1 only.
+
 ## Julia mode
 - **Julia mode** on: the picture is the Julia set of one point. Switching it on brings back the last point you had and shows the whole of its set from outside. The first time, it takes the point at the centre of the view.
 - **Constant** shows that point as three numbers, while Julia mode is on. Drag or type one and the set changes as you go; the camera stays where it is. Each can be keyframed.
@@ -262,7 +266,7 @@ The three tabs on the right change how the picture looks, never where you are. \
         title: "What's New",
         content: `
 ## 0.1.0 — Deep Zoom
-- **Fly into a Mandelbulb or a Mandelbox, down to 1e-77.** Each has a Julia mode.
+- **Fly into a Mandelbulb, a Mandelbox or a KaliBox, down to 1e-77.** Each has a Julia mode.
 - **Fly or Orbit** (\`Tab\`), or type a depth and **Dive** to it.
 - **Save places** with \`B\`; \`1\` to \`9\` go back to the first nine.
 - **Routes**: \`K\` drops a keyframe as you fly, and **Play** flies through them.

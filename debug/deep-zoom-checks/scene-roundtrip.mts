@@ -274,5 +274,30 @@ const newer = decodeSession(encodeSession(DZ_SESSION_FORMAT, dzSessionAdapter.ve
 const foreign = decodeSession(encodeSession('gmt-gx-session', dzSessionAdapter.version, body), DZ_SESSION_FORMAT, dzSessionAdapter.version);
 check(!newer.ok && newer.reason === 'version' && !foreign.ok && foreign.reason === 'other-format', 'session: another version of the format, and another app\'s session, are refused');
 
+// ── [4] KaliBox (2026-10-12): the third formula as a place and through a scene's text ──────────────────────────
+console.log('[4] kalibox   a jump to a KaliBox place, and a scene of it');
+{
+    const kHost = fakeHost(START, true);
+    setHost(kHost.host);
+    await tick();
+    const KALI = { kind: 2, kaliScale: 2.04348, kaliMinRad2: 0.5, kaliTransX: 0.1, kaliTransY: -1.5, kaliTransZ: 0.2, kaliRot: 0.25 };
+    const DEFAULTS = { kind: 0, kaliScale: 1.8, kaliMinRad2: 0.3492, kaliTransX: 0.0365, kaliTransY: -1.9183, kaliTransZ: 0.0365, kaliRot: 0 };
+    const kaliNow = (): string => { const f = store().dzFormula; return JSON.stringify({ kind: f.kind, kaliScale: f.kaliScale, kaliMinRad2: f.kaliMinRad2, kaliTransX: f.kaliTransX, kaliTransY: f.kaliTransY, kaliTransZ: f.kaliTransZ, kaliRot: f.kaliRot }); };
+    store().setDzFormula({ ...DEFAULTS, juliaMode: false, boxScale: -1.5 });
+    await tick();
+    kHost.sets.length = 0;
+    jumpTo({ view: { ...START, cam: CAM_B }, formula: KALI, depth: '1e-3' });
+    check(kaliNow() === JSON.stringify(KALI) && store().dzFormula.boxScale === -1.5 && store().dzFormula.juliaMode === false && sameTriple(kHost.sets[kHost.sets.length - 1]?.cam, CAM_B),
+        'place: a jump to a KaliBox place writes its kind (index 2) and its six numbers, hands over its camera, and leaves the Mandelbox\'s rows as they are', `${kaliNow()} box ${store().dzFormula.boxScale}`);
+    const text = serializeScene(sceneNow(true));
+    store().setDzFormula(DEFAULTS);
+    await tick();
+    const back = parseSceneJson(text);
+    if (!back) throw new Error('the KaliBox scene\'s own text did not parse');
+    store().loadPreset(back);
+    await tick();
+    check(kaliNow() === JSON.stringify(KALI), 'scene: KaliBox - the formula\'s index 2 and its six numbers - comes back from a scene\'s text', kaliNow());
+}
+
 console.log(failed === 0 ? 'scene-roundtrip: all green' : `scene-roundtrip: ${failed} FAILED`);
 process.exit(failed === 0 ? 0 : 1);

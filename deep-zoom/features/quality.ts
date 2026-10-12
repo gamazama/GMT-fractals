@@ -21,7 +21,7 @@
  *     hitRefine          api.setHitRefine(n)
  *     accumulate         api.setAccum(on)
  *     actualPixels       no handle (`view1to1` is closure state in core.js) until module package M1
- *     stepSize           api.setStepRelax(r)         the Mandelbox's march only (see pitfalls)
+ *     stepSize           api.setStepRelax(r)         the march of the Mandelbox and KaliBox only (see pitfalls)
  *     resolutionCap      api.setCapRelax(m)          floor 1
  *   ENUMS. An enum param is a float holding the option's INDEX (`engine/defineEnumParam.ts`). The
  *   renderer wants its own value, which is not always the index, so each enum exports, beside its
@@ -52,9 +52,10 @@
  *     alternative based on that, rather an error"), and its skip table went with the page's
  *     program. A saved `rayMarch: false` is ignored like the keys above - the bulb is drawn by
  *     the ray march whatever a file says.
- *   - `stepSize` IS THE MANDELBOX'S ROW. The ray march steps by its own estimate and has no step
- *     setting, so for the bulb the row would move nothing: it is shown only while the Mandelbox is
- *     the formula (`BOX_ONLY`, as bulb-only rows are hidden for the box). The value is kept and
+ *   - `stepSize` IS THE MANDELBOX'S ROW, AND KALIBOX'S (the same march, 2026-10-12). The ray march steps
+ *     by its own estimate and has no step setting, so for the bulb the row would move nothing: it is
+ *     shown only while the formula is not the bulb (`BOX_ONLY`, as bulb-only rows are hidden for the
+ *     box). The value is kept and
  *     PUSHED whatever the formula, so the box marches by it the moment it is selected; a bulb
  *     scene's saved step size loads, shows nowhere and changes nothing.
  *   - `actualPixels` IS DECLARED BUT ITS ROW WAITS FOR M1. The id exists now so the slice key and
@@ -131,15 +132,16 @@
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import type { SliceFromParams } from '../../engine/typedSlices';
 import { defineEnumParam } from '../../engine/defineEnumParam';
-import { FORMULA_BOX } from './formula';
+import { FORMULA_BULB } from './formula';
 
 /* THE MANDELBOX DOES NOT USE THE RAY MARCH (2026-10-09; grep THE FORMULA SEAM in renderer/core.js): that is
    built on the bulb's power map. The box is drawn by a program of its own that steps by the page's rule, a
    multiple of the distance estimate - so Step size is the box's row, and the bulb, whose ray march has no step
    setting, is not offered a slider that does nothing. (Until 2026-10-11 the condition here was the other way
    round: `BULB_ONLY`, on the Ray march switch, which went that day.) The value is not touched by the formula.
+   KaliBox (2026-10-12) is drawn by that program and that march too: the row shows for every formula but the bulb.
    `$dzFormula.kind` reads the other feature's slice (utils/paramConditions.ts). */
-const BOX_ONLY = { param: '$dzFormula.kind', eq: FORMULA_BOX };
+const BOX_ONLY = { param: '$dzFormula.kind', neq: FORMULA_BULB };
 
 // ── Reach — how far a ray travels. core.js: `const REACH`, default `const march = {` = REACH[1].
 export const REACH_OPTIONS = ['short', 'relaxed', 'full'] as const;
@@ -260,7 +262,7 @@ export const DzQualityFeature = {
             label: 'Step size',
             condition: BOX_ONLY,
             format: (v) => `${v.toFixed(2)}×`,
-            description: 'The Mandelbox\'s march step, as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features. The Mandelbulb has no step setting: its ray march steps by how fast the orbit\'s escaping point moves along the ray.',
+            description: 'The march step of the Mandelbox and of KaliBox, as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features. The Mandelbulb has no step setting: its ray march steps by how fast the orbit\'s escaping point moves along the ray.',
         },
         // NO `rayMarch` PARAM SINCE 2026-10-11 (see the header's pitfall). What it measured when it was a switch,
         // for the record (2026-10-09, the GPU, Detail 32, 16,384 rays a view, 17 views): rays more than 2 px of depth

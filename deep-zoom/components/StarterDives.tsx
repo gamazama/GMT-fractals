@@ -22,6 +22,7 @@ import React from 'react';
 import { STARTERS } from '../data/starters';
 import { PLACES } from '../data/places';
 import { BOX_STARTERS } from '../data/boxStarters';
+import { KALI_STARTERS } from '../data/kaliStarters';
 import type { Starter } from '../data/starters';
 import { jumpTo } from '../locations';
 import { diveTo, useDive } from '../diveControl';
@@ -89,6 +90,33 @@ export const BoxStarters: React.FC = () => {
                     key={starter.name}
                     type="button"
                     data-dz-box-starter={starter.name}
+                    disabled={diving}
+                    title={starter.blurb}
+                    onClick={() => { void runStarter(starter); }}
+                    className="text-left px-2 py-1.5 rounded border border-line/15 bg-line/[0.04] hover:bg-line/10 hover:border-line/30 disabled:opacity-40 text-[10px] leading-tight text-fg-secondary"
+                >
+                    {starter.name}
+                </button>
+            ))}
+        </div>
+    );
+};
+
+/**
+ * KaliBox's starter places (deep-zoom/data/kaliStarters.ts), as the Mandelbox's above: a card is a jump to
+ * a place of that formula, which switches the formula - and for GMT's preset, Julia mode and its constant -
+ * in the same undo step. Registered as `dz-kali-starters`; panels.ts puts it on the Locations tab under its
+ * own heading. Its cards carry `data-dz-kali-starter`.
+ */
+export const KaliStarters: React.FC = () => {
+    const diving = useDive((s) => s.dive !== null);
+    return (
+        <div data-dz-kali-starters className="grid grid-cols-2 gap-1 px-2 pb-2">
+            {KALI_STARTERS.map((starter) => (
+                <button
+                    key={starter.name}
+                    type="button"
+                    data-dz-kali-starter={starter.name}
                     disabled={diving}
                     title={starter.blurb}
                     onClick={() => { void runStarter(starter); }}

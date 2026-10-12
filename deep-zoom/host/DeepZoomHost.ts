@@ -69,7 +69,7 @@
  *     `estimateAt(`       the renderer's own distance estimate at a point beside the camera: the
  *                         nearest surface in any direction, there. Orbit mode's clearance.
  *     `building()`        which shader variant the picture is still waiting for, asked NOW (the
- *                         `compile` event says the same up to 125 ms late): 'rayMarch' or 'mandelbox'
+ *                         `compile` event says the same up to 125 ms late): 'rayMarch', 'mandelbox' or 'kalibox'
  *                         while it builds in the background and the plain single-precision picture
  *                         is drawn; null once it is there, has FAILED, or is not asked for - so a
  *                         wait on it ends when a build fails. What a render waits on before a frame (`deep-zoom/routeRender.tsx`):
@@ -143,7 +143,7 @@
  *                         its own name so the shell can say WHAT is building (`compiling` for the
  *                         20 or so seconds from the first frame, then `ready`, or `failed`) - and
  *                         the Mandelbox's (about 2 s from the first switch to it; its plain picture
- *                         is drawn meanwhile).
+ *                         is drawn meanwhile), and KaliBox's the same way (`variant: 'kalibox'`).
  *     `progress`          live but read off the module's own status line; `text` is always set,
  *                         the numbers when they can be parsed. Events from the module at M3.
  *     `paramChanged`      never fires in stage 1. From stage 2 by comparing `getParams()`
@@ -317,7 +317,7 @@ export type DzCompileState = {
     state: 'compiling' | 'ready' | 'failed';
     what: 'deep' | 'variant';
     /** With `what: 'variant'`: which one. Absent means the ray march's (the only one until 2026-10-09). */
-    variant?: 'rayMarch' | 'mandelbox';
+    variant?: 'rayMarch' | 'mandelbox' | 'kalibox';
     error?: string;
 };
 
@@ -371,12 +371,12 @@ export interface DzLeverPatch {
 /** What the Diagnostics tab reads besides telemetry. Every field is a copy. */
 export interface DzDiagnostics {
     levers: DzLevers;
-    /** The Mandelbulb's program: 'off' while the Mandelbox is drawn or with ray bits 0. */
+    /** The Mandelbulb's program: 'off' while the Mandelbox or KaliBox is drawn, or with ray bits 0. */
     rayMarch: 'off' | 'building' | 'on' | 'failed';
     /** The deep program of the formula that is selected. */
     formula: 'building' | 'on' | 'failed';
     /** Build times in milliseconds by the renderer's own program key (`S` the small shading pass,
-     *  `PR` the Mandelbulb's, `X` the Mandelbox's); a key is there once its program is built. */
+     *  `PR` the Mandelbulb's, `X` the Mandelbox's, `K` KaliBox's); a key is there once its program is built. */
     compileMs: Record<string, number>;
     /** The accuracy gate's last reading: the relative difference of the two distances (under 1e-3
      *  is a pass) and the distances themselves. null with the gate off or before its first reading. */
@@ -525,7 +525,7 @@ export interface DeepZoomHost {
      * for). Cheap, draws nothing, works before `ready`. For the bulb, 'rayMarch' and `ready` wait for
      * the same program; this one is asked without a promise, and it ends on a failure too.
      */
-    building(): 'rayMarch' | 'mandelbox' | null;
+    building(): 'rayMarch' | 'mandelbox' | 'kalibox' | null;
     /**
      * Hold the live picture: while on, `step` still polls (telemetry, progress, compile) but the
      * renderer draws no live frame, so the canvas keeps what was last put on it. A render run

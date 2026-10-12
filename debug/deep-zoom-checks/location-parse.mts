@@ -220,6 +220,13 @@ const EXPORTED = locationsToText(ROWS);
           'import: the same camera with Burning on, or at another Burning mix, is another place; with Burning off the mix says nothing'); }
     check(newLocations([state({}, BOX)], [state({}, { ...BOX, boxScale: 2 })]).skipped === 0 && newLocations([state({}, BOX)], [state({}, { ...BOX, power: 4 })]).skipped === 1,
         'import: a box of another scale is another place; the bulb\'s power does not tell two boxes apart');
+    // KaliBox (2026-10-12): the third kind, told apart by its own six numbers and by nothing of the other two formulas
+    { const KALI = { ...BULB, kind: 2, kaliScale: 1.8, kaliMinRad2: 0.3492, kaliTransX: 0.0365, kaliTransY: -1.9183, kaliTransZ: 0.0365, kaliRot: 0 };
+      const other = (over: object): number => newLocations([state({}, KALI)], [state({}, { ...KALI, ...over })]).skipped;
+      check(!dup(state({}, KALI)) && newLocations([state({}, BOX)], [state({}, KALI)]).skipped === 0 && other({}) === 1
+          && other({ kaliScale: 2.04348 }) === 0 && other({ kaliMinRad2: 0.5 }) === 0 && other({ kaliTransY: -1.5 }) === 0 && other({ kaliRot: 0.25 }) === 0
+          && other({ boxScale: -1.5 }) === 1 && other({ power: 4 }) === 1 && other({ burning: true }) === 1,
+          'import: a KaliBox place is neither the bulb\'s nor the box\'s at that camera; another Scale, MinRad2, Translation or Rotation is another place; the box\'s scale, the bulb\'s power and Burning do not tell two apart'); }
     // Only what is ALREADY in the list counts. Seen in the app 2026-10-12: two starter dives begin at the same
     // camera; saved, exported and imported into an empty list, the second was "skipped" and the list came back short.
     const within = newLocations([], [base, state({ cam: CAM_B }, BULB), base]);

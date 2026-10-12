@@ -105,6 +105,13 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     box('boxRotX', (f) => f.rot[0]),
     box('boxRotY', (f) => f.rot[1]),
     box('boxRotZ', (f) => f.rot[2]),
+    // KaliBox's own numbers ride in that call too, under their own names (renderer/core.js, KALIBOX).
+    box('kaliScale', (f) => f.kaliScale),
+    box('kaliMinRad2', (f) => f.kaliMinRad2),
+    box('kaliTransX', (f) => f.kaliTrans[0]),
+    box('kaliTransY', (f) => f.kaliTrans[1]),
+    box('kaliTransZ', (f) => f.kaliTrans[2]),
+    box('kaliRot', (f) => f.kaliRot),
     // The Julia switch rides in the same call. So does its constant as numbers, but only when the three differ from
     // what the renderer holds: the exact constant travels with the view (looseParams.ts, THE CONSTANT).
     box('juliaMode', (f) => f.julia),
@@ -116,6 +123,7 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     box('burningMix', (f) => f.burnMix),
     { feature: 'dzFormula', key: 'juliaConstant', cls: '-', group: null, why: 'a composed row with no state of its own: juliaX, juliaY and juliaZ carry the value' },
     { feature: 'dzFormula', key: 'boxRotation', cls: '-', group: null, why: 'a composed row with no state of its own: boxRotX, boxRotY and boxRotZ carry the value' },
+    { feature: 'dzFormula', key: 'kaliTranslation', cls: '-', group: null, why: 'a composed row with no state of its own: kaliTransX, kaliTransY and kaliTransZ carry the value' },
     { feature: 'dzFormula', key: 'power', cls: 'O', group: 'power', read: (api) => api.dz.settings().power },
     { feature: 'dzFormula', key: 'phaseTheta', cls: 'O', group: 'phase', read: (api) => api.dz.settings().phase[0] },
     { feature: 'dzFormula', key: 'phasePhi', cls: 'O', group: 'phase', read: (api) => api.dz.settings().phase[1] },

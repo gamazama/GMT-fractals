@@ -2,7 +2,7 @@
  * deep-zoom/features/formula.ts — the DDFS feature `dzFormula` (dock tab Formula).
  *
  * PURPOSE
- *   The values that decide the SHAPE being drawn: which formula (the Mandelbulb or the Mandelbox),
+ *   The values that decide the SHAPE being drawn: which formula (the Mandelbulb, the Mandelbox or KaliBox),
  *   that formula's own parameters, and the iteration budget. Declaring them as a feature is what
  *   gives each one a panel row, an undo step, a preset field and a keyframe track
  *   (`dzFormula.power`, ...).
@@ -12,7 +12,7 @@
  *   never asked. No param here has `uniform` or `onUpdate` — the engine does not draw this picture;
  *   the shell's host sync (`deep-zoom/host/paramMap.ts`, `host/looseParams.ts`) pushes a changed
  *   value through these handles of `instance.api` (read in `deep-zoom/renderer/core.js`):
- *     kind            api.setFormula(kind, params)   'mandelbulb' | 'mandelbox' (formulaToRenderer)
+ *     kind            api.setFormula(kind, params)   'mandelbulb' | 'mandelbox' | 'kalibox' (formulaToRenderer)
  *     juliaMode       api.setFormula(kind, { julia })   in the same call as the kind (see JULIA MODE)
  *     juliaX / Y / Z  api.setFormula(kind, { c })       in that call too, and ONLY when the three differ
  *                     from the constant the renderer holds (see THE CONSTANT'S ROW)
@@ -23,6 +23,9 @@
  *     boxScale, boxMinRadius, boxFold, boxFixedRadius, boxRotX / Y / Z
  *                     api.setFormula(kind, { scale, minR, fold, fixedR, rot }) - one call carries
  *                     the kind and all seven (grep THE FORMULA SEAM in core.js)
+ *     kaliScale, kaliMinRad2, kaliTransX / Y / Z, kaliRot
+ *                     api.setFormula(kind, { kaliScale, kaliMinRad2, kaliTrans, kaliRot }) - in that call
+ *                     too (see KALIBOX; grep KALIBOX in core.js)
  *     iterations      api.setIters(n)            clamps to 4..400, or 4..500 while the box is drawn
  *     autoIterations  api.setAutoIters(on)
  *   This file only declares. The integrator registers the feature (`registerFeatures.ts`), derives
@@ -44,8 +47,30 @@
  *   Anything saved before this day has no `kind` and means the Mandelbulb (a scene load fills a
  *   missing key with its default; `deep-zoom/locations.ts` does the same for a place).
  *
+ * KALIBOX (2026-10-12)
+ *   The third option of `kind` (index 2; 0 and 1 keep their meaning, so everything saved before this
+ *   day reads as it did). GMT's KaliBox (`engine-gmt/formulas/KaliBox.ts`): the Mandelbox's step with
+ *   abs(z) + Translation in the box fold's place. Its rows carry GMT's own labels - Scale, MinRad2,
+ *   Translation (one row over three scalars, as `boxRotation`), Rotation - and are its own values,
+ *   kept apart from the Mandelbox's. Three differences from GMT's rows:
+ *     defaults    Scale 1.8 with the point added, not GMT's 2.043 in Julia mode: the owner's call
+ *                 (plans/deep-zoom-shell/BURNING-KALIBOX.md, call 2). GMT's preset is a Julia set with
+ *                 no inside, and its numbers with the point added draw NOTHING: they must never be a
+ *                 default. MinRad2 and Translation start as that preset's (0.3492; 0.0365, -1.9183,
+ *                 0.0365), which is the set the study drew at Scale 1.8.
+ *     Scale       held out of the band (-1.02, 1.02), as the Mandelbox's is (`deep-zoom/boxScale.ts`).
+ *     MinRad2     runs to 1, not 2: from 1 up GMT's map has no sphere fold left, and the renderer holds
+ *                 the value at 1 (grep `MinRad2 IS HELD` in core.js).
+ *   With the point added KaliBox has NO WHOLE OBJECT (an octant without end): a switch to it lands on
+ *   one fixed view near its tip (`formulaHome` in `deep-zoom/locations.ts`), whatever its numbers. In
+ *   Julia mode it has one, and that switch shows it as for the other two. GMT's preset is a card
+ *   (`deep-zoom/data/kaliStarters.ts`), in Julia mode, and its blurb says what the study found: it
+ *   holds its shapes at Detail 1 only. No row and no rule here is keyed to that.
+ *   The first switch builds its renderer in the background (about 2 s; the top bar says so). The
+ *   Mandelbox's Step size row (`features/quality.ts`) is this march's too and shows for both.
+ *
  * JULIA MODE (2026-10-12)
- *   `juliaMode` is a switch for either formula: on, one constant is added every iteration and the
+ *   `juliaMode` is a switch for every formula: on, one constant is added every iteration and the
  *   point looked at starts the orbit (grep JULIA MODE in renderer/core.js). The constant is taken
  *   from the place looked at ("Julia from this place", `juliaFromThisPlace` in
  *   `deep-zoom/locations.ts`) or comes with a pasted or loaded view, lives in the renderer as the
@@ -110,7 +135,7 @@
  *     write-back would turn flying deeper into undo steps and scene-file changes, and a sync that
  *     re-pushed the stored floor on every change would fight the renderer and rebuild the orbit
  *     twice a frame.
- *   - THE ITERATION CEILING FOLLOWS THE FORMULA: 400 for the bulb, 500 for the box (the row's
+ *   - THE ITERATION CEILING FOLLOWS THE FORMULA: 400 for the bulb, 500 for the box and KaliBox (the row's
  *     `dynamicConfig`; `iterationCeiling` below is the one place that says so). Switching to the
  *     bulb brings a higher floor down to 400 in the same store write (`onSet` on `kind`).
  *     The bulb's was 160 until 2026-10-11: the page's own ceiling, which `api.setIters` and
@@ -126,8 +151,8 @@
  *   - NAMING. A track id containing `rot`, `phase` or `twist` is interpolated as an angle that
  *     wraps at 2 pi (grep `isRotation` in `engine/AnimationEngine.ts`, `isRotationTrack` in
  *     `utils/timelineUtils.ts`). That is correct for `phaseTheta` / `phasePhi` and for
- *     `boxRotX` / `Y` / `Z`, which are radians. Do not add a non-angle param whose id contains one
- *     of those three strings.
+ *     `boxRotX` / `Y` / `Z` and `kaliRot`, which are radians. Do not add a non-angle param whose id
+ *     contains one of those three strings (KaliBox's translation is `kaliTransX`, not a "rot").
  *   - No key may start with `is`: saved scenes and share links drop such keys (grep
  *     `startsWith('is')`: `sanitizeFeatureState` in `utils/PresetLogic.ts`, `quantize` in
  *     `utils/UrlStateEncoder.ts`).
@@ -136,7 +161,8 @@
  *   - `boxRotation` is a COMPOSED row: it has no state of its own (the slice holds `boxRotX`,
  *     `boxRotY`, `boxRotZ`), no push and no track. A scene load can leave a stale `boxRotation`
  *     key in the slice (the loader writes every declared param's default); nothing reads it.
- *     `juliaConstant` over `juliaX`, `juliaY`, `juliaZ` is the same.
+ *     `juliaConstant` over `juliaX`, `juliaY`, `juliaZ` is the same, and `kaliTranslation` over
+ *     `kaliTransX`, `kaliTransY`, `kaliTransZ`.
  *   - THE CONSTANT'S ROWS ARE NOT WHAT A PLACE IS. `FORMULA_CHOICE_KEYS` does not hold them and
  *     `locationKey` (deep-zoom/locationParse.ts) does not read them: the view's strings say which
  *     constant. A saved place's formula does hold the three numbers (it is the whole slice); a
@@ -181,11 +207,12 @@ import type { SliceFromParams } from '../../engine/typedSlices';
 import { defineEnumParam } from '../../engine/defineEnumParam';
 
 // ── Formula — core.js: `let dzFormula = 'mandelbulb'`. The option's own name is what `api.setFormula` takes.
-export const FORMULA_OPTIONS = ['mandelbulb', 'mandelbox'] as const;
-const formulaParam = defineEnumParam(FORMULA_OPTIONS, 'Formula', { defaultIndex: 0 });
+export const FORMULA_OPTIONS = ['mandelbulb', 'mandelbox', 'kalibox'] as const;
+const formulaParam = defineEnumParam(FORMULA_OPTIONS, 'Formula', { defaultIndex: 0, optionLabels: { kalibox: 'KaliBox' } });
 /** The slice index of each formula, for conditions and for code that asks "is this the box". */
 export const FORMULA_BULB = FORMULA_OPTIONS.indexOf('mandelbulb');
 export const FORMULA_BOX = FORMULA_OPTIONS.indexOf('mandelbox');
+export const FORMULA_KALI = FORMULA_OPTIONS.indexOf('kalibox');
 /** `api.setFormula(kind, ...)`: index -> the renderer's name; a missing or odd index is the Mandelbulb. */
 export const formulaToRenderer = (index: number | undefined) => formulaParam.fromIndex(index);
 
@@ -197,10 +224,13 @@ export const validBoxScale = (v: number): number =>
 
 /** The highest iteration count the renderer takes for a formula: its own `BOX_ITER_MAX` and `RAY_ITER_MAX`
  *  (grep both, and `const itersMax`, in core.js; `api.setIters` and `api.dz.setView` hold a count under them). */
-export const iterationCeiling = (kind: number | undefined): number => (kind === FORMULA_BOX ? 500 : 400);
+export const iterationCeiling = (kind: number | undefined): number => (kind === FORMULA_BOX || kind === FORMULA_KALI ? 500 : 400);
 
 const onBulb = { param: 'kind', eq: FORMULA_BULB };
 const onBox = { param: 'kind', eq: FORMULA_BOX };
+const onKali = { param: 'kind', eq: FORMULA_KALI };
+/** One coordinate of KaliBox's translation: GMT's range. */
+const KALI_TRANS = { type: 'float', min: -5, max: 5, step: 0.001, hidden: true, condition: onKali } as const;
 /** Radians as a share of pi: the box's rotation row reads like GMT's. */
 const BOX_ROT = { type: 'float', default: 0, min: -6.28, max: 6.28, step: 0.001, scale: 'pi', hidden: true, condition: onBox } as const;
 
@@ -230,10 +260,10 @@ export const DzFormulaFeature = {
         kind: {
             ...formulaParam.config,
             type: 'float',
-            description: 'Which fractal is drawn. The Mandelbox is GMT\'s Amazing Box. Switching shows the whole of the new one from outside; Undo brings back the place you were at. The first switch to the Mandelbox builds its renderer, a few seconds.',
+            description: 'Which fractal is drawn. The Mandelbox is GMT\'s Amazing Box, KaliBox its Kali Box. Switching shows the whole of the new one from outside (KaliBox has no whole: a place near its tip); Undo brings back the place you were at. The first switch to the Mandelbox or to KaliBox builds its renderer, a few seconds.',
             // The bulb's ceiling is 400: a higher floor comes down with the switch, in the same write.
             onSet: (next: number, slice: { iterations?: number }) =>
-                (next !== FORMULA_BOX && (slice.iterations ?? 0) > iterationCeiling(next) ? { iterations: iterationCeiling(next) } : {}),
+                ((slice.iterations ?? 0) > iterationCeiling(next) ? { iterations: iterationCeiling(next) } : {}),
         },
         power: {
             type: 'int',
@@ -311,7 +341,39 @@ export const DzFormulaFeature = {
             condition: onBox,
             description: 'Turns space about x, then y, then z before every fold.',
         },
-        // ── Julia mode, either formula (see JULIA MODE in the header) ──
+        // ── KaliBox: GMT's rows (engine-gmt/formulas/KaliBox.ts), see KALIBOX in the header ──
+        kaliScale: {
+            type: 'float',
+            default: 1.8, min: -3, max: 3, step: 0.001,
+            label: 'Scale',
+            condition: onKali,
+            description: 'How much each fold scales space. At 1.8 there is a solid that holds its shapes; from about 2 up, with Julia mode off, there is nothing to draw. Negative values put the shape on the other side. Between -1.02 and 1.02 there is nothing to draw: the slider passes over that band.',
+        },
+        kaliMinRad2: {
+            type: 'float',
+            default: 0.3492, min: 0.001, max: 1, step: 0.001,
+            label: 'MinRad2',
+            condition: onKali,
+            description: 'Inside this radius, squared, the sphere fold scales by a fixed amount. At 1 there is no sphere fold left.',
+        },
+        kaliTransX: { ...KALI_TRANS, default: 0.0365, label: 'Translation X' },
+        kaliTransY: { ...KALI_TRANS, default: -1.9183, label: 'Translation Y' },
+        kaliTransZ: { ...KALI_TRANS, default: 0.0365, label: 'Translation Z' },
+        kaliTranslation: {
+            type: 'vec3', default: new THREE.Vector3(0.0365, -1.9183, 0.0365), label: 'Translation',
+            composeFrom: ['kaliTransX', 'kaliTransY', 'kaliTransZ'],
+            min: -5, max: 5, step: 0.001,
+            condition: onKali,
+            description: 'Added to every point after its coordinates are mirrored to the positive side, in every iteration.',
+        },
+        kaliRot: {
+            type: 'float',
+            default: 0, min: -3.14, max: 3.14, step: 0.01, scale: 'pi',
+            label: 'Rotation',
+            condition: onKali,
+            description: 'Turns space about the diagonal (1, 1, 0) before every fold.',
+        },
+        // ── Julia mode, every formula (see JULIA MODE in the header) ──
         juliaMode: {
             type: 'boolean',
             default: false,
@@ -345,23 +407,25 @@ export const DzFormulaFeature = {
             type: 'boolean',
             default: true,
             label: 'Auto iterations',
-            description: 'Raises the live iteration count as the zoom deepens, and never lowers it. Mandelbulb: 32 plus 1.35 for each decade, up to 160, and never less than a margin above where the camera\'s own orbit escapes, up to 400, which is what low powers need. Mandelbox: that margin alone, up to 500.',
+            description: 'Raises the live iteration count as the zoom deepens, and never lowers it. Mandelbulb: 32 plus 1.35 for each decade, up to 160, and never less than a margin above where the camera\'s own orbit escapes, up to 400, which is what low powers need. Mandelbox and KaliBox: that margin alone, up to 500.',
         },
     },
 } satisfies FeatureDefinition;
 
-/** The keys that say WHICH formula a place is of, the box's parameters, whether it is a Julia set, and the
- *  bulb's Burning with its mix. A place, a jump and the renderer's `setFormula` all carry exactly these. (The
+/** The keys that say WHICH formula a place is of, the box's parameters, KaliBox's, whether it is a Julia set, and
+ *  the bulb's Burning with its mix. A place, a jump and the renderer's `setFormula` all carry exactly these. (The
  *  Julia CONSTANT is not among them: it is part of the view, and its three number rows follow the view. See
  *  JULIA MODE and THE CONSTANT'S ROW in the header.) */
-export const FORMULA_CHOICE_KEYS = ['kind', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotX', 'boxRotY', 'boxRotZ', 'juliaMode', 'burning', 'burningMix'] as const;
+export const FORMULA_CHOICE_KEYS = ['kind', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotX', 'boxRotY', 'boxRotZ', 'juliaMode', 'burning', 'burningMix',
+    'kaliScale', 'kaliMinRad2', 'kaliTransX', 'kaliTransY', 'kaliTransZ', 'kaliRot'] as const;
 type DzFormulaChoiceKey = (typeof FORMULA_CHOICE_KEYS)[number];
-/** The keys a choice written before they existed does not have: `juliaMode` (off), `burning` (off) and
- *  `burningMix` (both 2026-10-12). */
-type DzFormulaLateKey = 'juliaMode' | 'burning' | 'burningMix';
+/** A choice always says its `kind`. Every other key may be absent, and an absent key leaves its row as it is:
+ *  a choice written before a key existed does not have it (`juliaMode` and `burning`: off; `burningMix`;
+ *  KaliBox's six - all 2026-10-12), and a card of one formula does not carry the other formula's numbers
+ *  (a KaliBox card leaves the Mandelbox's rows alone, as a Mandelbox card leaves KaliBox's). */
 export type DzFormulaChoice =
-    Pick<SliceFromParams<typeof DzFormulaFeature['params']>, Exclude<DzFormulaChoiceKey, DzFormulaLateKey>>
-    & Partial<Pick<SliceFromParams<typeof DzFormulaFeature['params']>, DzFormulaLateKey>>;
+    Pick<SliceFromParams<typeof DzFormulaFeature['params']>, 'kind'>
+    & Partial<Pick<SliceFromParams<typeof DzFormulaFeature['params']>, Exclude<DzFormulaChoiceKey, 'kind'>>>;
 
 /* Compile-time guard for the @invariant in the header. `AnyKeys` is the union of the slice keys
    typed `any` (never when there are none); `MustBeNever` refuses anything else, so tsc names the

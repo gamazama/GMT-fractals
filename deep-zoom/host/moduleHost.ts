@@ -405,6 +405,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     let compileSaid: 'compiling' | 'ready' | 'failed' | null = null;
     let raySaid: 'compiling' | 'ready' | 'failed' = 'ready';      // the ray march's shader (the bulb's one program): said from the first poll, while it builds
     let boxSaid: 'compiling' | 'ready' | 'failed' = 'ready';      // the Mandelbox's, likewise: it builds from the first switch to that formula
+    let kaliSaid: 'compiling' | 'ready' | 'failed' = 'ready';     // and KaliBox's (its own variant of the box's program)
     let jobShown = false;
     let lastStatus = '';
     /** `renderFrameBlob` calls in flight: tells a frame from a still in `progress`. */
@@ -427,9 +428,14 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         if (raySay !== raySaid) { raySaid = raySay; emit('compile', { state: raySay, what: 'variant', variant: 'rayMarch' }); }
         // The Mandelbox's shader, the same way. `formulaState` speaks for the SELECTED formula, and for the bulb that
         // is the deep shader itself, which `what: 'deep'` already reports: it is asked only while the box is selected.
-        const boxNow = api.formula().kind === 'mandelbox' ? api.formulaState() : 'on';
+        const kindNow = api.formula().kind;
+        const boxNow = kindNow === 'mandelbox' ? api.formulaState() : 'on';
         const boxSay = boxNow === 'building' ? 'compiling' : boxNow === 'failed' ? 'failed' : 'ready';
         if (boxSay !== boxSaid) { boxSaid = boxSay; emit('compile', { state: boxSay, what: 'variant', variant: 'mandelbox' }); }
+        // KaliBox's, the same way again: a third program, named so the shell can say which one is building.
+        const kaliNow = kindNow === 'kalibox' ? api.formulaState() : 'on';
+        const kaliSay = kaliNow === 'building' ? 'compiling' : kaliNow === 'failed' ? 'failed' : 'ready';
+        if (kaliSay !== kaliSaid) { kaliSaid = kaliSay; emit('compile', { state: kaliSay, what: 'variant', variant: 'kalibox' }); }
         if (t.ready) {
             if (!isReady) {
                 isReady = true;
@@ -525,7 +531,8 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         // FAILED answers null: nothing is being waited for (and the host is about to be taken down).
         building() {
             if (disposed) return null;
-            if (api.formula().kind === 'mandelbox') return api.formulaState() === 'building' ? 'mandelbox' : null;
+            const kind = api.formula().kind;
+            if (kind === 'mandelbox' || kind === 'kalibox') return api.formulaState() === 'building' ? kind : null;
             return api.rayMarchState() === 'building' ? 'rayMarch' : null;
         },
         holdLive(on) { liveHeld = !!on; },

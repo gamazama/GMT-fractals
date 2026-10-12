@@ -28,6 +28,8 @@ export const DeepZoomPanels: PanelManifest = [
         { type: 'widget', id: 'dz-starters' },
         { type: 'section', label: 'Mandelbox' },
         { type: 'widget', id: 'dz-box-starters' },
+        { type: 'section', label: 'KaliBox' },
+        { type: 'widget', id: 'dz-kali-starters' },
         { type: 'section', label: 'Kept places' },
         { type: 'widget', id: 'dz-places' },
         { type: 'section', label: 'My locations' },
@@ -40,7 +42,7 @@ export const DeepZoomPanels: PanelManifest = [
     ] },
     { id: 'Formula', dock: 'left', order: 2, items: [
         // One formula's rows at a time: each row carries its own condition on `kind` (features/formula.ts).
-        { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'burning', 'burningMix', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation'] },
+        { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'burning', 'burningMix', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation', 'kaliScale', 'kaliMinRad2', 'kaliTranslation', 'kaliRot'] },
         // Julia mode, for either formula: the switch, the constant's three numbers while it is on, and the button
         // that takes the constant from the place looked at.
         { type: 'section', label: 'Julia' },

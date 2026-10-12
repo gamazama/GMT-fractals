@@ -39,6 +39,8 @@ import { useDzNavigation } from '../navigationState';
 const RAY_BUILDING_TITLE = 'The ray march\'s shader is being built, ten seconds or more the first time. Until it is ready the plain single-precision picture is shown and nothing deep is drawn; then the deep picture comes by itself.';
 const BOX_BUILDING_TITLE = 'The Mandelbox\'s renderer is being built, a few seconds the first time. Its plain single-precision picture is drawn until it is ready, then changes by itself.';
 const BOX_FAILED_TITLE = 'The Mandelbox\'s renderer could not be built on this machine. Its plain single-precision picture is drawn instead, which runs out of precision a few decades in.';
+const KALI_BUILDING_TITLE = 'KaliBox\'s renderer is being built, a few seconds the first time. Its plain single-precision picture is drawn until it is ready, then changes by itself.';
+const KALI_FAILED_TITLE = 'KaliBox\'s renderer could not be built on this machine. Its plain single-precision picture is drawn instead, which runs out of precision a few decades in.';
 const ENGINE_TITLE = 'Perturbation with a 256-bit reference, at every depth. "f32" shows only for the seconds that renderer takes to start.';
 
 export const StatusChip: React.FC = () => {
@@ -51,13 +53,15 @@ export const StatusChip: React.FC = () => {
     const host = useHost();
     const [ray, setRay] = React.useState<'compiling' | 'ready' | 'failed'>('ready');
     const [box, setBox] = React.useState<'compiling' | 'ready' | 'failed'>('ready');
+    const [kali, setKali] = React.useState<'compiling' | 'ready' | 'failed'>('ready');
     React.useEffect(() => {
         setRay('ready');
         setBox('ready');
+        setKali('ready');
         if (!host) return undefined;
         return host.on('compile', (e) => {
             if (e.what !== 'variant') return;
-            if (e.variant === 'mandelbox') setBox(e.state); else setRay(e.state);
+            if (e.variant === 'mandelbox') setBox(e.state); else if (e.variant === 'kalibox') setKali(e.state); else setRay(e.state);
         });
     }, [host]);
     const size = useDzTelemetry((t) => `${t.frameW} x ${t.frameH}`);
@@ -89,6 +93,16 @@ export const StatusChip: React.FC = () => {
             {box === 'failed' && (
                 <span data-dz-status-box="failed" title={BOX_FAILED_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
                     mandelbox failed
+                </span>
+            )}
+            {kali === 'compiling' && (
+                <span data-dz-status-kali="building" title={KALI_BUILDING_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
+                    kalibox: building
+                </span>
+            )}
+            {kali === 'failed' && (
+                <span data-dz-status-kali="failed" title={KALI_FAILED_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
+                    kalibox failed
                 </span>
             )}
             <span data-dz-status-depth title="Depth: distance from the camera to the surface" className="text-fg-secondary tabular-nums">

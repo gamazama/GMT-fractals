@@ -58,7 +58,7 @@
  */
 import type { DzView } from './host/DeepZoomHost';
 import type { DzLocationState } from './locations';
-import { FORMULA_BOX, FORMULA_BULB } from './features/formula';
+import { FORMULA_BOX, FORMULA_BULB, FORMULA_KALI } from './features/formula';
 
 export type ParsedLocations =
     | { ok: true; locations: DzLocationState[]; labels: Array<string | undefined> }
@@ -239,9 +239,11 @@ export function locationKey(state: DzLocationState): string {
     const kind = choice?.kind ?? FORMULA_BULB;
     const shape = kind === FORMULA_BOX
         ? [choice?.boxScale, choice?.boxMinRadius, choice?.boxFold, choice?.boxFixedRadius, choice?.boxRotX, choice?.boxRotY, choice?.boxRotZ]
+        : kind === FORMULA_KALI
+        ? [choice?.kaliScale, choice?.kaliMinRad2, choice?.kaliTransX, choice?.kaliTransY, choice?.kaliTransZ, choice?.kaliRot]
         : saved ? [saved.power, saved.phaseTheta, saved.phasePhi] : [v.power, v.phase[0], v.phase[1]];
     // Burning is the bulb's: on, the place is another one, and so is the same camera at another mix; off, the mix says nothing
-    const burning = kind !== FORMULA_BOX && choice?.burning === true ? (choice.burningMix ?? 1) : null;
+    const burning = kind === FORMULA_BULB && choice?.burning === true ? (choice.burningMix ?? 1) : null;
     return JSON.stringify([v.cam, v.julia ?? null, kind, choice?.juliaMode === true, shape.map((n) => (typeof n === 'number' ? n : null)), burning]);
 }
 

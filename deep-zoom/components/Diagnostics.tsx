@@ -93,7 +93,7 @@ const RAY_NUMBERS: Array<{ key: Exclude<keyof DzRayLevers, 'bits'>; label: strin
 const started = new WeakMap<DeepZoomHost, DzLevers>();
 
 const seconds = (ms: number): string => (ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`);
-const PROGRAM_NAMES: Record<string, string> = { S: 'shading', PR: 'Mandelbulb', X: 'Mandelbox', PTR: 'Mandelbulb probe', XT: 'Mandelbox probe' };
+const PROGRAM_NAMES: Record<string, string> = { S: 'shading', PR: 'Mandelbulb', X: 'Mandelbox', K: 'KaliBox', PTR: 'Mandelbulb probe', XT: 'Mandelbox probe', KT: 'KaliBox probe' };
 
 const Readout: React.FC<{ label: string; id: string; children: React.ReactNode }> = ({ label, id, children }) => (
     <div className={ROW}>
@@ -133,7 +133,7 @@ export const Diagnostics: React.FC = () => {
     const levers = now.levers;
     const set = (patch: DzLeverPatch): void => { host.setLevers(patch); ask(); };
     const reset = (): void => { const first = started.get(host); if (first) set(first); };
-    const box = now.rayMarch === 'off' && levers.ray.bits !== 0;   // the Mandelbox is drawn: the ray march is the bulb's
+    const box = now.rayMarch === 'off' && levers.ray.bits !== 0;   // the Mandelbox or KaliBox is drawn: the ray march is the bulb's
     const built = Object.entries(now.compileMs).map(([key, ms]) => `${PROGRAM_NAMES[key] ?? key} ${seconds(ms)}`).join(', ');
     const gate = !levers.gate ? 'off' : !now.gate ? 'no reading yet' : `${now.gate.relT.toExponential(1)} ${now.gate.relT < 1e-3 ? 'pass' : 'MISMATCH'}`;
 
@@ -179,7 +179,7 @@ export const Diagnostics: React.FC = () => {
             </div>
 
             <div className="px-2 pt-3"><SectionLabel>Ray march (Mandelbulb)</SectionLabel></div>
-            {box && <div data-dz-diag="ray-idle" className={NOTE}>The Mandelbox is drawn by its own program: these act when the Mandelbulb is selected.</div>}
+            {box && <div data-dz-diag="ray-idle" className={NOTE}>This formula is drawn by its own program: these act when the Mandelbulb is selected.</div>}
             {levers.ray.bits === 0 && <div data-dz-diag="ray-zero" className={NOTE}>All three off: the old step rule marches, and iterations stop at 160 whatever the Formula tab says.</div>}
             {RAY_BITS.map(({ bit, label }) => (
                 <div key={bit} data-dz-lever={`ray-bit-${bit}`}>

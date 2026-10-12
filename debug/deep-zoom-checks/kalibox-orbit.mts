@@ -267,6 +267,9 @@ if (lastDeep) {
     check(b.marched && b.hits >= 5 && !b.inside && b.near > 0 && b.near <= b.second, `bundle: seven rays about the view axis, ${b.hits} meet the solid`);
     const camDist = Math.hypot(...place.cam.map(num));
     check(Math.abs(lib.boxFar() - camDist - 40) < 1e-9, `far: with c = the point a ray is followed 40 past the camera's own distance from the origin (${lib.boxFar().toFixed(1)}), a number set by hand`);
+    lib.setCam([fix(90), fix(80), fix(100)], place.cap, yaw, pitch);
+    { const d = Math.hypot(90, 80, 100); check(Math.abs(lib.boxFar() - 9 * d) < 1e-9, `far: and from far out, 8 times the camera's own distance past it (${lib.boxFar().toFixed(0)} from ${d.toFixed(0)}): the octant has no end to cut at`); }
+    lib.setCam(place.cam, place.cap, yaw, pitch);
     enter({ julia: true, c: K_PRESET });
     check(lib.boxFar() - camDist > 5.2 && lib.boxFar() - camDist < 6.5, `far: in Julia mode the preset's ball is ${(lib.boxFar() - camDist).toFixed(2)} wide (the bound, and a tenth more)`);
 }

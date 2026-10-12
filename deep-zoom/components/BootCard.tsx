@@ -139,15 +139,15 @@ export interface DzBootFailure {
     hint?: string;
 }
 
-/** The two programs a picture can wait for, as the host names them (`DeepZoomHost.building`). */
-type DzBuilding = 'rayMarch' | 'mandelbox';
+/** The programs a picture can wait for, as the host names them (`DeepZoomHost.building`). */
+type DzBuilding = 'rayMarch' | 'mandelbox' | 'kalibox';
 
 /**
  * Down to which depth the plain picture drawn while each program builds is a true picture of the
  * view; `Infinity`: at no depth. Measured, see THE TWO SIZES in the header. At or above its row the
  * notice is the small line, below it the large card.
  */
-export const DZ_PLAIN_DOWN_TO: Readonly<Record<DzBuilding, number>> = { rayMarch: 1, mandelbox: 0.05 };
+export const DZ_PLAIN_DOWN_TO: Readonly<Record<DzBuilding, number>> = { rayMarch: 1, mandelbox: 0.05, kalibox: 0.05 };   // kalibox: the Mandelbox's number, not measured for it (the same plain program with another fold)
 
 /** How long a build must have lasted before the notice shows (see the header). */
 export const DZ_NOTICE_AFTER_MS = 400;
@@ -176,6 +176,11 @@ const NOTICE: Readonly<Record<DzBuilding, { line: string; title: string; body: s
     mandelbox: {
         line: 'Mandelbox renderer building',
         title: 'Building the Mandelbox renderer',
+        body: 'This takes a few seconds the first time. The picture comes by itself when it is ready.',
+    },
+    kalibox: {
+        line: 'KaliBox renderer building',
+        title: 'Building the KaliBox renderer',
         body: 'This takes a few seconds the first time. The picture comes by itself when it is ready.',
     },
 };

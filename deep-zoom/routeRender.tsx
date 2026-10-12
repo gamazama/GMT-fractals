@@ -251,7 +251,7 @@ const DEFAULT_SAMPLES = 8;
 const TICK_MS = 250;
 /** How often THE WAIT asks whether the shader is there (and an interrupted run whether it may go on), and what the dialog says meanwhile. */
 const WAIT_MS = 100;
-const WAITING = { rayMarch: 'Waiting for the ray march\'s shader', mandelbox: 'Waiting for the Mandelbox\'s shader' } as const;
+const WAITING = { rayMarch: 'Waiting for the ray march\'s shader', mandelbox: 'Waiting for the Mandelbox\'s shader', kalibox: 'Waiting for KaliBox\'s shader' } as const;
 /** Frames the video encoder may have waiting before the run holds the next one back (each holds its picture). */
 const MAX_QUEUED = 2;
 

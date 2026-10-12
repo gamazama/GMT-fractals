@@ -19,6 +19,9 @@
  *
  * PITFALL: a keyframed scale that passes through the band is corrected on every frame it is in it
  *   (one extra store write a frame). The picture holds at 1.02 or -1.02 meanwhile.
+ *
+ * KALIBOX'S SCALE (`kaliScale`, 2026-10-12) is held to the same band by the same rule: the renderer
+ *   keeps its |scale| at or above 1.02 as it keeps the Mandelbox's.
  */
 import { useEngineStore } from '../store/engineStore';
 import { validBoxScale } from './features/formula';
@@ -29,12 +32,14 @@ let installed = false;
 export function installBoxScaleRule(): void {
     if (installed) return;
     installed = true;
-    useEngineStore.subscribe(
-        (s) => s.dzFormula?.boxScale,
-        (scale) => {
-            if (typeof scale !== 'number' || !Number.isFinite(scale)) return;
-            const valid = validBoxScale(scale);
-            if (valid !== scale) useEngineStore.getState().setDzFormula({ boxScale: valid });
-        },
-    );
+    for (const key of ['boxScale', 'kaliScale'] as const) {
+        useEngineStore.subscribe(
+            (s) => s.dzFormula?.[key],
+            (scale) => {
+                if (typeof scale !== 'number' || !Number.isFinite(scale)) return;
+                const valid = validBoxScale(scale);
+                if (valid !== scale) useEngineStore.getState().setDzFormula({ [key]: valid });
+            },
+        );
+    }
 }

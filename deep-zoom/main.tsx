@@ -69,7 +69,7 @@ import { LocationsPanel } from './components/LocationsPanel';
 import { RoutePanel } from './components/RoutePanel';
 import { installRoute } from './route';
 import { installRouteRender } from './routeRender';
-import { BoxStarters, KeptPlaces, StarterDives } from './components/StarterDives';
+import { BoxStarters, KaliStarters, KeptPlaces, StarterDives } from './components/StarterDives';
 import { LocationText } from './components/LocationText';
 import { JuliaHere } from './components/JuliaHere';
 import { installSceneIO } from '../engine/plugins/SceneIO';
@@ -206,6 +206,7 @@ try {
     componentRegistry.register('dz-route', RoutePanel);
     componentRegistry.register('dz-starters', StarterDives);
     componentRegistry.register('dz-box-starters', BoxStarters);
+    componentRegistry.register('dz-kali-starters', KaliStarters);
     componentRegistry.register('dz-places', KeptPlaces);
     componentRegistry.register('dz-location-text', LocationText);
     componentRegistry.register('dz-julia-here', JuliaHere);

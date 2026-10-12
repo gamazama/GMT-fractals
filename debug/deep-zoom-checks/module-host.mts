@@ -342,7 +342,7 @@ function makeRig() {
         ray: { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 },
         tick: 0,
         rayState: 'off' as 'off' | 'building' | 'on' | 'failed',
-        formulaKind: 'mandelbulb' as 'mandelbulb' | 'mandelbox',
+        formulaKind: 'mandelbulb' as 'mandelbulb' | 'mandelbox' | 'kalibox',
         formulaState: 'on' as 'building' | 'on' | 'failed',
         view: view(CAM_A),
         settings: {
@@ -425,7 +425,7 @@ function makeRig() {
         gate: { relT: 1.25e-7, tGPU: 1.244, tCPU: 1.2440001, when: 0 },
         rayMarchState: () => state.rayState,
         setFormula: (kind: string, p?: { c?: string[] | number[] }): void => { note('setFormula', kind, p); if (p?.c) setK(p.c); },
-        formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number], julia: false, c: [...K.c] as [string, string, string], cNum: [...K.num] as [number, number, number] }),
+        formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number], kaliScale: 1.8, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365] as [number, number, number], kaliRot: 0, julia: false, c: [...K.c] as [string, string, string], cNum: [...K.num] as [number, number, number] }),
         formulaState: () => state.formulaState,
         normalDetail: () => 0,
     };
@@ -600,6 +600,13 @@ console.log('[3] boot      ready, bootParams, compile, error');
     rig.state.formulaState = 'failed';
     run(host, 400, 9000, 200);
     check(variants[variants.length - 1] === 'mandelbox:failed' && variants.length === 5, 'boot: a Mandelbox shader that cannot be built says failed', variants.join());
+    // KaliBox's shader, the same way, under its own name (2026-10-12). (The Mandelbox's "ready" before it is that
+    // variant no longer being asked about: the formula is another.)
+    rig.state.formulaKind = 'kalibox'; rig.state.formulaState = 'building';
+    run(host, 400, 9400, 200);
+    rig.state.formulaState = 'on';
+    run(host, 400, 9800, 200);
+    check(variants.slice(5).join() === 'mandelbox:ready,kalibox:compiling,kalibox:ready', 'boot: with KaliBox selected its shader is named kalibox, compiling then ready', variants.join());
     host.dispose();
 }
 {
@@ -860,7 +867,7 @@ console.log('[5] input     focus, and the host-input members');
         'levers: a ray number goes with the bits in force and no other number; the bits go alone', JSON.stringify(rig.calls.setRayMarch));
     host.setLevers({ gate: true, mode: 'auto', rebaseOrigin: true, farHandOff: 0.5, ray: { bits: 5, tol: 0.05 } });   // as the tab's Reset: the fake is back where the lines below expect it
     // building() (2026-10-11): the variant the picture is waiting for, asked now. A render waits on it.
-    const asked = (ray: 'off' | 'building' | 'on' | 'failed', kind: 'mandelbulb' | 'mandelbox', box: 'building' | 'on' | 'failed') => {
+    const asked = (ray: 'off' | 'building' | 'on' | 'failed', kind: 'mandelbulb' | 'mandelbox' | 'kalibox', box: 'building' | 'on' | 'failed') => {
         rig.state.rayState = ray; rig.state.formulaKind = kind; rig.state.formulaState = box;
         return host.building();
     };
@@ -870,6 +877,9 @@ console.log('[5] input     focus, and the host-input members');
     const box = [asked('building', 'mandelbox', 'building'), asked('building', 'mandelbox', 'on'), asked('on', 'mandelbox', 'failed')];
     check(box[0] === 'mandelbox' && box[1] === null && box[2] === null,
         'input: with the Mandelbox selected building() speaks for its shader alone, whatever the ray march\'s says', box.join());
+    const kali = [asked('building', 'kalibox', 'building'), asked('building', 'kalibox', 'on'), asked('on', 'kalibox', 'failed')];
+    check(kali[0] === 'kalibox' && kali[1] === null && kali[2] === null,
+        'input: with KaliBox selected building() names kalibox while its shader builds, and nothing once it is there or has failed', kali.join());
     rig.state.rayState = 'building'; rig.state.formulaKind = 'mandelbulb';
     host.dispose();
     check(host.building() === null, 'input: a disposed host is waiting for nothing');

@@ -22,14 +22,14 @@
  *     256, line 2 - grep `let rayAsk` in renderer/core.js). A `dzQuality.bla`,
  *     `dzQuality.trueGradient` or `dzQuality.rayMarch` from an older scene has no row and is not
  *     pushed.
- *   - `stepRelax` IS PUSHED WHATEVER THE FORMULA, though its row shows for the Mandelbox only
+ *   - `stepRelax` IS PUSHED WHATEVER THE FORMULA, though its row shows for the Mandelbox and KaliBox only
  *     (features/quality.ts, `BOX_ONLY`): the bulb's ray march does not read it, and the box must
  *     find it in force the moment it is selected.
  *   - `setColor(mode, scale)` and `setLight(mode, falloff)` ignore a falsy second argument and
  *     `setLight` reads a missing first one as Direct: both are always called with both values.
  *   - `setNormalMode` does not restart the still; the empty `setLook({})` after it does.
  *   - An id with no row, or a row with `group: null`, is not pushed. Unknown ids are named once.
- *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind, the Julia switch, Burning and its mix, the box's seven numbers and
+ *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind, the Julia switch, Burning and its mix, the box's seven numbers, KaliBox's six and
  *     (see THE CONSTANT) sometimes the Julia constant, and
  *     it is sent before any other push of the same patch: `setIters` clamps to the ceiling of the
  *     formula IN FORCE (400 for the bulb, 500 for the box), so a box place's 450 iterations sent
@@ -60,6 +60,11 @@
  *   by: npm run check:deep-zoom-param-map ("push: Burning and its mix go as setFormula(kind, { ..., burning:
  *   true, burnMix: 0.5 }), one call and nothing else"). Falsified 2026-10-12: the `burning` line of the push
  *   left out -> 7 red (the record is in that check's header).
+ * @invariant KaliBox's numbers reach the module in the formula's own call, under their own names (`kaliScale`,
+ *   `kaliMinRad2`, `kaliTrans`, `kaliRot`), and the Mandelbox's go beside them untouched - proven by: npm run
+ *   check:deep-zoom-param-map ("push: KaliBox goes as setFormula("kalibox", { ..., kaliScale, kaliMinRad2,
+ *   kaliTrans, kaliRot }), one call, ..."). Falsified 2026-10-12: the `kaliTrans` line of the push left out -> 6
+ *   red (the record is in that check's header).
  * @assumption Only the last `EXACT_CONSTANTS_KEPT` are remembered, the oldest forgotten first: the
  *   check has a line for it ("constant: the ninth ..."), not broken on purpose.
  */
@@ -118,6 +123,10 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
             fold: num('dzFormula', 'boxFold'),
             fixedR: num('dzFormula', 'boxFixedRadius'),
             rot: [num('dzFormula', 'boxRotX'), num('dzFormula', 'boxRotY'), num('dzFormula', 'boxRotZ')],
+            kaliScale: validBoxScale(num('dzFormula', 'kaliScale')),
+            kaliMinRad2: num('dzFormula', 'kaliMinRad2'),
+            kaliTrans: [num('dzFormula', 'kaliTransX'), num('dzFormula', 'kaliTransY'), num('dzFormula', 'kaliTransZ')],
+            kaliRot: num('dzFormula', 'kaliRot'),
             julia: flag('dzFormula', 'juliaMode'),
             burning: flag('dzFormula', 'burning'),
             burnMix: num('dzFormula', 'burningMix'),

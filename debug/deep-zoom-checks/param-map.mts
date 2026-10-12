@@ -67,11 +67,18 @@
  *     one call and nothing else" (the fake saw { ..., "julia":false,"burnMix":0.5 }), "read-back: Burning and
  *     its mix are read from the module's formula()", "push: and off again", and the four lines that hold a
  *     whole formula call as text. Not broken on purpose: the mix's own line of the push.
+ * 2026-10-12, KALIBOX (its six numbers in the formula's push), one break, restored byte for byte (sha-256):
+ *   - `looseParams.ts`: the `kaliTrans: [...]` line of the formula push left out
+ *     -> 6 red of 55: "push: KaliBox goes as setFormula("kalibox", { ..., kaliScale, kaliMinRad2, kaliTrans,
+ *     kaliRot }), one call, the Mandelbox's own numbers beside them untouched", "read-back: KaliBox and its numbers
+ *     are read from the module's formula() (kind as index 2)", and the four lines that hold a whole formula call
+ *     as text. Not broken on purpose: the other three numbers' lines of the push, the band rule for its scale,
+ *     the map line.
  */
 import { DZ_PARAM_ROWS, DZ_PARAM_FEATURES, DZ_PARAM_ROW_BY_ID, defaultParams, paramId, readParams } from '../../deep-zoom/host/paramMap.ts';
 import { createParamPusher } from '../../deep-zoom/host/looseParams.ts';
 import { NORMALS_OPTIONS, normalsIndex, normalsToRenderer } from '../../deep-zoom/features/quality.ts';
-import { FORMULA_BOX } from '../../deep-zoom/features/formula.ts';
+import { FORMULA_BOX, FORMULA_BULB, FORMULA_KALI } from '../../deep-zoom/features/formula.ts';
 import type { DeepZoomApi } from '../../deep-zoom/renderer/index.ts';
 
 let failed = 0;
@@ -93,7 +100,8 @@ function makeApi() {
     const ray = { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 };   // the module's own start values (core.js: `let rayAsk`)
     let normalDetail = 0;
     let auto = true;
-    const formula = { kind: 'mandelbulb', scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number], julia: false, burning: false, burnMix: 1 };   // core.js: `let dzFormula`, `const box = {`, `let juliaOn`, `let burnOn`, `let burnMix`
+    const formula = { kind: 'mandelbulb', scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number],
+        kaliScale: 1.8, kaliMinRad2: 0.3492, kaliTrans: [0.0365, -1.9183, 0.0365] as [number, number, number], kaliRot: 0, julia: false, burning: false, burnMix: 1 };   // core.js: `let dzFormula`, `const box = {`, `const kali = {`, `let juliaOn`, `let burnOn`, `let burnMix`
     // The Julia constant as the module holds it (core.js: `let juliaHP`, `let juliaF`, `function setJuliaC`): 256-bit
     // numbers as text, and the doubles they read as. Numbers given here must be whole multiples of 2^-256.
     const K = { c: ['0', '0', '0'] as [string, string, string], num: [0, 0, 0] as [number, number, number] };
@@ -102,13 +110,13 @@ function makeApi() {
         else { K.num = [...c] as [number, number, number]; K.c = (c as number[]).map((x) => String(BigInt(x * 2 ** 256))) as [string, string, string]; }
     };
     const api = {
-        setFormula: (kind: string, p?: { scale?: number; minR?: number; fold?: number; fixedR?: number; rot?: [number, number, number]; julia?: boolean; burning?: boolean; burnMix?: number; c?: string[] | number[] }) => {
+        setFormula: (kind: string, p?: { scale?: number; minR?: number; fold?: number; fixedR?: number; rot?: [number, number, number]; kaliScale?: number; kaliMinRad2?: number; kaliTrans?: [number, number, number]; kaliRot?: number; julia?: boolean; burning?: boolean; burnMix?: number; c?: string[] | number[] }) => {
             note('setFormula', kind, p); formula.kind = kind;
             const { c, ...rest } = p || {};
             Object.assign(formula, rest);
             if (c) setK(c);
         },
-        formula: () => ({ ...formula, rot: [...formula.rot] as [number, number, number], c: [...K.c] as [string, string, string], cNum: [...K.num] as [number, number, number] }),
+        formula: () => ({ ...formula, rot: [...formula.rot] as [number, number, number], kaliTrans: [...formula.kaliTrans] as [number, number, number], c: [...K.c] as [string, string, string], cNum: [...K.num] as [number, number, number] }),
         dz: { settings: () => ({ ...s, phase: [s.phase[0], s.phase[1]] as [number, number] }) },
         look,
         setLook: (o: Record<string, unknown>) => { note('setLook', o); Object.assign(look, o); if (typeof o.mode === 'number') s.lookMode = o.mode; },
@@ -174,6 +182,13 @@ console.log('[1] map');
         && JSON.stringify(shown.juliaConstant.composeFrom) === '["juliaX","juliaY","juliaZ"]' && JSON.stringify(shown.juliaConstant.condition) === '{"param":"juliaMode","bool":true}'
         && ['juliaX', 'juliaY', 'juliaZ'].every((key) => shown[key].hidden === true),
         'map: the Julia constant is three numbers in the formula\'s push (class O, read back), shown as one composed row while Julia mode is on');
+    // KaliBox (2026-10-12): its six numbers in the formula's own push, the translation shown as one composed row.
+    const kaliRows = ['kaliScale', 'kaliMinRad2', 'kaliTransX', 'kaliTransY', 'kaliTransZ', 'kaliRot'].map((key) => DZ_PARAM_ROW_BY_ID.get(paramId('dzFormula', key)));
+    const kaliComposed = DZ_PARAM_ROW_BY_ID.get('dzFormula.kaliTranslation');
+    check(kaliRows.every((row) => !!row && row.cls === 'O' && row.group === 'formula' && typeof row.read === 'function') && !!kaliComposed && kaliComposed.group === null
+        && JSON.stringify(shown.kaliTranslation.composeFrom) === '["kaliTransX","kaliTransY","kaliTransZ"]' && ['kaliTransX', 'kaliTransY', 'kaliTransZ'].every((key) => shown[key].hidden === true)
+        && ['kaliScale', 'kaliMinRad2', 'kaliTranslation', 'kaliRot'].every((key) => JSON.stringify(shown[key].condition) === JSON.stringify({ param: 'kind', eq: FORMULA_KALI })),
+        'map: KaliBox\'s six numbers are in the formula\'s push (class O, read back), its translation one composed row, all four rows shown while the formula is KaliBox');
 }
 
 // ── [2] read ─────────────────────────────────────────────────────────────────────────────────────
@@ -202,7 +217,7 @@ console.log('[3] push');
     p.push(defaultParams());
     check(rig.calls.length > 15 && rig.of('setSurf').length === 1 && rig.of('setColor').length === 1 && rig.of('setLight').length === 1 && rig.of('setPhase').length === 1 && rig.of('setFormula').length === 1,
         'push: a first push of every param sends each group once (the joint groups once, not once per key)', rig.calls.map(([n]) => n).join(','));
-    check(rig.calls[0][0] === 'setFormula' && JSON.stringify(rig.calls[0][1]) === '["mandelbulb",{"scale":2,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0,0],"julia":false,"burning":false,"burnMix":1}]',
+    check(rig.calls[0][0] === 'setFormula' && JSON.stringify(rig.calls[0][1]) === '["mandelbulb",{"scale":2,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0,0],"kaliScale":1.8,"kaliMinRad2":0.3492,"kaliTrans":[0.0365,-1.9183,0.0365],"kaliRot":0,"julia":false,"burning":false,"burnMix":1}]',
         'push: the formula is the FIRST call of a whole push, with the kind by name and the box\'s seven numbers', JSON.stringify(rig.calls[0]));
     rig.clear();
     p.push(defaultParams());
@@ -249,16 +264,16 @@ console.log('[3] push');
     // the formula: one call for the kind and the box's numbers, always ahead of the iteration count
     rig.clear();
     p.push({ 'dzFormula.iterations': 300, 'dzFormula.kind': 1, 'dzFormula.boxScale': -1.5 });
-    check(rig.calls.map(([n]) => n).join() === 'setFormula,setIters' && JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0,0],"julia":false,"burning":false,"burnMix":1}]]',
+    check(rig.calls.map(([n]) => n).join() === 'setFormula,setIters' && JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0,0],"kaliScale":1.8,"kaliMinRad2":0.3492,"kaliTrans":[0.0365,-1.9183,0.0365],"kaliRot":0,"julia":false,"burning":false,"burnMix":1}]]',
         'push: the Mandelbox goes as setFormula("mandelbox", ...) BEFORE the iteration count sent with it (the ceiling is the formula\'s)', JSON.stringify(rig.calls));
     rig.clear();
     p.push({ 'dzFormula.boxRotY': 0.5 });
-    check(JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0.5,0],"julia":false,"burning":false,"burnMix":1}]]', 'push: one of the box\'s numbers sends the kind and all seven', JSON.stringify(rig.of('setFormula')));
+    check(JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0.5,0],"kaliScale":1.8,"kaliMinRad2":0.3492,"kaliTrans":[0.0365,-1.9183,0.0365],"kaliRot":0,"julia":false,"burning":false,"burnMix":1}]]', 'push: one of the box\'s numbers sends the kind and all seven', JSON.stringify(rig.of('setFormula')));
     rig.clear();
     // JULIA MODE (2026-10-12): the switch rides in the formula's own call. So does its constant, when the rows say
     // another one than the module holds: the "constant: ..." lines below.
     p.push({ 'dzFormula.juliaMode': true });
-    check(JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0.5,0],"julia":true,"burning":false,"burnMix":1}]]' && rig.calls.length === 1,
+    check(JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0.5,0],"kaliScale":1.8,"kaliMinRad2":0.3492,"kaliTrans":[0.0365,-1.9183,0.0365],"kaliRot":0,"julia":true,"burning":false,"burnMix":1}]]' && rig.calls.length === 1,
         'push: the Julia switch goes as setFormula(kind, { ..., julia: true }), one call and nothing else', JSON.stringify(rig.calls));
     check(readParams(rig.api)['dzFormula.juliaMode'] === true, 'read-back: the Julia switch is read from the module\'s formula()');
     rig.clear();
@@ -278,13 +293,27 @@ console.log('[3] push');
     p.push({ 'dzFormula.boxScale': 0.3 });
     check(JSON.stringify((rig.of('setFormula')[0] as [string, { scale: number }])[1].scale) === '1.02', 'push: a scale inside the band the renderer cannot draw goes as the nearer end (0.3 -> 1.02)', JSON.stringify(rig.of('setFormula')));
     rig.clear();
-    p.push({ 'dzFormula.boxRotation': 7, 'dzFormula.juliaConstant': 7 });
-    check(rig.calls.length === 0, 'push: the composed Pre-Rotation and Constant rows send nothing themselves', rig.calls.map(([n]) => n).join(','));
+    p.push({ 'dzFormula.boxRotation': 7, 'dzFormula.juliaConstant': 7, 'dzFormula.kaliTranslation': 7 });
+    check(rig.calls.length === 0, 'push: the composed Pre-Rotation, Constant and Translation rows send nothing themselves', rig.calls.map(([n]) => n).join(','));
     {
         const read = readParams(rig.api);
         check(read['dzFormula.kind'] === 1 && read['dzFormula.boxScale'] === 1.02 && read['dzFormula.boxRotY'] === 0.5 && read['dzFormula.boxFixedRadius'] === 1,
             'read: the formula reads back as the store holds it (kind as its index)', JSON.stringify(read));
     }
+    // KALIBOX (2026-10-12): the third kind by name, with its own numbers under their own names, in the same one call.
+    rig.clear();
+    p.push({ 'dzFormula.kind': FORMULA_KALI, 'dzFormula.kaliScale': 2.04348, 'dzFormula.kaliMinRad2': 0.5, 'dzFormula.kaliTransY': -1.5, 'dzFormula.kaliRot': 0.25 });
+    { const sent = rig.of('setFormula') as Array<[string, { scale?: number; kaliScale?: number; kaliMinRad2?: number; kaliTrans?: number[]; kaliRot?: number }]>;
+      check(rig.calls.length === 1 && sent.length === 1 && sent[0][0] === 'kalibox' && sent[0][1].kaliScale === 2.04348 && sent[0][1].kaliMinRad2 === 0.5 && JSON.stringify(sent[0][1].kaliTrans) === '[0.0365,-1.5,0.0365]' && sent[0][1].kaliRot === 0.25 && sent[0][1].scale === 1.02,
+          'push: KaliBox goes as setFormula("kalibox", { ..., kaliScale, kaliMinRad2, kaliTrans, kaliRot }), one call, the Mandelbox\'s own numbers beside them untouched', JSON.stringify(rig.calls)); }
+    { const read = readParams(rig.api);
+      check(read['dzFormula.kind'] === FORMULA_KALI && read['dzFormula.kaliScale'] === 2.04348 && read['dzFormula.kaliMinRad2'] === 0.5 && read['dzFormula.kaliTransX'] === 0.0365 && read['dzFormula.kaliTransY'] === -1.5 && read['dzFormula.kaliTransZ'] === 0.0365 && read['dzFormula.kaliRot'] === 0.25 && read['dzFormula.boxScale'] === 1.02,
+          'read-back: KaliBox and its numbers are read from the module\'s formula() (kind as index 2)', JSON.stringify(read)); }
+    rig.clear();
+    p.push({ 'dzFormula.kaliScale': -0.4 });
+    check(JSON.stringify((rig.of('setFormula')[0] as [string, { kaliScale: number }])[1].kaliScale) === '-1.02', 'push: a KaliBox scale inside the band goes as the nearer end (-0.4 -> -1.02)', JSON.stringify(rig.of('setFormula')));
+    rig.clear();
+    p.push({ 'dzFormula.kind': FORMULA_BOX, 'dzFormula.kaliScale': 1.8, 'dzFormula.kaliMinRad2': 0.3492, 'dzFormula.kaliTransY': -1.9183, 'dzFormula.kaliRot': 0 });   // back, for the lines below
 
     rig.clear();
     p.push({ 'dzInspect.overlays': 2, 'dzQuality.actualPixels': true });
@@ -384,8 +413,8 @@ console.log('[4] retired (2026-10-11): True-gradient march, BLA, the Ray march s
     p.push(defaultParams());
     check(rig.calls.length > 15 && rig.of('setBla').length === 0 && rig.of('setJacobian').length === 0 && rig.of('setRayMarch').length === 0,
         'retired: a push of every param sends none of setBla, setJacobian, setRayMarch', rig.calls.map(([n]) => n).join(','));
-    check(JSON.stringify(quality.stepSize?.condition) === JSON.stringify({ param: '$dzFormula.kind', eq: FORMULA_BOX }) && rig.of('setStepRelax').length === 1,
-        'retired: Step size is the Mandelbox\'s row (shown while the formula is the box), and its value was still pushed with the bulb selected',
+    check(JSON.stringify(quality.stepSize?.condition) === JSON.stringify({ param: '$dzFormula.kind', neq: FORMULA_BULB }) && rig.of('setStepRelax').length === 1,
+        'retired: Step size is the row of the Mandelbox and of KaliBox (shown while the formula is not the bulb), and its value was still pushed with the bulb selected',
         JSON.stringify(quality.stepSize?.condition));
     check(NORMALS_OPTIONS.length === 4 && normalsIndex(4) === 2 && normalsToRenderer(4) === 2 && normalsIndex(3) === 3 && normalsToRenderer(3) === 3 && normalsIndex(undefined) === 2,
         'retired: Normals has four options, and an index that names none (4, Gradient) reads as 4-tap: index 2, renderer mode 2',
