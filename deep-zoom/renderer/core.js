@@ -332,6 +332,20 @@ uniform mat3  uBoxRot;           // the pre-rotation
 uniform int   uBoxHasRot;        // 0 = no pre-rotation: the matrix is not applied
 uniform float uBoxFar;           // how far from the camera the far-field march follows a ray (the bulb: 12)
 float boxOnE(vec2 g, float e) { return g.x * exp2(clamp(g.y - e, -160.0, 120.0)); }      // a distance (mantissa, exponent) as a mantissa on e
+#ifdef USE_KALI
+/* KALIBOX (grep; the USE_KALI variant of this kernel): one axis of the fold x -> abs(x) as a DELTA. Z = the
+   reference's signed coordinate (rows 2 to 4, which at a folding limit of 0 hold it twice), d = the pixel's
+   delta on this axis, a mantissa on e. BURNING's case table (grep burnFoldD) at a factor of -1:
+       the same side      +-d            (the sign of Z)
+       opposite sides     +-(d + 2 Z)    (the sign of Z + d; |Z| <= |d| there: nothing cancels)
+   The translation that follows the fold is the same for the pixel and the reference: it is not in a delta. */
+uniform vec3  uKaliT;            // the translation: the plain-f32 copies add it; this kernel does not read it
+float kaliFoldD(vec2 Z, float d, float e) {
+  float zs = boxOnE(Z, e), p = zs + d;
+  bool neg = p < 0.0;
+  return (Z.x < 0.0) == neg ? (neg ? -d : d) : (neg ? -(p + zs) : p + zs);
+}
+#else
 /* one axis of the box fold. g = the reference's U − L (xy) and U + L (zw); d = the pixel's delta on this
    axis, l2 = 2 L, both mantissas on e. Returns the folded delta, 2·(the clamp's difference) − d, on e. */
 float boxFoldD(vec4 g, float d, float e, float l2) {
@@ -344,6 +358,7 @@ float boxFoldD(vec4 g, float d, float e, float l2) {
   else cd = pr == -1 ? 0.0 : (pr == 0 ? pl : l2);
   return 2.0 * cd - d;
 }
+#endif
 OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec3 C; float ec;
   sclFromH3(dc, C, ec);                        // δc = C·2^ec, constant along the orbit
@@ -368,8 +383,12 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
     vec4 gs = texelFetch(orbit, ivec2(m, 5), 0);             // |W|² − minR² (m, e), |W|² − fixedR² (m, e)
     float s = sclPow2(e), inv = exp2(clamp(-e, -160.0, 120.0));   // 2^e, and 2^−e for the three constants that are not δ-linear
     if (uBoxHasRot == 1) D = uBoxRot * D;
+#ifdef USE_KALI
+    vec3 E = vec3(kaliFoldD(gx.xy, D.x, e), kaliFoldD(gy.xy, D.y, e), kaliFoldD(gz.xy, D.z, e));
+#else
     float l2 = uBoxA.w * inv;
     vec3 E = vec3(boxFoldD(gx, D.x, e, l2), boxFoldD(gy, D.y, e, l2), boxFoldD(gz, D.z, e, l2));
+#endif
     vec3 W = tw.xyz; float r2 = tw.w;
     float Q = 2.0 * dot(W, E) + s * dot(E, E);               // the pixel's |w|² is r2 + Q·2^e
     float r2p = r2 + s * Q;
@@ -1007,13 +1026,20 @@ uniform vec4  uBoxB;
 uniform mat3  uBoxRot;
 uniform int   uBoxHasRot;
 uniform float uBoxFar;
+#ifdef USE_KALI
+uniform vec3  uKaliT;            // KALIBOX (grep): the translation added after its fold
+#endif
 float deMandelbulb(vec3 pos){
     vec3 z = pos, c = cOf(pos); float dr = 1.0; float r2 = 0.0;
     int N = int(uIters);
     for (int i=0;i<512;i++){
         if (i>=N) break;
         if (uBoxHasRot == 1) z = uBoxRot * z;
+#ifdef USE_KALI
+        z = abs(z) + uKaliT;         // KALIBOX (grep): its fold in the box fold's place; the rest is the box's
+#else
         z = clamp(z, -uBoxA.z, uBoxA.z) * 2.0 - z;
+#endif
         float k = clamp(uBoxB.y / max(dot(z,z), 1e-30), 1.0, uBoxB.z);
         z = z * (k * uBoxA.x) + c;
         dr = dr * k * uBoxA.y + 1.0;
@@ -1205,7 +1231,11 @@ ${KERNEL_CORE}
    the last one is log(|z| / R) / log |scale| (the bulb's log log |z| / log n belongs to a power map). */
 void boxStepF32(inout vec3 z, inout float dr, vec3 c) {
     if (uBoxHasRot == 1) z = uBoxRot * z;
+#ifdef USE_KALI
+    z = abs(z) + uKaliT;             // KALIBOX (grep): its fold in the box fold's place; the rest is the box's
+#else
     z = clamp(z, -uBoxA.z, uBoxA.z) * 2.0 - z;
+#endif
     float k = clamp(uBoxB.y / max(dot(z, z), 1e-30), 1.0, uBoxB.z);
     z = z * (k * uBoxA.x) + c;
     dr = dr * k * uBoxA.y + 1.0;
@@ -2260,7 +2290,8 @@ function mkProgAsync(fs, cb){
    DEEP_FRAG compiles into variants, selected by #defines:
      USE_JET   the bulb's program: THE RAY MARCH (key PR; PTR with the work counters)
      USE_BOX   the Mandelbox's program (key X; XT with the work counters)
-     + T       USE_STATS: per-pixel work counters for __stats and the march probe (diagnostics only)
+     USE_BOX + USE_KALI   KaliBox's program (grep KALIBOX; key K; KT with the work counters)
+     + T      USE_STATS: per-pixel work counters for __stats and the march probe (diagnostics only)
    THE BULB HAS ONE PROGRAM SINCE 2026-10-11, PR. It is compiled WITHOUT blocking at load (deepProg / ud — the
    readiness flag everything checks), and nothing else draws a deep picture of the bulb: until it is there
    the f32 baseline is on screen, and if it cannot be built there is no deep picture at all (deepCompileErr,
@@ -2310,9 +2341,11 @@ function ensureRayVariant(t){
    jet, whatever was asked for. Keys X (the picture) and XT (with the work counters). A picture never waits
    for it: it builds in the background from the moment the box is selected, and until it is there the frame
    draws the box's f32 baseline (deepNow() is null), as the page draws the bulb's while its deep shader
-   compiles. A probe or a study that asks for it before then builds it at once, blocking. */
-const xKey = (t) => 'X' + (t ? 'T' : '');
-const xSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_BOX');
+   compiles. A probe or a study that asks for it before then builds it at once, blocking.
+   KALIBOX (grep) is this variant with USE_KALI as well - its fold in the box fold's place and nothing else - under
+   keys K and KT: the same two functions build it, by the formula selected when they are called. */
+const xKey = (t) => (kaliOn() ? 'K' : 'X') + (t ? 'T' : '');
+const xSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_BOX' + (kaliOn() ? '\n#define USE_KALI' : ''));
 function ensureBoxVariant(t){
   const key = xKey(t);
   if (variants[key] === undefined && pendingBuild[key]) pendingBuild[key].finish();
@@ -2330,7 +2363,7 @@ function kickBoxVariantAsync(){                  // without blocking; a no-op on
   const key = xKey(false);
   if (variants[key] !== undefined || pendingBuild[key]) return;
   const t0 = performance.now();
-  pendingBuild[key] = mkProgAsync(xSrc(false), (p, err) => {
+  pendingBuild[key] = mkProgAsync(xSrc(false), (p, err) => {   // (key and source are taken now: the formula may be another by the time it lands)
     pendingBuild[key] = null;
     if (!p) { variantErr[key] = err; variants[key] = null; return; }
     const x = makeUD(p);
@@ -2401,8 +2434,19 @@ const u = { res:U('uRes'), camPos:U('uCamPos'), right:U('uRight'), up:U('uUp'), 
             light:U('uLightDir'), phase:U('uPhase'), addC:U('uAddC'), juliaC:U('uJuliaC') };
 /* THE FORMULA SEAM (grep): the f32 baseline of the active formula - the page's program for the bulb, FRAG with
    USE_BOX for the box (small: built on first use, blocking, well under a second). */
-let progBox = null, uBox = null, progBurn = null, uBurn = null;
+let progBox = null, uBox = null, progBurn = null, uBurn = null, progKali = null, uKali = null;
 function baseCtx(){
+  if (kaliOn()) {                                // KALIBOX (grep): FRAG with USE_BOX and USE_KALI, built on first use as the box's is
+    if (!progKali) {
+      progKali = mkProg(FRAG.replace('#version 300 es', '#version 300 es\n#define USE_BOX\n#define USE_KALI'));
+      const g = n => gl.getUniformLocation(progKali, n);
+      uKali = { res:g('uRes'), camPos:g('uCamPos'), right:g('uRight'), up:g('uUp'), fwd:g('uFwd'),
+                fov:g('uFovScale'), power:g('uPower'), iters:g('uIters'), prec:g('uPrecRatio'),
+                light:g('uLightDir'), phase:g('uPhase'), addC:g('uAddC'), juliaC:g('uJuliaC'),
+                boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar'), kaliT:g('uKaliT') };
+    }
+    return { p: progKali, u: uKali };
+  }
   if (!boxOn() && burnActive()) {                // BURNING (grep): FRAG with USE_BURN, built on first use as the box's is
     if (!progBurn) {
       progBurn = mkProg(FRAG.replace('#version 300 es', '#version 300 es\n#define USE_BURN'));
@@ -2432,6 +2476,7 @@ function setBoxUniforms(x){
   gl.uniformMatrix3fv(x.boxRot, false, [R[0][0], R[1][0], R[2][0], R[0][1], R[1][1], R[2][1], R[0][2], R[1][2], R[2][2]]);   // column by column
   gl.uniform1i(x.boxHasRot, p.hasRot ? 1 : 0);
   gl.uniform1f(x.boxFar, boxFar());
+  if (p.kali) gl.uniform3f(x.kaliT, p.T[0], p.T[1], p.T[2]);   // KALIBOX (grep): its translation, for the plain-f32 copies
 }
 function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
   return { res:g('uRes'), right:g('uRight'), up:g('uUp'), fwd:g('uFwd'),
@@ -2444,7 +2489,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
             land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), addC:g('uAddC'), juliaC:g('uJuliaC'), farSwitch:g('uFarSwitch'), holdR:g('uHoldR'), farOnly:g('uFarOnly'), burnNeg:g('uBurnNeg'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
-            boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar') }; }   // the last five: null but in the USE_BOX variant
+            boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar'), kaliT:g('uKaliT') }; }   // the last six: null but in the USE_BOX variant (kaliT: but with USE_KALI)
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -2863,10 +2908,11 @@ function makeHP(P) {
   const boxFixed = (p) => { const m2 = fromNum(p.m2), F2 = fromNum(p.F2);
     /* kA is DIVIDED here, not converted from the f64 quotient: the factor must be continuous across the min-radius
        sphere to the last bit, or a pixel that crosses it at depth gets a step wrong by 1e-16, far above its delta */
-    return { S: fromNum(p.scale), L: fromNum(p.fold), m2, F2, kA: fdiv(F2, m2), R: p.hasRot ? p.R.map(r => r.map(fromNum)) : null }; };
+    return { S: fromNum(p.scale), L: fromNum(p.fold), m2, F2, kA: fdiv(F2, m2), R: p.hasRot ? p.R.map(r => r.map(fromNum)) : null,
+      T: p.kali ? p.T.map(fromNum) : null }; };   // T: KALIBOX (grep) - its translation; with it the fold is abs(u) + T and L is 0
   const boxParts = (v, B) => {
     const u = B.R ? B.R.map(r => mul(r[0], v[0]) + mul(r[1], v[1]) + mul(r[2], v[2])) : v;
-    const w = u.map(x => x > B.L ? 2n * B.L - x : x < -B.L ? -2n * B.L - x : x);
+    const w = B.T ? u.map((x, i) => (x < 0n ? -x : x) + B.T[i]) : u.map(x => x > B.L ? 2n * B.L - x : x < -B.L ? -2n * B.L - x : x);
     const r2 = mul(w[0], w[0]) + mul(w[1], w[1]) + mul(w[2], w[2]);
     const reg = r2 < B.m2 ? 0 : r2 < B.F2 ? 1 : 2;
     return { u, w, r2, reg, k: reg === 0 ? B.kA : reg === 1 ? fdiv(B.F2, r2) : ONE };
@@ -2915,8 +2961,10 @@ const BOX_ESC = 1000, BOX_ESC2 = BOX_ESC * BOX_ESC;
 const BOX_REF_MAX2 = 1e14;                       // the reference orbit is kept this far past the escape radius, so a pixel can ride it to its own escape
 let dzFormula = 'mandelbulb';
 let formulaStamp = 0;                            // bumped by every change of formula or of its parameters: kept orbits and kept rays are keyed by it
-const boxOn = () => dzFormula === 'mandelbox';
+const boxOn = () => dzFormula !== 'mandelbulb';  // the Mandelbox, or KALIBOX (grep): both are drawn by the box's kernel, march and rules
+const kaliOn = () => dzFormula === 'kalibox';
 const box = { scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] };
+const kali = { scale: 1.8, minRad2: 0.3492, trans: [0.0365, -1.9183, 0.0365], rot: 0 };   // KALIBOX (grep): its own numbers, kept apart from the box's
 /* the pre-rotation as one matrix (rows), from the formula's three mat2 steps: X on (y, z), Y on (x, z), Z on (x, y) */
 function boxRotMat(r){
   const sx = Math.sin(r[0]), cx = Math.cos(r[0]), sy = Math.sin(r[1]), cy = Math.cos(r[1]), sz = Math.sin(r[2]), cz = Math.cos(r[2]);
@@ -2926,6 +2974,12 @@ function boxRotMat(r){
 }
 /* what the map is computed from: the parameters as numbers, their squares, the matrix, and the fixed-point copies */
 function boxDerive(){
+  if (kaliOn()) {                                // KALIBOX (grep): the same record, with a folding limit of 0, a fixed radius of 1 and its translation
+    const hasRot = Math.abs(kali.rot) > 0.001, m2 = kali.minRad2;   // GMT's own threshold
+    const p = { scale: kali.scale, fold: 0, m2, F2: 1, kA: 1 / m2, hasRot, R: kaliRotMat(hasRot ? kali.rot : 0), kali: true, T: kali.trans.slice() };
+    p.fixed = hp.boxFixed(p);
+    return p;
+  }
   const m2 = box.minR * box.minR, F2 = box.fixedR * box.fixedR, hasRot = Math.hypot(box.rot[0], box.rot[1], box.rot[2]) > 0.001;   // GMT's own threshold
   const p = { scale: box.scale, fold: box.fold, m2, F2, kA: F2 / m2, hasRot, R: boxRotMat(hasRot ? box.rot : [0, 0, 0]) };
   p.fixed = hp.boxFixed(p);
@@ -3156,14 +3210,68 @@ function burnDeltaJS(Z, d, neg){
   const p = Z + d, fr = Z < 0 ? neg : 1, fp = p < 0 ? neg : 1;
   return fr === fp ? fp * d : fp * p - fr * Z;
 }
+/* ════════ KALIBOX (2026-10-12) - a third formula, on the Mandelbox's kernel ════════
+   GMT's KaliBox (read: engine-gmt/formulas/KaliBox.ts):
+       z <- R z                                   a rotation by one angle about the axis (1, 1, 0)
+       z <- abs(z) + T                            the fold, and a translation
+       k  = clamp(1 / |z|², 1, 1 / MinRad2) ;  z <- k z        (GMT writes clamp(max(MinRad2 / r², MinRad2), 0, 1) and
+       z <- scale * z + c ;  dr <- dr * k * |scale| + 1         scale / MinRad2: the same factor)
+   THAT IS THE MANDELBOX'S STEP WITH ANOTHER FOLD: its sphere fold at a fixed radius of 1 and an inner radius² of
+   MinRad2, its scale, its "+ c", its derivative. So KaliBox is drawn by everything the box is drawn by (boxOn() is
+   true for both; grep THE FORMULA SEAM for what that is and what the box does not use), and its own is only:
+     the fold     abs(u) + T in the fixed-point map (hp.boxParts), in the two plain-f32 copies, and in the CPU's
+                  direct orbits; as a DELTA it is BURNING's case table at a factor of -1 (burnDeltaJS on the CPU,
+                  kaliFoldD in the shader: a three-line copy, because burnFoldD stands in the bulb's half of the
+                  kernel and reads a uniform the box's program does not have). T cancels in a delta.
+     no new row   boxP for KaliBox has a folding limit of 0, so rows 2 to 4 of the box's orbit texture (U - L and
+                  U + L, each a mantissa and its own exponent) ARE the signed coordinate the table needs, however
+                  near a plane the reference stands. Row 5 is |W|² - MinRad2 and |W|² - 1.
+     a program    the box's variant with USE_KALI as well (keys K, KT): with the fold behind that #define the
+                  Mandelbox's program is token for token the text it was (debug/scratch/r7/shader-diff.mjs).
+     its numbers  `kali`, kept apart from the box's so that each formula finds its own again.
+   MinRad2 IS HELD AT OR UNDER 1 (GMT's row runs to 2). From 1 up GMT's factor is 1 / MinRad2 everywhere: no sphere
+   fold is left, the map is abs, a shift and a scale of scale / MinRad2 - another, plainer fractal, and one the
+   box's three-region fold does not describe (it would read k = 1 outside the inner radius).
+   WHAT THE CPU STUDY MEASURED BEFORE THIS WAS BUILT (plans/deep-zoom-shell/BURNING-KALIBOX.md, section 1):
+     - GMT's preset (Scale 2.043, Julia mode) has NO INSIDE: every orbit escapes. What is drawn is the estimate's
+       level one pixel from a dust (dimension about 2.5). At Detail 1 it is a city of detail at every depth; at
+       Detail 16 the same view is grain. No rule here is keyed to that: the owner's call, a card says it.
+     - the preset's numbers with c = the point draw NOTHING (the estimate is never under 5e-2 anywhere).
+     - Scale 1.8 with c = the point has a solid that holds its shapes: `kali` starts as that set.
+     - WITH c = THE POINT THE SET IS AN OCTANT WITHOUT END: there is no whole object and no ball about it. A ray is
+       followed KALI_OPEN from the origin, a number set by hand (boxExtent). In Julia mode there is a ball: beyond
+       |z| = max((|s| |T| + |K|) / (|s| - 1), |T| + 1) the fold and the translation shorten a vector by at most
+       |T|, the sphere fold does nothing, and |z| grows every iteration (derived as the box's own, grep boxExtent).
+   THE NAVIGATION'S RAY steps by HALF the estimate on KaliBox, as the box did until 2026-10-12 (rayFreeJS): the
+   whole estimate was measured for the Mandelbox alone, and with c = the point this map stretches space unevenly
+   (widest over narrowest 10.6 in the study, the box's 1.3).
+   Pitfalls:
+   - An orbit carries its formula's record (O.box, and O.box.kali): kept across a switch it is iterated as built.
+   - This block is lifted as TEXT by the node checks: nothing in it may touch gl, api or options.
+   @invariant KaliBox's per-pixel orbit on the CPU (boxOrbitJS with the abs table, what the navigation's rays and
+   the probes' referee run) equals an exact fixed-point orbit of the same point under GMT's map as its shader
+   writes it - c = the point and Julia mode, both signs of scale, with a rotation, from outside, at 1e-8 to 1e-30,
+   and 3e-51 from an abs plane - proven by: npm run check:deep-zoom-kalibox-orbit ("kalibox twin = exact ..."
+   lines). Falsified 2026-10-12: the opposite-side case cut in boxOrbitJS -> 12 red (that file's header).
+   @assumption the rotation's matrix, MinRad2 held at 1, the two formulas' numbers kept apart and the two far
+   distances are right: that check has a line for each ("rotation: ...", "seam: ...", "far: ..."), none broken
+   on purpose. */
+const KALI_OPEN = 40;                            // KaliBox with c = the point: how far from the origin a ray is followed (by hand: there is no bound)
+/* KALIBOX's rotation as one matrix (rows): by the angle a about the axis (1, 1, 0) / sqrt 2. GMT builds the same
+   nine numbers as a mat3 and writes `p *= uKB_rot` - the vector on the LEFT, so each row here is a column there. */
+function kaliRotMat(a){
+  const s = Math.sin(a) * Math.SQRT1_2, c = Math.cos(a), h = 0.5 * (1 - c);
+  return [[h + c, h, s], [h, h + c, -s], [-s, s, c]];
+}
 /* Set the formula. params (all optional): the box's scale (|scale| held at or above 1.02: at 1 the
    orbit of every point is bounded and there is no surface), minR, fold, fixedR, rot [x, y, z] in radians;
-   for either formula, julia (true / false: JULIA MODE, grep) and c (its constant: three strings, or
+   KALIBOX's (grep) own kaliScale (held as the box's), kaliMinRad2 (1e-9 to 1), kaliTrans [x, y, z], kaliRot (radians);
+   for every formula, julia (true / false: JULIA MODE, grep) and c (its constant: three strings, or
    three numbers - setJuliaC); and burning (true / false) with burnMix (0 to 1): BURNING (grep), the bulb's.
    Returns true when anything changed. Pure state: the caller restarts the orbit and the still. */
 function applyFormula(kind, params){
-  const was = JSON.stringify([dzFormula, box, juliaOn, burnOn, burnMix]);
-  dzFormula = kind === 'mandelbox' ? 'mandelbox' : 'mandelbulb';
+  const was = JSON.stringify([dzFormula, box, kali, juliaOn, burnOn, burnMix]);
+  dzFormula = kind === 'mandelbox' || kind === 'kalibox' ? kind : 'mandelbulb';
   const q = params || {}, num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
   if (typeof q.julia === 'boolean') juliaOn = q.julia;
   if (typeof q.burning === 'boolean') burnOn = q.burning;
@@ -3175,15 +3283,25 @@ function applyFormula(kind, params){
   box.fold = Math.max(1e-3, Math.min(8, num(q.fold, box.fold)));
   box.fixedR = Math.max(box.minR, Math.min(8, num(q.fixedR, box.fixedR)));
   if (Array.isArray(q.rot)) box.rot = [0, 1, 2].map(i => num(q.rot[i], 0));
-  if (JSON.stringify([dzFormula, box, juliaOn, burnOn, burnMix]) === was && !newC) return false;
+  let ks = num(q.kaliScale, kali.scale); if (Math.abs(ks) < 1.02) ks = ks < 0 ? -1.02 : 1.02;
+  kali.scale = Math.max(-8, Math.min(8, ks));
+  kali.minRad2 = Math.max(1e-9, Math.min(1, num(q.kaliMinRad2, kali.minRad2)));   // from 1 up GMT's map has no sphere fold left (grep KALIBOX)
+  if (Array.isArray(q.kaliTrans)) kali.trans = [0, 1, 2].map(i => Math.max(-8, Math.min(8, num(q.kaliTrans[i], 0))));
+  kali.rot = num(q.kaliRot, kali.rot);
+  if (JSON.stringify([dzFormula, box, kali, juliaOn, burnOn, burnMix]) === was && !newC) return false;
   boxP = boxDerive(); burnDerive(); formulaStamp++;
   return true;
 }
 /* boxExtent: a radius about the origin that holds the whole box. The set lies in the cube
    |x| <= 2 L (|s| + 1) / (|s| - 1) for a positive scale (the classic bound; for a negative scale it is smaller).
    In JULIA MODE (grep) the set is another and can be larger: the ball derived there, and a tenth more.
+   KALIBOX (grep) has a bound of its own in Julia mode and none with the point added: KALI_OPEN, by hand.
    boxFar: the distance from the CAMERA beyond which a ray has left the box for good. */
 function boxExtent(){
+  if (kaliOn()) {
+    const aS = Math.abs(kali.scale), t = Math.hypot(kali.trans[0], kali.trans[1], kali.trans[2]);
+    return juliaOn ? 1.1 * Math.max((aS * t + Math.hypot(juliaF[0], juliaF[1], juliaF[2])) / (aS - 1), t + 1) : KALI_OPEN;
+  }
   const aS = Math.abs(box.scale);
   if (juliaOn) return 1.1 * (2 * Math.sqrt(3) * box.fold * aS + Math.hypot(juliaF[0], juliaF[1], juliaF[2])) / (aS - 1);
   return 1.8 * (2 * box.fold * (aS + 1) / (aS - 1) + box.fixedR);
@@ -3579,7 +3697,9 @@ function boxOrbitJS(O, dc, maxIter, fixed){
   let zx = V0[0] + dx, zy = V0[1] + dy, zz = V0[2] + dz;
   while (it < maxIter) {
     if (R) { const a = R[0][0]*dx + R[0][1]*dy + R[0][2]*dz, b = R[1][0]*dx + R[1][1]*dy + R[1][2]*dz, c = R[2][0]*dx + R[2][1]*dy + R[2][2]*dz; dx = a; dy = b; dz = c; }
-    const ex = boxFoldJS(GH[0][m], GL[0][m], dx, L2), ey = boxFoldJS(GH[1][m], GL[1][m], dy, L2), ez = boxFoldJS(GH[2][m], GL[2][m], dz, L2);
+    let ex, ey, ez;
+    if (p.kali) { ex = burnDeltaJS(GH[0][m], dx, -1); ey = burnDeltaJS(GH[1][m], dy, -1); ez = burnDeltaJS(GH[2][m], dz, -1); }   // KALIBOX (grep): abs as a delta, by BURNING's table; GH is the signed coordinate (L = 0)
+    else { ex = boxFoldJS(GH[0][m], GL[0][m], dx, L2); ey = boxFoldJS(GH[1][m], GL[1][m], dy, L2); ez = boxFoldJS(GH[2][m], GL[2][m], dz, L2); }
     const W = O.Wf[m], r2 = O.R2[m], gm = O.GM[m], gF = O.GF[m], reg = O.REG[m];
     const q = 2 * (W[0]*ex + W[1]*ey + W[2]*ez) + ex*ex + ey*ey + ez*ez, r2p = r2 + q, pm = gm + q, pF = gF + q;
     const pr = pm < 0 ? 0 : pF < 0 ? 1 : 2, kp = pr === 0 ? kA : pr === 1 ? F2 / r2p : 1;
@@ -3795,7 +3915,7 @@ function rayFreeJS(O, rd, maxIter, tol, maxSteps, t0, prev0){
     if(t>0 && (o.de<tol*t || o.ray<tol*0.125*t)) return { t, prev:t, kind:1, steps };
     if(t>far) return { t, prev:t, kind:0, steps };
     tPrev=t;
-    t+=Math.max(Math.min(o.ray,8*o.de)*(O.box?1:0.5), t*1e-7);   // the bulb: half; the box: the whole (grep THE MANDELBOX STEPS BY THE WHOLE ESTIMATE)
+    t+=Math.max(Math.min(o.ray,8*o.de)*(O.box&&!O.box.kali?1:0.5), t*1e-7);   // the bulb: half; the box: the whole (grep THE MANDELBOX STEPS BY THE WHOLE ESTIMATE); KALIBOX (grep): half
   }
   return { t, prev:tPrev, kind:0, steps };
 }
@@ -4166,7 +4286,8 @@ function boxDirectF64(pos, N){
   const p = boxP, R = p.hasRot ? p.R : null, aS = Math.abs(p.scale), c = juliaOn ? juliaF : pos;   // JULIA MODE (grep)
   let z = pos.slice(), dr = 1, r2 = 0, escaped = false, it = 0, trap2 = Infinity;
   for (let i = 0; i < N; i++) {
-    const u = R ? R.map(r => r[0]*z[0] + r[1]*z[1] + r[2]*z[2]) : z, w = u.map(x => Math.max(-p.fold, Math.min(p.fold, x)) * 2 - x);
+    const u = R ? R.map(r => r[0]*z[0] + r[1]*z[1] + r[2]*z[2]) : z;
+    const w = p.kali ? u.map((x, j) => Math.abs(x) + p.T[j]) : u.map(x => Math.max(-p.fold, Math.min(p.fold, x)) * 2 - x);   // KALIBOX (grep): its fold and translation
     const k = Math.max(1, Math.min(p.kA, p.F2 / Math.max(w[0]*w[0] + w[1]*w[1] + w[2]*w[2], 1e-300)));
     z = w.map((x, j) => x * k * p.scale + c[j]); dr = dr * k * aS + 1; it++;
     r2 = z[0]*z[0] + z[1]*z[1] + z[2]*z[2];
@@ -4249,7 +4370,7 @@ function deCPUesc(px,py,pz, N){
    came out 29 units wide for a set of 12 (seen 2026-10-12).
    A rough answer on purpose: it places a camera, it draws nothing. */
 function wholeObjectJS(){
-  const G = 20, N = boxOn() ? Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(box.scale))) + 12) : 12;
+  const G = 20, N = boxOn() ? Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(boxP.scale))) + 12) : 12;
   const R = boxOn() ? boxExtent() : 2.2;
   let lo = [-R, -R, -R], hi = [R, R, R], found = false;
   for (let pass = 0; pass < 3; pass++) {
@@ -4796,9 +4917,10 @@ api.setStepRelax = (r)=>{ stepRelax = Math.max(0, +r); accumReset = true; };  //
 api.setCapRelax = (m)=>{ capRelax = Math.max(1, +m); accumReset = true; };    // QUALITY LEVER: scale deep res cap (1 = shipped; 1e6 = uncapped/full-res deep)
 api.setPower = (n)=>{ nPower=Math.max(2,Math.min(16,n|0)); cam.power=nPower; binomN=binomPad(nPower); binomN1=binomPad(nPower-1); orbitDirty=true; };
 api.setPhase = (th,ph)=>{ phaseTheta=th||0; phasePhi=ph||0; orbitDirty=true; };
-/* THE FORMULA SEAM (grep; added 2026-10-09). kind 'mandelbulb' (the default, the page) or 'mandelbox'; params, the box
+/* THE FORMULA SEAM (grep; added 2026-10-09). kind 'mandelbulb' (the default, the page), 'mandelbox' or 'kalibox'
+   (KALIBOX, grep: "the box" below is either of the two); params, the box
    only, each optional and kept from call to call: scale (negative allowed; |scale| held at or above 1.02), minR, fold,
-   fixedR, rot [x, y, z] radians (applyFormula has the limits). The camera, the look and every setting stay; the
+   fixedR, rot [x, y, z] radians, and KaliBox's own four (applyFormula has the names and the limits). The camera, the look and every setting stay; the
    reference orbit and the still restart. The first time the box is selected its deep variant starts to build in
    the background - the box's f32 baseline is drawn until it is there (telemetry `ready` is false meanwhile, and
    formulaState says 'building'). The iteration count is only ever RAISED here and by the box's rule (grep
@@ -4810,13 +4932,13 @@ function setFormulaNow(kind, params){
   if (boxOn()) { kickBoxVariantAsync();
     /* the least count that draws the box at all: what a point at the edge of it needs to pass the escape radius
        (|z| grows by |scale| an iteration out there), and 12 more. The bulb's 14 would draw a featureless lump. */
-    cam.iters = Math.max(cam.iters, Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(box.scale))) + 12)); }
+    cam.iters = Math.max(cam.iters, Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(boxP.scale))) + 12)); }   // (boxP.scale: the scale of whichever of the two is selected)
   else cam.iters = Math.min(cam.iters, itersMax());
   if (burnActive()) kickBurnVariantAsync();        // BURNING (grep): its variant builds in the background from the first time it is on
   orbitDirty = true; accumReset = true; snapDist = true;
 }
 api.setFormula = setFormulaNow;
-api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), julia: juliaOn, c: juliaHP.map(String), cNum: juliaF.slice(), burning: burnOn, burnMix });   // cNum: the constant as doubles, for a host's number rows; burning, burnMix: BURNING (grep), the bulb's, kept while the box is drawn
+api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), kaliScale: kali.scale, kaliMinRad2: kali.minRad2, kaliTrans: kali.trans.slice(), kaliRot: kali.rot, julia: juliaOn, c: juliaHP.map(String), cNum: juliaF.slice(), burning: burnOn, burnMix });   // cNum: the constant as doubles, for a host's number rows; burning, burnMix: BURNING (grep), the bulb's, kept while the box is drawn
 api.formulaState = ()=>{ if (!boxOn() && !burnActive()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
   const v = variants[pictureKey()]; return v ? 'on' : v === null ? 'failed' : 'building'; };   // the Mandelbox's variant, or BURNING's (grep)
 // Shell setters (not in the historical page, added 2026-10-08): what the page's `iters` and
@@ -5044,7 +5166,7 @@ api.export = async function(longEdge, samples, tile){
     const r = await renderFrameToBlob(longEdge, samples, tile, 'exporting');
     if (r.error) { openPanel(renderEl); rstat(r.error); return r; }
     if (r.cancelled) return { cancelled:true };
-    dlBlob(r.blob, `${boxOn() ? `mandelbox_s${+box.scale.toFixed(3)}` : `mandelbulb_n${nPower}`}_d${smoothedDist.toExponential(0)}_${r.W}x${r.H}.png`);   // the formula and its one number: the bulb's power, the box's scale
+    dlBlob(r.blob, `${boxOn() ? `${dzFormula}_s${+boxP.scale.toFixed(3)}` : `mandelbulb_n${nPower}`}_d${smoothedDist.toExponential(0)}_${r.W}x${r.H}.png`);   // the formula and its one number: the bulb's power, the box's scale
     return { W:r.W, H:r.H };
   } finally { exporting = false; cancelRender = false; if (loading) { loading.style.display='none'; loading.style.background=''; } }
 };
@@ -5735,7 +5857,7 @@ api.dz = {
   }),
 };
 
-if (options.formula === 'mandelbox' || options.formulaParams) setFormulaNow(options.formula, options.formulaParams);   // THE FORMULA SEAM: the create option
+if (options.formula === 'mandelbox' || options.formula === 'kalibox' || options.formulaParams) setFormulaNow(options.formula, options.formulaParams);   // THE FORMULA SEAM: the create option
 dzScheduleFrame();
 /* ════════ END ported page script ════════ */
 const instance = {
