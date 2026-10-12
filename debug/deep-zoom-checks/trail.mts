@@ -30,6 +30,11 @@
  *            frame run before it is taken and the renderer's iteration rule held off meanwhile; the camera is put back
  *            to the digit; the trail, the route and the undo stack are told nothing; a route cut again draws only the
  *            samples that are new. NOT FALSIFIED: green lines only.
+ *            A ROUTE THAT ARRIVES with a loaded scene (`setSequence`: five keyframes under other ids) is owed its
+ *            pictures and gets them from the same pass: not while a formula's shader builds, the camera and the undo
+ *            stack as they were, each keyframe tried once. FALSIFIED 2026-10-12, route.ts, the `owePictures` listener on
+ *            the route's track taken out of `installRoute` -> 4 red: "picture: a route that arrives with a loaded scene
+ *            ..." (0 owed), the two lines after it, and "a keyframe whose picture could not be drawn ..." (0 of 5 pictured).
  *   follow   an iteration key follows its keyframe on the timeline: moved, deleted, across another
  *
  * MEASURED HERE, 2026-10-11 (this machine, node; the two "cost:" lines the check prints):
@@ -442,6 +447,10 @@ const calls: DzView[] = [];
 let stepped = 0, sinceSet = 0;
 /** The developer lever that says how the renderer draws, and every value `dzFormula.autoIterations` was sent with. */
 let drawMode: 'deep' | 'auto' = 'deep';
+/** What `host.building()` answers: the shader of a formula a loaded scene brought, while it builds. */
+let building: 'mandelbox' | null = null;
+/** When set, `host.thumbnail()` answers '' for a view at this camera: a picture that cannot be drawn. */
+let noPictureAt = '';
 const autoSent: unknown[] = [];
 const viewSetListeners = new Set<() => void>();
 let at: V3 = spiral(0);
@@ -460,12 +469,13 @@ const host = {
     },
     setParams: (patch: DzParams): void => { if ('dzFormula.autoIterations' in patch) autoSent.push(patch['dzFormula.autoIterations']); },
     diagnostics: () => ({ levers: { mode: drawMode } }),
+    building: () => building,
     orientation: () => ({ yaw: view.yaw, pitch: view.pitch, roll: view.roll ?? 0 }),
     telemetry: () => ({ depth: at[2], iters: view.iters, ready: true, error: '', mode: 'deep' }),
     sense: () => ({ near: at[2], second: at[2], hits: 7, open: 0, inside: false, marched: true }),
     step: (): void => { stepped++; sinceSet++; },
     // What it is a picture of: the camera, the count, and how many frames were run since the view was set.
-    thumbnail: () => `${view.cam.join()} | ${view.yaw} ${view.pitch} | ${view.iters} | ${sinceSet}`,
+    thumbnail: () => (view.cam.join() === noPictureAt ? '' : `${view.cam.join()} | ${view.yaw} ${view.pitch} | ${view.iters} | ${sinceSet}`),
     estimateAtPoint: () => 1,
     on: (type: string, fn: () => void) => { if (type === 'viewSet') viewSetListeners.add(fn); return () => { viewSetListeners.delete(fn); }; },
 } as unknown as DeepZoomHost;
@@ -615,6 +625,47 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
     setRouteSmoothing(ROUTE_SMOOTHING.initial);
     keys = routeKeys();
     check(keys.every((k) => pictures()[k.id] === own(k)), 'picture: and turned back, every keyframe has its picture at once');
+
+    // A route that ARRIVES (2026-10-12): a scene loaded over this one. Five keyframes of the route as a scene's text
+    // holds them, under other key ids: none has a picture, and none came from a trail. `setSequence` is how a loaded
+    // scene's timeline is applied (utils/PresetLogic.ts), and it is the load's own undo step.
+    const cutSequence = anim().sequence, cutUndo = anim().undoStack, cutRedo = anim().redoStack;
+    const sceneWith = (tag: string): typeof cutSequence => {
+        const scene = JSON.parse(JSON.stringify(cutSequence)) as typeof cutSequence;
+        for (const id of [ROUTE_TRACK, ROUTE_ITERATIONS_TRACK]) scene.tracks[id].keyframes = scene.tracks[id].keyframes.slice(0, 5).map((k, i) => ({ ...k, id: `${tag}-${id}-${i}` }));
+        return scene;
+    };
+    calls.length = 0;
+    stepped = 0;
+    building = 'mandelbox';                          // the scene brought another formula: its shader is still building
+    anim().setSequence(sceneWith('loaded'));
+    const loaded = routeKeys(), stepsLoaded = anim().undoStack.length, stoodLoaded = JSON.stringify(host.getView());
+    const waiting = takeOwedPictures();
+    check(loaded.length === 5 && routeHandSet() && waiting === 5 && calls.length === 0 && loaded.every((k) => !pictures()[k.id]),
+        'picture: a route that arrives with a loaded scene is owed its pictures, and none is taken while the shader of the scene\'s formula still builds', `${loaded.length} keyframes, ${waiting} owed, ${calls.length} setView`);
+    building = null;
+    const leftLoaded = takeOwedPictures();
+    check(leftLoaded === 0 && loaded.every((k) => pictures()[k.id] === own(k)),
+        'picture: then each of its keyframes gets its picture: of its own view, with the count keyed there', `${leftLoaded} owed, ${loaded.filter((k) => pictures()[k.id] !== own(k)).length} of ${loaded.length} wrong`);
+    check(JSON.stringify(host.getView()) === stoodLoaded && calls.length === loaded.length + 1 && anim().undoStack.length === stepsLoaded && trailSamples().length === samples,
+        'picture: and the camera is the very view it was, with no undo step and no trail sample added', `${calls.length} setView, ${anim().undoStack.length - stepsLoaded} steps, back ${JSON.stringify(host.getView()) === stoodLoaded}`);
+    calls.length = 0;
+    check(takeOwedPictures() === 0 && calls.length === 0, 'picture: asked again, nothing is set: they are taken once');
+    // Once, also for a picture that cannot be drawn: the keyframe keeps its number, and a later change of the track does not try it again.
+    const second = sceneWith('second');
+    noPictureAt = (second.tracks[ROUTE_TRACK].keyframes[2].payload as RoutePayload).view.cam.join();
+    anim().setSequence(second);
+    takeOwedPictures();
+    const blank = routeKeys()[2], last = routeKeys()[4];
+    calls.length = 0;
+    anim().updateKeyframes([{ trackId: ROUTE_TRACK, keyId: last.id, patch: { frame: last.frame + 3 } }]);      // any change of the route's track
+    const tried = takeOwedPictures();
+    noPictureAt = '';
+    check(!pictures()[blank.id] && routeKeys().filter((k) => !!pictures()[k.id]).length === 4 && tried === 0 && calls.length === 0,
+        'picture: a keyframe whose picture could not be drawn keeps its number, and the next change of the track does not try it again', `${routeKeys().filter((k) => !!pictures()[k.id]).length} of 5 pictured, ${tried} owed, ${calls.length} setView`);
+    // The cut route again, as it was, for the lines below.
+    useAnimationStore.setState({ sequence: cutSequence, undoStack: cutUndo, redoStack: cutRedo });
+    check(routeKeys().length === keys.length && routeKeys().every((k, i) => k.id === keys[i].id) && !routeHandSet(), 'picture: (the cut route is put back for the lines below)');
 }
 
 // ── time (the two buttons) ───────────────────────────────────────────────────────────────────────

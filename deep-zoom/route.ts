@@ -138,11 +138,15 @@
  *     keyframes half way round the bulb, the middle three deleted: one leg of 125 frames where K
  *     would time 81, 0.25 to 0.44 decades a second, 0.61 from the bulb's centre, shown in red.
  *   - `host.thumbnail` restarts the still. It is called when a keyframe is set, and once for each
- *     keyframe of a route cut from the trail (PICTURES below). Never on a timer that goes on.
- *   - PICTURES OF A CUT ROUTE (`takeOwedPictures`). A keyframe set with K is pictured from the
- *     screen. A keyframe cut from the trail was never on screen as a keyframe, so a moment after
- *     the cut the camera is put on each in turn and its picture taken, a task at a time
- *     (`PICTURE_TASK_MS`), until none is owed; then nothing runs. WITHIN ONE TASK the camera goes
+ *     keyframe that was not set from the screen (PICTURES below). Never on a timer that goes on.
+ *   - PICTURES OF KEYFRAMES NOT SET FROM THE SCREEN (`takeOwedPictures`). A keyframe set with K is
+ *     pictured from the screen. A keyframe cut from the trail was never on screen as a keyframe,
+ *     and neither was one that ARRIVED: with a loaded scene (File > Load Scene, a dropped file), a
+ *     restored session, an undo. So a moment after the cut, or after the route's track changed, or
+ *     when the renderer becomes ready, the camera is put on each in turn and its picture taken, a
+ *     task at a time (`PICTURE_TASK_MS`), until none is owed; then nothing runs. A KEYFRAME IS
+ *     TRIED ONCE (`asked`): one whose picture cannot be drawn keeps its number, and is not tried
+ *     again when the track next changes. WITHIN ONE TASK the camera goes
  *     to a keyframe, the renderer is stepped BY HAND (`host.step`: its picture of a view needs
  *     the reference orbit and the depth of that view, which only a frame works out - with no
  *     frame run the picture is of the place the camera came from, seen 2026-10-12), the picture
@@ -155,9 +159,15 @@
  *     WHAT IT COSTS: the still starts again once the last picture is taken, as it does after K,
  *     and the page is slow while it runs (a keyframe is two frames of the renderer's work and a
  *     96-pixel one; what was measured is in the PICTURES @assumption below). It waits while the
- *     timeline plays, the hands fly, a dive flies or a route renders. A route cut again from the
- *     same trail (the smoothing) keeps the pictures of the samples it had (`pictured`). A
- *     keyframe from a loaded scene still shows its number.
+ *     timeline plays, the hands fly, a dive flies or a route renders, and while a formula's
+ *     shader is still building (a loaded scene may bring another formula: until its shader is
+ *     there the renderer draws the plain picture). A route cut again from the same trail (the
+ *     smoothing) keeps the pictures of the samples it had (`pictured`).
+ *     A SCENE THAT IS BEING APPLIED IS NEVER PICTURED HALF WAY: the scene's keyframes arrive in
+ *     the middle of the load, before its view, and all that happens then is that they are noted
+ *     as owed; the pictures are a later task. Before a renderer is ready nothing is owed at all
+ *     (the list is dropped): they are asked for again when it is, which is after the scene's
+ *     parked view has been applied.
  *   - The solid check asks the renderer for one reference orbit a sample (milliseconds at depth):
  *     it runs a moment after a keyframe changes, a leg a task, never per frame, and it waits while
  *     the hands fly or the timeline plays (a cut route has up to 300 legs). It reads the
@@ -282,6 +292,26 @@
  *   the camera was the same view object for object afterwards, and at every animation frame in
  *   between; the still went from 64 samples to 0 and was at 64 again 1.2 to 1.4 s later. A
  *   keyframe costs two live frames and one 96-pixel draw: on a larger frame, more.
+ * @invariant Keyframes that ARRIVE with no picture (a loaded scene's: `setSequence`) are owed one
+ *   from the moment the route's track changes, and get it from the same pass, the camera and the
+ *   undo stack left as they were - proven by: npm run check:deep-zoom-trail ("picture: a route that
+ *   arrives with a loaded scene is owed its pictures ...", "picture: then each of its keyframes
+ *   gets its picture ...", "picture: and the camera is the very view it was ..."). Falsified
+ *   2026-10-12: the `owePictures` listener on the route's track taken out of `installRoute` -> 4
+ *   red (0 owed, 5 of 5 without a picture).
+ * @assumption The rest of that: nothing is taken while a formula's shader builds, a keyframe is
+ *   tried once also when its picture cannot be drawn, and what has a picture by now stops the
+ *   wait - green lines in the same check, none broken on its own. That a route which was there
+ *   BEFORE the renderer (a restored session) is asked for at `ready` has no node line: the checks'
+ *   renderer is ready from the start. IN THE REAL APP, once, 2026-10-12 (headless Chrome on the
+ *   GPU, 1440 x 900; debug/scratch/small-three/app-loaded-pictures.mts, git-ignored), a scene of
+ *   five keyframes from the start view down to 1e-8: picked in File > Load Scene in a fresh page,
+ *   all five pictures 0.68 s after the file was picked, the camera the scene's view to the digit,
+ *   no step on either undo stack beyond the load's own, the still whole again 1.3 s later and no
+ *   view set after that; restored with a session, the keyframes were there 0.22 s into the page,
+ *   the renderer ready at 0.36 s and the five pictures at 0.90 s, none before ready. WHERE A
+ *   FRAME IS DEAR IT IS SLOW: the same five keyed along a dive from the boot view (it grazes the
+ *   bulb; a frame there is 0.2 to 0.8 s) took 8.0 s, the page stalling a second or two at a time.
  * @invariant A keyed count arrives whole up to the renderer's ceiling for the formula in force: 400
  *   on the Mandelbulb (the ray march's own, `RAY_ITER_MAX`), 500 on the Mandelbox - `api.dz.setView`
  *   and `api.setIters` hold a count under `itersMax()` and nothing lower - proven by: npm run
@@ -1279,8 +1309,10 @@ function moveKeyframes(r: Built, was: readonly number[], now: readonly number[])
 
 // ── pictures of keyframes that were not set from the screen ──────────────────────────────────────
 
-/** The keyframes of the last cut that have no picture yet, in route order (PICTURES in the header). */
+/** The keyframes that have no picture yet and are to get one, in route order (PICTURES in the header). */
 let owed: string[] = [];
+/** The keyframes a picture was tried for. A keyframe is tried once: one that cannot be drawn keeps its number. */
+const asked = new Set<string>();
 /** By trail: the picture taken at a sample. A route cut again from the same trail draws only the samples that are new. */
 const pictured = new WeakMap<readonly TrailSample[], Map<number, string>>();
 
@@ -1295,20 +1327,40 @@ function keepPictures(add: Record<string, string>): void {
 }
 
 /**
- * Take the pictures a cut route is owed, for as long as `budgetMs`: one keyframe at least when one
+ * Every keyframe that has no picture, and was never tried for one, is owed one from here on: the
+ * keyframes of a loaded scene, of a restored session, of an undo that brings back ones never
+ * pictured. Called when the route's track changes and when a renderer becomes ready
+ * (`installRoute`). It only NOTES them: the pictures are taken a moment later by the pass a cut
+ * route's are taken by, under the same holds. Nothing owed, nothing scheduled.
+ */
+function owePictures(): void {
+    const have = useRoute.getState().thumbnails, waiting = new Set(owed);
+    const more = route().keys.filter((k) => !have[k.id] && !asked.has(k.id) && !waiting.has(k.id)).map((k) => k.id);
+    if (more.length === 0) return;
+    owed.push(...more);
+    picturesSoon();
+}
+
+/**
+ * Take the pictures that are owed, for as long as `budgetMs`: one keyframe at least when one
  * is owed. Each is the view shown at its keyframe's frame, drawn with the count keyed there (the
  * renderer's own iteration rule held off meanwhile, as when the route drives): the camera is PUT
  * there, a frame is run, the picture is taken - and before this returns the camera is put back
  * where it stood, the very view it was, and a frame of it is run. So no frame of a keyframe is
  * ever shown, and nothing else sees the camera anywhere but where the user left it. Nothing is
  * done, and nothing is dropped, while something else has the camera: a render, a playing timeline,
- * a flight, a dive. Returns how many are still owed.
+ * a flight, a dive - or while a formula's shader is still building. Returns how many are still owed.
  */
 export function takeOwedPictures(budgetMs = Infinity): number {
     const host = getHost(), state = host?.bootParams() ? host.telemetry() : null;
-    if (!host || !state || state.error) { owed = []; return 0; }     // no renderer to draw them: they keep their numbers
-    if (owed.length === 0 || !state.ready || routeRendering() || anim().isPlaying || isFlying() || diving > 0) return owed.length;
-    const r = route(), here = host.getView(), held = autoIterationsHeld(), began = performance.now(), taken: Record<string, string> = {};
+    if (!host || !state || state.error) { owed = []; return 0; }     // no renderer to draw them: asked for again when one is ready
+    // What is not owed any more goes first - a keyframe that has its picture by now (K's own, from the screen) or is
+    // gone - so that the wait below ends when nothing is left to wait for.
+    const r = route(), pictures = useRoute.getState().thumbnails, there = new Set(r.keys.map((k) => k.id));
+    owed = owed.filter((id) => there.has(id) && !pictures[id]);
+    if (owed.length === 0 || !state.ready || routeRendering() || anim().isPlaying || isFlying() || diving > 0 || host.building()) return owed.length;
+    flushHostSync();                                                 // what a loaded scene wrote and the sync still holds, before the look is read
+    const here = host.getView(), held = autoIterationsHeld(), began = performance.now(), taken: Record<string, string> = {};
     const { roll: _roll, ...look } = here;                           // every look value as the renderer has it: only the camera differs
     // One frame works out the reference orbit and the depth of a view that was set. The shell's renderer draws
     // every depth one way ('deep'); under the developer lever's other two, the frame after a jump is still drawn
@@ -1321,6 +1373,7 @@ export function takeOwedPictures(budgetMs = Infinity): number {
         while (owed.length > 0 && (!away || performance.now() - began < budgetMs)) {
             const id = owed.shift() as string, key = r.keys.find((k) => k.id === id);
             if (!key || useRoute.getState().thumbnails[id]) continue;   // gone (an undo, a newer edit), or it has one
+            asked.add(id);                                           // tried from here on, whatever comes of it
             const view = routeShownAt(key.frame) ?? key.view, count = itersAt(r, key.frame);
             holdAutoIterations(count > 0);                           // the rule only raises a count: a picture would depend on where the camera stood
             host.setView({ ...look, cam: view.cam, yaw: view.yaw, pitch: view.pitch, ...(view.roll ? { roll: view.roll } : {}), iters: count || here.iters });
@@ -1338,6 +1391,7 @@ export function takeOwedPictures(budgetMs = Infinity): number {
         picturing = false;
     }
     keepPictures(taken);
+    for (const id of asked) { if (asked.size <= MADE_KEPT) break; asked.delete(id); }
     return owed.length;
 }
 
@@ -1433,13 +1487,18 @@ export function installRoute(): void {
             takeCamera();
             bump();
         });
-        // Ready: the view the renderer starts with is where a trail begins.
-        void host.ready.then(() => { if (getHost() === host) { trailViewSet(); checkLegsSoon(); } }, () => undefined);
+        // Ready: the view the renderer starts with is where a trail begins. And a route that was there before the
+        // renderer (a restored session, a scene loaded while the shader built) gets its pictures now: a parked view
+        // has been applied by the time `ready` is heard.
+        void host.ready.then(() => { if (getHost() === host) { trailViewSet(); checkLegsSoon(); owePictures(); } }, () => undefined);
     };
     subscribeHost(adopt);
     adopt(getHost());
 
     useAnimationStore.subscribe((s) => s.sequence.tracks[ROUTE_TRACK], checkLegsSoon);
+    // Keyframes that arrived with no picture (a loaded scene, an undo) are owed one. One set with K is noted too,
+    // for the moment before its picture is taken from the screen; the pass then finds it has one and sets nothing.
+    useAnimationStore.subscribe((s) => s.sequence.tracks[ROUTE_TRACK], owePictures);
     useAnimationStore.subscribe((s) => s.sequence.tracks[ROUTE_ITERATIONS_TRACK], checkLegsSoon);
 
     // An iteration key stays with its keyframe (PITFALLS). `follows`: which iteration key went with
