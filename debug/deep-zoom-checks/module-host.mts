@@ -83,6 +83,9 @@
  *     inline width / height written on the canvas -> 1: "mount: the canvas is taken out of the flow ..."
  *     the pointerlockchange listener left on -> 2: "dispose: the pointerlockchange listener is
  *       removed", "dispose: no event and no store write after dispose"
+ *   parked (2026-10-12, the one break of that day)
+ *     `viewParked` answering false always -> 2: "views: the host says a view is parked from the
+ *       moment one is ...", "views: a view is parked for as long as the renderer builds ..."
  *   boot
  *     the snapshot taken after the parked view -> 1: "boot: the snapshot is the module's settings ..."
  *     not frozen -> 1: "boot: bootParams is frozen ..."; answering before ready -> 3: "boot:
@@ -551,6 +554,11 @@ console.log('[3] boot      ready, bootParams, compile, error');
     host.on('compile', (e) => { compile.push(`${e.what}:${e.state}`); if (e.what === 'variant') variants.push(`${e.variant}:${e.state}`); });
     check(host.bootParams() === null, 'boot: bootParams is null before the first step');
     const parked = view(CAM_C, { power: 5 });
+    const nothingParked = host.viewParked();
+    host.setPendingView(view(CAM_B));
+    const oneParked = host.viewParked();
+    host.setPendingView(null);
+    check(!nothingParked && oneParked && !host.viewParked(), 'views: the host says a view is parked from the moment one is, and no longer once the slot is emptied');
     host.setPendingView(view(CAM_B));
     host.setPendingView(parked);   // one slot: the later call replaces the first
     // The module since 2026-10-11: the deep shader IS the ray march's program, building from create.
@@ -558,6 +566,7 @@ console.log('[3] boot      ready, bootParams, compile, error');
     host.step(0);
     check(host.bootParams() === null && rig.count('setView') === 0 && compile.join() === 'variant:compiling,deep:compiling' && host.building() === 'rayMarch',
         'boot: while the deep shader - the ray march\'s program - compiles, bootParams stays null, the parked view waits, compile says compiling under both names', compile.join());
+    const parkedWhileBuilding = host.viewParked();
     rig.state.settings.detail = 3;
     rig.state.ready = true;
     rig.state.rayState = 'on';
@@ -570,6 +579,7 @@ console.log('[3] boot      ready, bootParams, compile, error');
     const applied = rig.calls.setView?.[0]?.[0] as DzView | undefined;
     check(rig.count('setView') === 1 && applied === parked && sameCam(applied?.cam, CAM_C),
         'views: a parked view reaches the module at ready, the last one parked, byte-identical');
+    check(parkedWhileBuilding && !host.viewParked(), 'views: a view is parked for as long as the renderer builds, and none is once it has been applied at ready');
     check(await stateOf(host.ready) === 'resolved' && compile.join() === 'variant:compiling,deep:compiling,variant:ready,deep:ready' && host.building() === null,
         'boot: ready resolves and compile says ready, under both names', compile.join());
     rig.state.settings.detail = 9;
@@ -578,7 +588,7 @@ console.log('[3] boot      ready, bootParams, compile, error');
     check(params.detail === 9 && params !== host.getParams() && params.lookMode === 1 && params.land === false,
         'boot: getParams returns the module\'s settings now, under the module\'s keys, a new object each call');
     host.setPendingView(view(CAM_A));
-    check(rig.count('setView') === 2 && sameCam((rig.calls.setView[1][0] as DzView).cam, CAM_A),
+    check(rig.count('setView') === 2 && sameCam((rig.calls.setView[1][0] as DzView).cam, CAM_A) && !host.viewParked(),
         'views: a view parked after ready is applied at once, byte-identical');
     run(host, 400, 2000, 200);
     check(compile.length === 4, 'boot: compile is said once per state', compile.join());

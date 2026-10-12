@@ -63,11 +63,14 @@
  *   read by rays on the CPU 8 times a second, so it is there before any deep program is), against
  *   the row of the program that is being built (the host's `compile` events, as the top bar's chip
  *   hears them). No reading yet counts as deep.
- *   A VIEW THAT WAITS FOR READY (a share link, a scene: `presetFields.ts` parks it) HAS NO TEST OF
- *   ITS OWN. It waits for the bulb's program with the camera still at the start view, so since
- *   2026-10-11 the notice over it is the SMALL line, over the start view's picture, and the
- *   picture jumps to the view that was asked for at ready. (Until then the bulb's notice was the
- *   card at any view, which covered that wait.)
+ *   A VIEW THAT WAITS FOR READY IS ALWAYS THE LARGE CARD (2026-10-12). A share link, a loaded scene
+ *   or a restored session hands its view over before the renderer can show it: it is parked
+ *   (`presetFields.ts`, the host's `setPendingView`) and applied at ready. Until then the camera
+ *   stands at the START view, whose plain picture is a true one - of the start view, which is not
+ *   the place that was asked for. From 2026-10-11 to that day the notice over it was the small
+ *   line, over the start view's picture undimmed, and the picture jumped to the place at ready.
+ *   Now the host is asked (`viewParked()`), and while a view is parked the notice is the card,
+ *   the picture dimmed under it, whatever the depth shown. The card's words are the same.
  *
  * NOT BEFORE `DZ_NOTICE_AFTER_MS`. With the program still held by the browser (a later visit in
  * the same browser session) `ready` comes one or two telemetry samples after the first frame (0.09
@@ -103,6 +106,15 @@
  *   plain-picture.mts, plain-by-depth.mts, shape-like.mjs, box-plain.mts, notice-shots.mts). No
  *   standing check measures a plain picture, so none would notice the bulb's baseline back at
  *   its old hit level: the start view would be speckle again, under a small line.
+ * @assumption While a view is parked the notice is the LARGE card at any depth (A VIEW THAT WAITS
+ *   FOR READY above). The host's side has a standing check (`viewParked`: the `@invariant` in
+ *   host/moduleHost.ts); that THIS component asks it has none - the smoke's notice step parks no
+ *   view. Seen in the app once, 2026-10-12, Chrome on the real GPU, the program's build held for
+ *   4 s as the 2026-10-11 tools held it (debug/scratch/small-three/app-parked-card.mts,
+ *   git-ignored): a share link to a place at 1.75e-7 opened in a new page showed the card, the
+ *   picture dimmed, from 1.0 s until ready at 5.4 s, the camera at the start view all that while,
+ *   and at ready the card was gone and the camera was the link's place; the same page opened
+ *   with no link showed the small line, undimmed, as before.
  * @assumption `DZ_NOTICE_AFTER_MS` hides the notice on a cached start. Measured on the dev server
  *   and in the production build that day (warm-flash.mts, same folder); no standing check opens a
  *   page twice.
@@ -231,6 +243,11 @@ export const BootCard: React.FC<{ failure: DzBootFailure | null }> = ({ failure 
     // THE TWO SIZES: is the plain picture under the notice a true picture of this view? A boolean,
     // so a moving camera re-renders this only when it crosses the line.
     const plainIsTrue = useDzNavigation((s) => s.depth >= DZ_PLAIN_DOWN_TO[building]);
+    // A VIEW THAT WAITS FOR READY: the picture under the notice is of the START view, not of the
+    // place that was asked for, however true a picture of the start view it is. Asked of the host
+    // at each render: while it builds this renders once a second (the count), and a view is parked
+    // before the host is mounted (a link, a restored session) or at once when a scene is loaded.
+    const parked = compiling && !!host?.viewParked();
 
     if (failure) {
         return (
@@ -252,7 +269,7 @@ export const BootCard: React.FC<{ failure: DzBootFailure | null }> = ({ failure 
         );
     }
 
-    const size = seconds === null ? null : plainIsTrue ? 'small' : 'large';
+    const size = seconds === null ? null : plainIsTrue && !parked ? 'small' : 'large';
     if (!size && !isMobile) return null;
     const notice = NOTICE[building];
 

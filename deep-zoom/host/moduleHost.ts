@@ -87,6 +87,11 @@
  *   the module the caller's, byte for byte - proven by: npx tsx
  *   debug/deep-zoom-checks/module-host.mts ("views: ..." lines). Falsified 2026-10-08: the "cam
  *   strings" group in the check's header.
+ * @invariant `viewParked()` is true from the moment a view is parked until it is applied at ready,
+ *   or the slot is emptied, and never after ready - proven by: npx tsx
+ *   debug/deep-zoom-checks/module-host.mts ("views: the host says a view is parked from the moment
+ *   one is ...", "views: a view is parked for as long as the renderer builds ..."). Falsified
+ *   2026-10-12: see the "parked" group in the check's header.
  * @invariant `shellOptions` returns `autoStart:false, shortcuts:false, dropTarget:null,
  *   pointerLock:false, mode:'deep', farLook:true, rebaseOrigin:true, farHandOff:0.5, holdEstimate:true, resetStillOnResize:true, loseContextOnDispose:true` and
  *   `keyTarget === frame` - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("options: ..." lines).
@@ -515,6 +520,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (v && isReady) { host.setView(v); return; }
             pendingView = v;
         },
+        viewParked: () => pendingView !== null,
         // host input (stage N): the shell's navigation flies the camera through these
         setInputOwner: (owner) => dz.setInputOwner(owner),
         rawDistance: () => dz.rawDistance(),

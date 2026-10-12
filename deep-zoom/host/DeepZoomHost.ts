@@ -94,7 +94,7 @@
  *                         at the shell's own values again.
  *     `snapshot()`        the picture as a 2D canvas, read back by the renderer itself (a saved PNG).
  *     `setPendingView(`   one parked view, applied by `setView` when `ready` resolves (at once if
- *                         it already has).
+ *                         it already has). `viewParked()` says whether one is waiting.
  *     `diveTo(`           the host's own loop (`host/dive.ts`) over `moveAlong`, not the module's dive.
  *     `cancel()`          ends a render and a dive.
  *     `canvas()` `focus()` `step(` `frameCount()` `dispose()` `on(`
@@ -459,6 +459,11 @@ export interface DeepZoomHost {
      * empties it.
      */
     setPendingView(v: DzView | null): void;
+    /**
+     * A view is parked and has not been applied yet: until `ready`, what the renderer shows is NOT
+     * the view that was asked for. (The loading notice asks: deep-zoom/components/BootCard.tsx.)
+     */
+    viewParked(): boolean;
     /** An exact move of `distance` world units along the unit direction `dir`. */
     moveAlong(dir: [number, number, number], distance: number): void;
     /**
