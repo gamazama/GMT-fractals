@@ -102,7 +102,9 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 6. **The navigation on the Mandelbox** could step its CPU ray by the whole scalar estimate
    instead of half: half the steps, 0 to 0.8 % of rays more than 5 % past the careful ray.
    *Recommended: yes, as a small measured change.*
-   **ANSWERED 2026-10-12: yes.** To build.
+   **ANSWERED 2026-10-12: yes.** **DONE, `95d4c129`**: re-measured on the renderer's own
+   function over 13 views, at most 0.78 % of rays more than 5 % past the careful ray, half the
+   steps; in the app the rays cost 0.06 to 0.44 ms a frame at the deep starters (0.09 to 0.79).
 7. Left open by him, recorded in `NEXT.md` session 7: why power 8 needs the depth rule for
    iterations; the odd single render (about 2 to 8 % of renders of a grainy frame, by the
    machine's state; he could not see a difference in the sheets).
@@ -224,6 +226,11 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
     heights along the normal, or along a cosine-weighted direction that changes every sample of
     a still; each sample counts by how much nearer the surface is than its height). Put to him:
     the rows now, then the cost of 4 measured before a new estimator is designed for 3.
+    **THE ROWS ARE BUILT, `3c89a641`**: "Occlusion radius" (0.12; 0.02 to 0.5) and "Occlusion
+    samples" (10; 4 to 32) on the Light tab under Occlusion, both uniforms. At the defaults the
+    shading pass differs in 301 of 94 million pixels, each by one level (the divisor is a
+    uniform now). 32 samples cost 0.0 to 0.5 ms a frame over 10 (Arches 29.7 -> 30.1 ms at
+    1024 x 1024). Still his: the order after the rows (the cost of 4 first, or 3 first).
 33. THE SPECKS FROM FAR. Seen in the occlusion capture (`ao-radius-whole-bulb.png`: the whole
     bulb's picture as specks with a halo). He: "the specks with a halo when viewing from far
     (~ >1) - its a bug, we need to fix." ONE measurement, then to him (his rule for his kernel):
@@ -270,14 +277,27 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
       is given to the f32 far field at once when the reference's next point is too large to
       carry a difference, and the first stride is held to the set's ball while the camera
       stands outside it.
+    - **FIXED, `742cc8ac`.** Past |Z1| = 512 on the reference's next point (grep `REF_FAR`; the
+      kernel is 2 % out there, 9 % at 1,026, non-positive from 4,100) the picture is the far
+      field's alone: at power 8 that is the camera 2.18 from the centre, about 0.95 off the
+      surface. And while the camera is outside the ball that holds the set, a ray starts where
+      it enters the ball. Against a CPU referee: stray hits 2.7 / 21.3 / 32.2 % at 2 / 3 / 4 off
+      (power 8) are 0, and rays more than 2 pixels of depth off went from 55 to 69 % to 0.17 to
+      0.21 %; power 12 and Julia mode the same; no hit turns to sky across the gate. Deep
+      places: the direct proof's 88 earlier lines to the character, deep frames +0.3 % at the
+      mean (+1.5 % worst), the build 8.03 -> 8.06 s. Five gated "FAR VIEWS" lines are new in
+      the direct proof. LEFT: at power 2 from 3 off outward, 1.7 to 2.5 % of the hit rays are
+      more than 2 pixels deep (1.2 % at 1 off): the far field's own, there before, and fewer
+      rays than before in number. And the far field gives up 12 from the camera, so beyond
+      about 13 from the centre nothing is drawn (unchanged).
 
 **26 to 31 BUILT, `e28fa8d8`** (one builder; smoke 54 of 54, `smoke:chrome`, the build):
 - 26: "Clear route" on the Route tab, one undo step; the trail is left alone.
 - 27: "Start view" in the readout box, beside Dive: the camera goes to the formula's whole
   view (`formulaHome`, or the Julia set's), the formula's numbers stay. NOTE: for the bulb that
-  view stands 3.23 from the centre, just past the cliff of 33, so until 33 is fixed it shows
-  specks; the app itself boots 2.60 from the centre, which is clean. Home was reworded to "the
-  view the app started with".
+  view stands 3.23 from the centre, just past the cliff of 33, so until 33 was fixed it showed
+  specks (fixed the same day, `742cc8ac`: it is a bulb now); the app itself boots 2.60 from the
+  centre. Home was reworded to "the view the app started with".
 - 28: click, Ctrl / Cmd-click, Shift-click in the list; "Delete selected (n)" or the Delete key,
   one undo step.
 - 29, measured (`debug/scratch/route-fixes/app-delete.mts`): a Route-tab delete leaves exactly
@@ -310,5 +330,11 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 - The look: occlusion (32), once he has said what looks wrong.
 - Done since: the Julia constant's row and the switch (2f, 2c: `a20c5405`); the CPU study
   (`BURNING-KALIBOX.md`, `f9d5bf97`, seven calls at its foot, not yet answered).
-- Running when this was last written: a builder on the routes (26 to 31), and an agent sent by
-  him to find the cause of the specks from far (33; it edits nothing in the tree).
+- Done after that: the routes (26 to 31, `e28fa8d8`); the occlusion's two rows (`3c89a641`); the
+  navigation ray on the Mandelbox (6, `95d4c129`); the specks from far (33, `742cc8ac`).
+- LEFT TO BUILD when this was last written (2026-10-12, early afternoon), nothing running: the
+  large card for a parked view (4); GMT's export (10, 11, 12, the 0-byte file); occlusion beyond
+  the rows (his order is open); Burning, then KaliBox (all seven calls accepted); pictures for a
+  loaded scene's keyframes; what a delete does to a leg that then crosses the solid (29, his).
+- Seen once by a builder: smoke step N5.08 ("with W and S held, 1 left the camera where it
+  was") failed in one run of three.

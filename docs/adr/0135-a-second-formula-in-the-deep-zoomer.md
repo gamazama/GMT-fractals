@@ -23,6 +23,14 @@
 > Jacobian variant" it names no longer exist. Whether the Mandelbox can take the ray march's step
 > is a math session of its own (`plans/deep-zoom-shell/NEXT.md`, session 8).
 
+> **Update 2026-10-12 (the navigation's ray on the Mandelbox; decisions unchanged):** the
+> Consequences' "Not done: ... the navigation's rays step by half" no longer holds. Since `95d4c129`
+> the box's CPU ray takes the whole scalar estimate (grep `rayFreeJS` in `deep-zoom/renderer/core.js`):
+> half the steps, and at most 0.78 % of rays more than 5 % past the careful ray over 13 views. The
+> bulb's ray is as it was. Decision 3 stands: the owner looked at the Mandelbox's ray step for the
+> PICTURE, timed against today's march at the same picture, and left it out
+> (`plans/deep-zoom-shell/ADR-DRAFT-box-ray-step.md`, not filed).
+
 ## Context
 
 The deep zoomer drew one formula, the Mandelbulb, and `core.js` was that formula throughout: the

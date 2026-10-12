@@ -216,9 +216,10 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
   - Done when there is a rule with its error bound, tested on rays through the box starters
     (`deep-zoom/data/boxStarters.ts`) against the careful march, or a written reason why not. If it
     holds, the build is its own stage and a new ADR over 0135's third decision.
-- The navigation's rays step by half the scalar estimate on the box (`pertOrbitJetJS` returns it):
-  with equal stretch on every axis the true ray estimate is close to the scalar one, so measure how
-  much of the half can be given back.
+- DONE 2026-10-12, `95d4c129` (his yes to call 6 of `OPEN-CALLS.md`): the navigation's ray on the
+  box takes the whole scalar estimate (grep `rayFreeJS`). Half the steps; at most 0.78 % of rays
+  more than 5 % past the careful ray over 13 views; in the app the rays cost 0.06 to 0.44 ms a
+  frame at the three deep starters where they cost 0.09 to 0.79.
 - Not measured on the GPU: where orbits run past the reference turn to noise (the 24-bit CPU
   emulation says about 17 iterations at scale 2). No noise was seen in any picture.
 - No kept GPU line for pre-rotation (the direct proof's five lines are unrotated).
