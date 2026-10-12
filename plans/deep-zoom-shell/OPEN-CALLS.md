@@ -265,6 +265,11 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
       the size of the reference's next point, not "camera outside radius 2": by arithmetic the
       cliff is 2.95 from the centre at power 8, 2.06 at power 12, 1.72 at power 16. The direct
       proof and the deep pictures must not move. His call which route.
+    - **ANSWERED 2026-10-12: "speckle fix - in the march pls".** Handed to the builder that has
+      the kernel file (after the occlusion rows and call 6), with the first-stride fault: a ray
+      is given to the f32 far field at once when the reference's next point is too large to
+      carry a difference, and the first stride is held to the set's ball while the camera
+      stands outside it.
 
 **26 to 31 BUILT, `e28fa8d8`** (one builder; smoke 54 of 54, `smoke:chrome`, the build):
 - 26: "Clear route" on the Route tab, one undo step; the trail is left alone.
