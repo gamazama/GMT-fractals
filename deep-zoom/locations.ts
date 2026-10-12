@@ -8,9 +8,10 @@
  *   store light and colour - this will make it hard to improve the lighting and color system").
  *   A jump leaves all of those as they are. They live in the engine's state library
  *   (`savedLocations`): thumbnails, labels, nine slots, the Locations menu. `jumpTo` is the single
- *   path for every jump - a saved place, a slot key, Home, Back, a starter dive's start, a pasted
- *   location - so each one is one undo step and the renderer never becomes a second writer of the
- *   look values. A scene file and a share link are not places: they carry the whole scene.
+ *   path for every jump - a saved place, a slot key, Home, Back, the readout's "Start view"
+ *   (`jumpStart`), a starter dive's start, a pasted location - so each one is one undo step and
+ *   the renderer never becomes a second writer of the look values. A scene file and a share link
+ *   are not places: they carry the whole scene.
  *
  * SEAMS
  *   - `installLocations()` is called once from main.tsx, after the store exists and before the
@@ -422,6 +423,29 @@ export function jumpHome(): void {
     if (homeView) jumpTo({ view: homeView.view, formula: homeView.formula, depth: '' });
 }
 
+/**
+ * "Start view": the camera goes to where the whole of what is drawn is seen from outside - the
+ * formula IN FORCE as a switch to it would show it (`formulaHome`), in Julia mode the whole Julia
+ * set of the constant in force (`juliaHome`, as `showJuliaSet` finds it). THE CAMERA ONLY: the
+ * formula, its power, phase and iteration floor, Julia mode and the constant all stay. A jump like
+ * any other (`jumpTo`): one undo step, the trail ends, Back returns.
+ * NOT THE HOME KEY: Home (`jumpHome`) goes to the view the app started with, which after a restored
+ * session is the restored place, and brings that view's formula with it. EVEN ON A FRESH START
+ * THE TWO ARE NOT ONE VIEW: the app starts on the renderer's own first view (the bulb from 2.6
+ * off its centre) and a switch of formula shows `formulaHome`'s (the bulb from 3.23: the first
+ * starter card's). Seen in the app 2026-10-12. Which of the two a fresh start should show is the
+ * owner's to say; this button goes where a switch of formula goes.
+ */
+export function jumpStart(): void {
+    const host = getHost();
+    if (!host || !host.bootParams()) return;
+    const choice = formulaChoiceNow(), f = useEngineStore.getState().dzFormula;
+    const whole = choice.juliaMode ? juliaHome(host) : null;
+    if (choice.juliaMode && !whole) showToast('This constant has no Julia set to show: the camera goes to the formula\'s own start view', 'warning', 6000);
+    // A bare view writes its own power, phase and count into the formula (`applyFormula`): they are handed the store's.
+    jumpTo({ view: { ...(whole ?? formulaHome(choice)), iters: f.iterations, power: f.power, phase: [f.phaseTheta, f.phasePhi] }, formula: choice, depth: '' });
+}
+
 /** Back to the view before the last jump. */
 export function jumpBack(): void {
     const back = backStack.pop();
@@ -571,7 +595,7 @@ export function installLocations(): void {
             align: 'start',
             width: 'w-52',
             openItem: { label: 'Locations panel…', title: 'Open the Locations panel' },
-            resetItem: { label: 'Home', title: 'Jump to the start view' },
+            resetItem: { label: 'Home', title: 'Jump to the view the app started with' },
             slotLabelPrefix: 'Location',
         },
     });

@@ -24,11 +24,20 @@
  *     was not recorded returns to it.
  *   - Only while a free look is recorded (one of the three look tracks holds a key): one line that
  *     says so, with "Clear" (`clearLook`: the three tracks go, one animation-undo step).
- * Then one row a keyframe, in the look of a saved location's row: the picture taken when it was
- * set (this session only - a keyframe from a loaded scene or a trail shows its number), its depth,
- * its time. A row goes to its keyframe; its buttons play the leg that arrives at it, replace it
- * with the view on screen, and delete it. A row is red when the leg that arrives at it passes
- * through the solid.
+ * Above the list, "Delete selected" and "Clear route" (`clearRoute`: every keyframe and a recorded
+ * free look, the playhead back at the start, one undo step; no question is asked, undo covers it).
+ * Then one row a keyframe, in the look of a saved location's row: its picture (taken when it was
+ * set, or a moment after the route was cut from the trail; this session only - a keyframe from a
+ * loaded scene shows its number), its depth, its time and, from the second row on, a SECONDS FIELD:
+ * the length of the leg that arrives at it. A typed length moves that keyframe and every later one
+ * (`setLegSeconds`), when the field is left or Enter is pressed. A row goes to its keyframe; its
+ * buttons play the leg that arrives at it, replace it with the view on screen, and delete it. A
+ * row is red when the leg that arrives at it passes through the solid.
+ * SELECTING ROWS: a click selects one (and goes to it), Ctrl / Cmd-click adds or removes one,
+ * Shift-click takes the range from the row clicked last. "Delete selected", or the Delete key
+ * while the list has the focus (a click on a row gives it), removes them in one undo step
+ * (`deleteKeyframes`). The selection is this panel's own state: ids that are no longer keyframes
+ * (a delete, an undo, a route cut again) drop out of it by themselves.
  * When the camera is not where the playhead says, one line says so and "Return" puts it back.
  *
  * THE TAB ENDS WITH ROOM FOR THE TIMELINE'S TOGGLE. The engine's round button that opens the
@@ -52,6 +61,12 @@
  *     whole frame, the route changing, the camera changing hands (`useRoute`'s `rev`), a flight
  *     landing - and never while the timeline plays.
  *   - The smoothing slider's value is its own while it is held; the route's again on release.
+ *   - THE DELETE KEY IS THE LIST'S ONLY WHILE IT HAS THE FOCUS, and it stops there: the timeline's
+ *     own Delete (a window listener that removes the keys selected ON THE TIMELINE) must not run
+ *     for the same press. Backspace is not taken: it is "back to the view before the last jump".
+ *   - A SECONDS FIELD IS AN INPUT INSIDE A ROW THAT IS CLICKED: its clicks stop at the field, or
+ *     each would go to the keyframe and select the row. A text input read as a number (a comma or
+ *     a point): a number input prints the browser's own decimal mark, 9,83 beside this tab's 9.8.
  *   - THE ROOM FOR THE TOGGLE IS OUT OF FLOW, AND CSS ALONE TAKES IT AWAY. It is an absolute box
  *     56 px high under the tab's own box (the dock's 8 px of bottom padding lie inside it: 48 px
  *     more scroll), hidden while the timeline is in the page (`:has` on the timeline's
@@ -63,6 +78,11 @@
  *     stays when the timeline is open; on the right dock or in a floating window it is 48 px of
  *     scroll nobody needs.
  *
+ * @assumption The selection (click, Ctrl / Cmd-click, Shift-click, the Delete key and its not
+ *   reaching the timeline), the seconds field setting its length on Enter and when it is left, and
+ *   the two buttons above the list are wiring no node check reaches (the functions they call have
+ *   lines in check:deep-zoom-route). Driven once in the real app, 2026-10-12
+ *   (debug/scratch/route-fixes/app-six.mts, git-ignored).
  * @assumption The last row ends clear of the toggle with the timeline closed, and with it open
  *   the list ends where it did before - measured once, 2026-10-11, in the app at 1280 x 800 with
  *   14 keyframes (debug/scratch/r7c/animate.mts, git-ignored; before the room was there its
@@ -78,9 +98,11 @@ import { createLogMapping } from '../../components/inputs/primitives/FormatUtils
 import { Modal } from '../../components/ui/Modal';
 import { useDzNavigation } from '../navigationState';
 import {
-    ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, clearLook, deleteKeyframe, lookKeyed, pauseRoute, playLeg, playRoute, replaceKeyframe, retimeRoute,
-    returnToRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo, setKeyframe, setRouteSmoothing, useRoute,
+    ROUTE_SMOOTHING, ROUTE_TRACK, ROUTE_TYPED_LEG_SECONDS, cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, lookKeyed, pauseRoute, playLeg,
+    playRoute, replaceKeyframe, retimeRoute, returnToRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo, setKeyframe,
+    setLegSeconds, setRouteSmoothing, useRoute,
 } from '../route';
+import type { RouteKey } from '../route';
 import { setTrailOn, useTrail } from '../trail';
 import { formatDepth, formatDepthCompact } from './depthFormat';
 
@@ -144,6 +166,43 @@ const Smoothing: React.FC<{ value: number }> = ({ value }) => {
     );
 };
 
+/** The length of the leg that arrives at a keyframe, in seconds. What is typed is set when the
+ *  field is left or Enter is pressed; Escape puts the route's own length back in the field. */
+const LegSeconds: React.FC<{ id: string; frames: number; fps: number }> = ({ id, frames, fps }) => {
+    const [typed, setTyped] = useState<string | null>(null);
+    const length = fps > 0 ? String(Number((frames / fps).toFixed(2))) : '0';
+    const set = (): void => {
+        // A text field, not a number field: that one prints 9,83 where the rest of the tab prints 9.8. Either is read.
+        const seconds = typed === null || typed.trim() === '' ? NaN : Number(typed.trim().replace(',', '.'));
+        setTyped(null);
+        if (seconds >= 0) setLegSeconds(id, seconds);
+    };
+    return (
+        <label
+            className="flex items-center gap-0.5 cursor-text"
+            onClick={(e) => e.stopPropagation()}
+            title={`The length of the leg that arrives at this keyframe, in seconds. Type another and press Enter: this keyframe and every later one move by the difference, in one undo step. Views and depths stay. From one frame to ${ROUTE_TYPED_LEG_SECONDS / 60} minutes.`}
+        >
+            leg
+            <input
+                data-dz-route-leg-seconds
+                type="text"
+                inputMode="decimal"
+                value={typed ?? length}
+                onChange={(e) => setTyped(e.target.value)}
+                onFocus={(e) => e.currentTarget.select()}
+                onBlur={set}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+                    else if (e.key === 'Escape') setTyped(null);
+                }}
+                className="w-11 h-4 px-1 rounded bg-line/10 border border-line/15 text-fg font-mono tabular-nums text-[9px]"
+            />
+            s
+        </label>
+    );
+};
+
 export const RoutePanel: React.FC = () => {
     // The track is another object after every edit of the route: the list follows it.
     useAnimationStore((s) => s.sequence.tracks[ROUTE_TRACK]);
@@ -164,13 +223,38 @@ export const RoutePanel: React.FC = () => {
     const previous = useTrail((s) => s.previous);
     /** The trail a route is asked for from (true: the previous one), while the question stands. */
     const [asking, setAsking] = useState<boolean | null>(null);
+    /** The rows picked (key ids), and the row a Shift-click takes its range from. */
+    const [picked, setPicked] = useState<readonly string[]>([]);
+    const rangeFrom = useRef<string | null>(null);
 
     const keys = routeKeys();
+    // Ids that are keyframes no more (a delete, an undo, a route cut again) are no selection.
+    const selected = picked.filter((id) => keys.some((k) => k.id === id));
     const source = routeSource();
     const seconds = (frames: number): string => (fps > 0 ? frames / fps : 0).toFixed(1);
     const off = !playing && keys.length > 0 && !cameraOnRoute();
     const act = (run: (id: string) => void, id: string) => (e: React.MouseEvent): void => { e.stopPropagation(); run(id); };
     const make = (fromPrevious: boolean): void => { if (routeHandSet()) setAsking(fromPrevious); else routeFromTrail(fromPrevious); };
+    /** A click on a row. With Shift: the range from the row clicked last. With Ctrl / Cmd: this row
+     *  in or out. Plain: this row alone, and the camera goes to it. */
+    const pick = (key: RouteKey, i: number) => (e: React.MouseEvent): void => {
+        if (e.shiftKey) {
+            const last = keys.findIndex((k) => k.id === rangeFrom.current), from = last >= 0 ? last : under >= 0 ? under : i;
+            setPicked(keys.slice(Math.min(from, i), Math.max(from, i) + 1).map((k) => k.id));
+            return;
+        }
+        rangeFrom.current = key.id;
+        if (e.ctrlKey || e.metaKey) { setPicked(selected.includes(key.id) ? selected.filter((id) => id !== key.id) : [...selected, key.id]); return; }
+        setPicked([key.id]);
+        scrubRouteTo(key.frame);
+    };
+    const removeSelected = (): void => { if (selected.length > 0) deleteKeyframes(selected); setPicked([]); };
+    const onListKey = (e: React.KeyboardEvent): void => {
+        if (e.key !== 'Delete' || selected.length === 0 || (e.target as HTMLElement).tagName === 'INPUT') return;
+        e.preventDefault();
+        e.stopPropagation();                                         // not the timeline's Delete as well (see the header)
+        removeSelected();
+    };
 
     return (
         <div data-dz-route className="relative flex flex-col">
@@ -309,7 +393,30 @@ export const RoutePanel: React.FC = () => {
                 </div>
             )}
 
-            <div className="p-2 space-y-1">
+            <div className="px-2 pt-2 flex gap-1">
+                <button
+                    type="button"
+                    data-dz-route-delete-selected
+                    disabled={selected.length === 0}
+                    onClick={removeSelected}
+                    title="Delete the selected keyframes, in one undo step (the Delete key does the same after a click in the list). To select: click a keyframe, Ctrl-click (Cmd on a Mac) to add or remove one, Shift-click for the range."
+                    className={`${plainButton} flex-1`}
+                >
+                    <TrashIcon /> Delete selected{selected.length > 0 ? ` (${selected.length})` : ''}
+                </button>
+                <button
+                    type="button"
+                    data-dz-route-clear
+                    disabled={keys.length === 0}
+                    onClick={() => { setPicked([]); clearRoute(); }}
+                    title="Clear the route: every keyframe goes, and a recorded free look with them; the playhead returns to the start. One undo on the timeline brings all of it back. The trail stays."
+                    className={`${plainButton} flex-1`}
+                >
+                    Clear route
+                </button>
+            </div>
+
+            <div data-dz-route-list tabIndex={0} onKeyDown={onListKey} className="p-2 space-y-1 outline-none">
                 {keys.length === 0 && (
                     <div className="text-center text-fg-faint text-[10px] italic py-4 px-2 break-words">
                         No keyframes yet. Press K to add this view, or fly and make the route from the trail.
@@ -319,17 +426,20 @@ export const RoutePanel: React.FC = () => {
                     const here = i === under;
                     const through = !!solid[key.id];
                     const picture = thumbnails[key.id];
+                    const chosen = selected.includes(key.id);
                     return (
                         <div
                             key={key.id}
                             data-dz-route-key={i + 1}
-                            onClick={() => scrubRouteTo(key.frame)}
-                            title="Go to this keyframe"
-                            className={`flex items-center gap-1.5 p-1.5 rounded border group cursor-pointer ${
+                            data-dz-route-selected={chosen || undefined}
+                            aria-selected={chosen}
+                            onClick={pick(key, i)}
+                            title="Go to this keyframe. Ctrl-click adds it to the selection or takes it out; Shift-click selects the range."
+                            className={`flex items-center gap-1.5 p-1.5 rounded border group cursor-pointer select-none ${
                                 through ? 'bg-danger/10 border-danger/40'
                                     : here ? 'bg-accent-900/20 border-accent-500/50'
                                         : 'bg-line/5 border-transparent hover:border-line/10'
-                            }`}
+                            } ${chosen ? 'ring-1 ring-inset ring-accent-400' : ''}`}
                         >
                             <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-surface-section border border-line/5">
                                 {picture ? (
@@ -342,7 +452,10 @@ export const RoutePanel: React.FC = () => {
                                 <span className={`text-xs font-bold font-mono tabular-nums truncate block ${here ? 'text-fg' : 'text-fg-muted group-hover:text-fg-tertiary'}`}>
                                     {formatDepth(key.depth)}
                                 </span>
-                                <div className="text-[9px] leading-tight text-fg-dim truncate">{seconds(key.frame)} s</div>
+                                <div className="flex items-center gap-1.5 text-[9px] leading-tight text-fg-dim">
+                                    <span title="When the route reaches this keyframe">{seconds(key.frame)} s</span>
+                                    {i > 0 && <LegSeconds id={key.id} frames={key.frame - keys[i - 1].frame} fps={fps} />}
+                                </div>
                                 {through && (
                                     <div data-dz-route-solid className="text-[9px] leading-tight text-danger truncate" title="The leg that arrives at this keyframe passes through the solid: the picture goes blank on the way. Move one of its two keyframes, or add one between them.">
                                         Leg passes through the solid

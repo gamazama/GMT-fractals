@@ -145,6 +145,7 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Dive to 1e-', 'deep-zoom/components/DepthReadout.tsx', '>Dive to 1e-</label>'],
     ['Dive', 'deep-zoom/components/DepthReadout.tsx', '>Dive</button>'],
     ['Stop', 'deep-zoom/components/DepthReadout.tsx', '>Stop</button>'],
+    ['Start view', 'deep-zoom/components/DepthReadout.tsx', 'Start view\n                    </button>'],
     ['Locations', 'deep-zoom/panels.ts', "id: 'Locations'"],
     ['Starter dives', 'deep-zoom/panels.ts', "label: 'Starter dives'"],
     ['Mandelbox', 'deep-zoom/panels.ts', "label: 'Mandelbox'"],

@@ -4,7 +4,9 @@
  * A HUD item (`hud.register` id `deep-zoom.depth`, top-left, in main.tsx): the depth to three
  * digits, how many decades are left above the 1e-77 floor, the magnification, the speed along the
  * scale while moving, the yardstick passed, a line past 1e-50 and at the floor, the dive in
- * flight with Stop, and the "Dive to 1e-" field.
+ * flight with Stop, and the "Dive to 1e-" field with "Start view" beside it (the camera back to
+ * the whole of the formula in force: `jumpStart` in deep-zoom/locations.ts, which says how it
+ * differs from the Home key).
  *
  * THE DEPTH IS WHAT IS LOOKED AT (the owner, 2026-10-09: "we lead with the looked at readout"):
  * the distance to what is in the middle of the picture, from `deep-zoom/navigationState.ts`
@@ -26,6 +28,7 @@ import { useEngineStore } from '../../store/engineStore';
 import { subscribeTelemetry, useDzTelemetry } from '../host/telemetry';
 import { overlaysFromIndex } from '../features/inspect';
 import { diveTo, stopDive, useDive } from '../diveControl';
+import { jumpStart } from '../locations';
 import { DZ_MODE_ORBIT, cameraModeOf, useDzNavigation } from '../navigationState';
 import {
     FLOOR_EXP, YARDSTICK_NOTE, decadesPerSecond, decadesToFloor, formatDepth, formatDepthCompact, validDepth, yardstickFor,
@@ -141,6 +144,15 @@ export const DepthReadout: React.FC = () => {
                         className="w-10 h-5 px-1 rounded bg-line/10 border border-line/15 text-fg font-mono text-[10px]"
                     />
                     <button type="submit" className={button}>Dive</button>
+                    <button
+                        type="button"
+                        data-dz-start-view
+                        className={`${button} ml-1`}
+                        onClick={jumpStart}
+                        title="Start view: the camera goes back to where the whole of this formula is seen from outside (in Julia mode, the whole Julia set). The formula's own settings stay as they are. One undo step, and Backspace comes back to this view. The Home key is another thing: it goes to the view the app started with."
+                    >
+                        Start view
+                    </button>
                 </form>
             )}
             <div

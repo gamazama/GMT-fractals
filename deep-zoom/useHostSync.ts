@@ -91,6 +91,9 @@ export function flushHostSync(): void {
     running?.flush();
 }
 
+/** Whether the rule is held off now: for a caller that holds it for a moment and must leave it as it found it. */
+export const autoIterationsHeld = (): boolean => autoHeld;
+
 /** Hold the renderer's own iteration rule off, or (false) hand it back to what the store says. */
 export function holdAutoIterations(held: boolean): void {
     if (autoHeld === held) return;

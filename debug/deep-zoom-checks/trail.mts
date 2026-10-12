@@ -26,6 +26,10 @@
  *   route    "Route to here" in the app: one undo step, no view set, the camera on the route
  *   exact    its keyframes are trail samples to the digit, each with its iteration key
  *   smooth   the smoothing cuts it again from the same trail, and back
+ *   picture  (2026-10-12) the keyframes of a cut route get their pictures: each of its own view with its own count, a
+ *            frame run before it is taken and the renderer's iteration rule held off meanwhile; the camera is put back
+ *            to the digit; the trail, the route and the undo stack are told nothing; a route cut again draws only the
+ *            samples that are new. NOT FALSIFIED: green lines only.
  *   follow   an iteration key follows its keyframe on the timeline: moved, deleted, across another
  *
  * MEASURED HERE, 2026-10-11 (this machine, node; the two "cost:" lines the check prints):
@@ -92,7 +96,7 @@ import { startHostSync } from '../../deep-zoom/useHostSync';
 import { setReadings } from '../../deep-zoom/navigationState';
 import {
     ROUTE_ITERATIONS_TRACK, ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, headingNow, installRoute, noteMove, noteTurn, retimeRoute,
-    routeFromTrail, routeHandSet, routeKeys, routeSource, routeViewAt, setKeyframe, setRouteSmoothing,
+    routeDrives, routeFromTrail, routeHandSet, routeKeys, routeSource, routeViewAt, setKeyframe, setRouteSmoothing, takeOwedPictures, useRoute,
 } from '../../deep-zoom/route';
 import type { RoutePayload } from '../../deep-zoom/route';
 import {
@@ -434,6 +438,11 @@ function offLine(s: TrailSample, line: readonly P3[]): number {
 // ══ the second half: the app's wiring ════════════════════════════════════════════════════════════
 
 const calls: DzView[] = [];
+/** Frames run by hand (`host.step`), and how many since the last view was set. */
+let stepped = 0, sinceSet = 0;
+/** The developer lever that says how the renderer draws, and every value `dzFormula.autoIterations` was sent with. */
+let drawMode: 'deep' | 'auto' = 'deep';
+const autoSent: unknown[] = [];
 const viewSetListeners = new Set<() => void>();
 let at: V3 = spiral(0);
 let view: DzView = { cam: camAt(at), yaw: -1.2, pitch: 0.3, iters: countFor(1), power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 };
@@ -443,16 +452,20 @@ const host = {
     getView: (): DzView => ({ ...view, cam: [view.cam[0], view.cam[1], view.cam[2]], phase: [view.phase[0], view.phase[1]] }),
     setView: (v: DzView): void => {
         calls.push(v);
+        sinceSet = 0;
         view = { ...v, cam: [v.cam[0], v.cam[1], v.cam[2]] };
         if (!v.roll) delete view.roll;
         at = offsetOf([BigInt(v.cam[0]), BigInt(v.cam[1]), BigInt(v.cam[2])]);
         for (const fn of [...viewSetListeners]) fn();
     },
-    setParams: (_patch: DzParams): void => undefined,
+    setParams: (patch: DzParams): void => { if ('dzFormula.autoIterations' in patch) autoSent.push(patch['dzFormula.autoIterations']); },
+    diagnostics: () => ({ levers: { mode: drawMode } }),
     orientation: () => ({ yaw: view.yaw, pitch: view.pitch, roll: view.roll ?? 0 }),
-    telemetry: () => ({ depth: at[2], iters: view.iters }),
+    telemetry: () => ({ depth: at[2], iters: view.iters, ready: true, error: '', mode: 'deep' }),
     sense: () => ({ near: at[2], second: at[2], hits: 7, open: 0, inside: false, marched: true }),
-    thumbnail: () => '',
+    step: (): void => { stepped++; sinceSet++; },
+    // What it is a picture of: the camera, the count, and how many frames were run since the view was set.
+    thumbnail: () => `${view.cam.join()} | ${view.yaw} ${view.pitch} | ${view.iters} | ${sinceSet}`,
     estimateAtPoint: () => 1,
     on: (type: string, fn: () => void) => { if (type === 'viewSet') viewSetListeners.add(fn); return () => { viewSetListeners.delete(fn); }; },
 } as unknown as DeepZoomHost;
@@ -560,6 +573,48 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
     check(anim().undoStack.length === steps + 1 && routeSource()?.smoothing === ROUTE_SMOOTHING.max, 'smooth: the same smoothing again is no step; one past the range is the widest');
     setRouteSmoothing(ROUTE_SMOOTHING.initial);
     keys = routeKeys();
+}
+
+// ── picture ──────────────────────────────────────────────────────────────────────────────────────
+{
+    const pictures = (): Record<string, string> => useRoute.getState().thumbnails;
+    const own = (k: { view: { cam: readonly string[]; yaw: number; pitch: number }; frame: number }, frames = 1): string =>
+        `${k.view.cam.join()} | ${k.view.yaw} ${k.view.pitch} | ${countKeys().find((c) => c.frame === k.frame)?.value} | ${frames}`;
+    check(keys.length > 8 && keys.every((k) => !pictures()[k.id]), 'picture: (a route cut from the trail has no picture at first: none of its keyframes was on screen as one)');
+    const stood = JSON.stringify(host.getView()), samples = trailSamples().length, line = useTrail.getState().line, steps = anim().undoStack.length, heading = JSON.stringify(headingNow()), drove = routeDrives();
+    calls.length = 0;
+    stepped = 0;
+    autoSent.length = 0;
+    const left = takeOwedPictures();
+    check(left === 0 && keys.every((k) => pictures()[k.id] === own(k)),
+        'picture: every keyframe gets a picture: of its own view, with the count keyed there, a frame run before it is taken', `${left} owed, ${keys.filter((k) => pictures()[k.id] !== own(k)).length} of ${keys.length} wrong`);
+    check(JSON.stringify(host.getView()) === stood && calls.length === keys.length + 1 && JSON.stringify(calls[calls.length - 1]) === stood && stepped === keys.length + 1,
+        'picture: the camera is put back where it stood, the very view it was, and one frame of it is run', `${calls.length} setView for ${keys.length} keyframes, ${stepped} frames, back ${JSON.stringify(host.getView()) === stood}`);
+    check(autoSent.join() === 'false,true', 'picture: the renderer\'s own iteration rule is held off while they are taken, and handed back after', `sent ${autoSent.join()}`);
+    check(trailSamples().length === samples && useTrail.getState().line === line && anim().undoStack.length === steps && JSON.stringify(headingNow()) === heading && routeDrives() === drove && cameraOnRoute(),
+        'picture: the trail, the heading, the undo stack and who holds the camera are as they were', `${trailSamples().length - samples} samples, ${anim().undoStack.length - steps} steps, heading ${JSON.stringify(headingNow())} was ${heading}`);
+    calls.length = 0;
+    check(takeOwedPictures() === 0 && calls.length === 0, 'picture: with none owed, nothing is set');
+    // Cut again from the same trail: the samples that had a picture keep it, only the new keyframes are drawn.
+    setRouteSmoothing(0.2);
+    const loose = routeKeys();
+    calls.length = 0;
+    check(loose.length < keys.length && loose.every((k) => pictures()[k.id] === own(k)) && takeOwedPictures() === 0 && calls.length === 0,
+        'picture: a wider smoothing: every keyframe is a sample that had its picture, and nothing is drawn again', `${loose.filter((k) => !pictures()[k.id]).length} of ${loose.length} without, ${calls.length} setView`);
+    setRouteSmoothing(0.01);
+    const tight = routeKeys(), fresh = tight.filter((k) => !pictures()[k.id]);
+    calls.length = 0;
+    stepped = 0;
+    drawMode = 'auto';                               // the developer lever off 'deep': the frame after a jump is drawn the last depth's way
+    const leftTight = takeOwedPictures();
+    drawMode = 'deep';
+    check(tight.length > keys.length && fresh.length === tight.length - keys.length && leftTight === 0 && calls.length === fresh.length + 1 && JSON.stringify(host.getView()) === stood
+        && tight.every((k) => pictures()[k.id] === own(k, fresh.includes(k) ? 2 : 1)) && stepped === 2 * (fresh.length + 1),
+        'picture: a narrower one: only the keyframes that are new are drawn (two frames each, and two back, when the renderer does not draw every depth one way), and the camera is back again',
+        `${fresh.length} without of ${tight.length} (${keys.length} before), ${calls.length} setView, ${stepped} frames`);
+    setRouteSmoothing(ROUTE_SMOOTHING.initial);
+    keys = routeKeys();
+    check(keys.every((k) => pictures()[k.id] === own(k)), 'picture: and turned back, every keyframe has its picture at once');
 }
 
 // ── time (the two buttons) ───────────────────────────────────────────────────────────────────────

@@ -17,7 +17,8 @@
  * (`cameraMode`), which the navigation reads every frame and the timeline's Space binding tests.
  *
  * WHAT IS REGISTERED HERE (`registerDeepZoomHotkeys`, the list a reader can check against the code):
- *   Locations   B / Shift+B save this view; Home the start view; Backspace back; J the Dive field;
+ *   Locations   B / Shift+B save this view; Home the view the app started with (NOT the readout's
+ *               "Start view" button: `jumpStart` in locations.ts); Backspace back; J the Dive field;
  *               Escape stops a dive (only while one flies).
  *   Route       K / Shift+K add a keyframe (or give the one under the playhead this view).
  *   Look        F G detail; [ ] iterations; I auto iterations; - = power; V colouring; L light type;
@@ -108,7 +109,7 @@ export function registerDeepZoomHotkeys(): void {
     const save = (): void => { void saveLocationHere(); };
     add('save-location', 'b', save, 'Save this view to My locations', 'Locations');
     add('save-location.shift', 'Shift+b', save, 'Save this view to My locations (with Shift held for speed)', 'Locations');
-    add('home', 'Home', jumpHome, 'Jump to the start view', 'Locations');
+    add('home', 'Home', jumpHome, 'Jump to the view the app started with', 'Locations');
     add('back', 'Backspace', jumpBack, 'Back to the view before the last jump', 'Locations');
     add('dive', 'j', focusDiveField, 'Go to the "Dive to 1e-" field', 'Locations');
     add('cancel', 'Escape', stopDive, 'Stop the dive in flight', 'Locations', { when: () => useDive.getState().dive !== null });

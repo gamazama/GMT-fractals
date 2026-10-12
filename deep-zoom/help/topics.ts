@@ -74,7 +74,8 @@ The speed follows what is in front of you: slow near a surface, fast in open spa
 ## Getting back
 - \`Ctrl+Z\` undoes a flight: the camera goes back to where it took off.
 - \`Backspace\` goes back to the view before the last jump.
-- \`Home\` is the start view.
+- \`Home\` is the view the app started with.
+- **Start view**, beside Dive on the picture, shows the whole of the formula from outside. Its settings stay.
 
 > A drag that looks the wrong way up: Settings (the gear) has Invert look Y.
 `,

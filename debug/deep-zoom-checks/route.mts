@@ -36,6 +36,13 @@
  *            what was on screen; Clear. The navigation is played by hand here: `lookTurned` with the orientation it
  *            would have turned to, `stopRoutePlayback` for a fly key. Every rotation a line compares against is put
  *            together in this file (axis-angle quaternions, Hamilton's product, the renderer's forward and up).
+ *   delete   (2026-10-12; another scene: five keyframes half way round a ball that is the solid) keyframes deleted in the
+ *            Route tab, and on the timeline, leave the route a FRESH route of the keyframes left would be - the view at
+ *            every half frame, the depth curve, the count, the handles; several deleted together are one undo step; the
+ *            keyframes that stay keep their times, and the leg that swallowed the others passes through the ball
+ *   clear    Clear route: every keyframe, its iteration key and a recorded free look in one undo step; the playhead at
+ *            frame 0; the camera the user's; undone, all of it is back
+ *   seconds  a typed leg moves its keyframe and every later one by the same frames; time only; a frame at least
  *
  * FALSIFICATION RECORD, 2026-10-11, one break per run in deep-zoom/route.ts, the file put back
  * byte for byte after each. The break, then what went red:
@@ -97,6 +104,24 @@
  *     going off in the middle, Clear). AFTER break 2 the pass's sampling was changed (a frame is sampled when the next one is
  *     shown, and the first key is a frame earlier): the "thinned when it ends" line was seen red before that change and
  *     green after it, and was not broken again.
+ *   - delete, clear, seconds (2026-10-12; THREE breaks, the stage's allowance, each in deep-zoom/route.ts and put back byte
+ *     for byte, the file's checksum compared):
+ *     1. a second `anim().snapshot()` in `clearRoute`, before the tracks go        -> 3 red: "clear: Clear route takes every
+ *        keyframe and its iteration key in ONE undo step ..." (2 steps), "clear: a recorded free look goes with the route, in
+ *        the same step ..." (2 steps), "clear: with no keyframe it does nothing, and leaves no step"
+ *     2. `setLegSeconds` moving the leg's own keyframe only (`j < i ? f : f + by` -> `j === i ? f + by : f`)
+ *                                                                             -> 3 red: "seconds: a leg given five seconds ..."
+ *        (frames 0, 40, 190, 208), "seconds: only time changes ..." (counts at 0, 40, 190, 168, 208), "seconds: the least is one
+ *        frame" (0, 40, 190, 191)
+ *     3. `deleteKeyframes` taking a step a keyframe                               -> 1 red: "delete: three keyframes deleted
+ *        together are ONE undo step ..." (3 steps). ("delete: and that one step undone brings all three back" stayed green:
+ *        the extra steps hold the same route.)
+ *     NOT FALSIFIED, green only: every other "delete:", "clear:" and "seconds:" line and the last "render:" line.
+ *     THE "deleted ON THE TIMELINE" LINES were written after their fix (the neighbours' handles worked out again by the
+ *     follower in `installRoute`). The same comparison, run as a scratch on the tree before the fix
+ *     (debug/scratch/route-fixes/delete-measure.mts, git-ignored), was red: 252 of 417 half frames differed from the fresh
+ *     route with the third keyframe deleted, 403 with the middle three, 414 with the second and the fourth; the depth curve
+ *     by up to 0.048 decades. The Route tab's own delete was 0 of 417 in all three, before the stage and after.
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -114,8 +139,9 @@ import * as THREE from 'three';
 import { toOrientation } from '../../deep-zoom/orbitCamera';
 import {
     LOOK_FIT_TOLERANCE, LOOK_TRACKS, ROUTE_ITERATIONS_TRACK, ROUTE_MAX_LEG_SECONDS, ROUTE_MIN_LEG_SECONDS, ROUTE_SOLID_SAMPLES, ROUTE_TRACK, ROUTE_UNIT,
-    cameraOnRoute, clearLook, deleteKeyframe, headingNow, installRoute, legFrames, legInSolid, lookKeyed, lookTurned, noteMove, playLeg, replaceKeyframe,
-    returnToRoute, routeDrives, routeKeys, routeShownAt, routeViewAt, scrubRouteTo, setKeyframe, setRouteRendering, stopRoutePlayback, useRoute,
+    cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, headingNow, installRoute, legFrames, legInSolid, lookKeyed, lookTurned, noteMove, playLeg,
+    replaceKeyframe, returnToRoute, routeDrives, routeKeys, routePaceAt, routeShownAt, routeViewAt, scrubRouteTo, setKeyframe, setLegSeconds, setRouteRendering,
+    stopRoutePlayback, useRoute,
 } from '../../deep-zoom/route';
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
 import type { Keyframe } from '../../types';
@@ -664,6 +690,154 @@ check(anim().isPlaying && anim().undoStack.length === lookUndo + 1 && afterOff.e
     `playing ${anim().isPlaying}, ${anim().undoStack.length - lookUndo} steps, keys ${afterOff}`);
 anim().pause();
 clearLook();
+
+// ── delete, clear, seconds (2026-10-12) ──────────────────────────────────────────────────────────
+// Another scene: the solid is a ball of radius R about S, and the route goes half way round it.
+// Five keyframes 2 R from its centre, an eighth of a turn apart (the third nearer, 1.3 R), set
+// with K as the hands fly from one to the next: frames 0, 40, 104, 168, 208.
+const R = 1e-3;
+const roundAt = (turn: number, r: number): [string, string, string] => {
+    const a = turn * 2 * Math.PI, p: V3 = [r * Math.cos(a), 0, r * Math.sin(a)];
+    return [0, 1, 2].map((j) => String(S[j] + BigInt(Math.round(p[j] * 2 ** 256)))) as [string, string, string];
+};
+function flyRound(turn: number, r: number, iters: number): void {
+    const was = fromS(view.cam), cam = roundAt(turn, r), now = fromS(cam);
+    view = { ...view, cam, yaw: Math.atan2(-now[2], -now[0]), pitch: 0, iters };
+    delete view.roll;
+    depthHere = r - R;                              // what is looked at: the ball's surface
+    noteMove(now[0] - was[0], now[1] - was[1], now[2] - was[2]);
+}
+function keyRound(): void {
+    anim().deleteAllTracks();
+    useAnimationStore.setState({ undoStack: [], redoStack: [] });   // the stack holds 50 steps and no more: counted from empty here
+
+    host.setView({ ...host.getView(), cam: roundAt(0, 2 * R), yaw: Math.PI, pitch: 0, roll: 0, iters: 40 });   // a jump to the start
+    depthHere = R;
+    ([[0, 2, 40], [0.125, 2, 44], [0.25, 1.3, 52], [0.375, 2, 46], [0.5, 2, 41]] as const).forEach(([turn, r, iters], i) => { if (i > 0) flyRound(turn, r * R, iters); setKeyframe(); });
+}
+/** Everything that plays: the view at every half frame, the depth curve, the count, and the depth keys as the track holds them (ids apart). */
+function played(): string {
+    const ks = routeKeys(), d = anim().sequence.tracks[ROUTE_TRACK], c = anim().sequence.tracks[ROUTE_ITERATIONS_TRACK], out: unknown[] = [];
+    for (let f = ks[0].frame; f <= ks[ks.length - 1].frame; f += 0.5) out.push([routeViewAt(f), animationEngine.evaluateTrack(d, f), animationEngine.evaluateTrack(c, f)]);
+    return JSON.stringify([out, depthKeys().map((k) => [k.frame, k.value, k.interpolation, k.autoTangent, k.leftTangent, k.rightTangent, k.payload]), countKeys().map((k) => [k.frame, k.value])]);
+}
+/** The same keyframes written FRESH: an empty timeline, each key through the store as a K writes it, in time order. */
+function freshRoute(depth: Keyframe[], counts: Keyframe[]): string {
+    anim().deleteAllTracks();
+    useAnimationStore.setState((s) => ({ sequence: { ...s.sequence, tracks: { ...s.sequence.tracks,
+        [ROUTE_TRACK]: { id: ROUTE_TRACK, type: 'float' as const, label: 'Depth', keyframes: [] }, [ROUTE_ITERATIONS_TRACK]: { id: ROUTE_ITERATIONS_TRACK, type: 'float' as const, label: 'Iterations', keyframes: [] } } } }));
+    for (const k of depth) { anim().addKeyframe(ROUTE_TRACK, k.frame, k.value, 'Bezier', k.payload); anim().addKeyframe(ROUTE_ITERATIONS_TRACK, k.frame, counts.find((c) => c.frame === k.frame)?.value ?? 0, 'Linear'); }
+    return played();
+}
+/** How many half frames of two `played()` routes show another view, depth or count. */
+const halfFramesApart = (a: string, b: string): string => {
+    const x = (JSON.parse(a) as [unknown[]])[0], y = (JSON.parse(b) as [unknown[]])[0];
+    return `${x.filter((v, i) => JSON.stringify(v) !== JSON.stringify(y[i])).length} of ${x.length} half frames differ`;
+};
+ball = { centre: [S[0], S[1], S[2]], radius: R };
+anim().setDuration(300);
+keyRound();
+const roundFrames = routeKeys().map((k) => k.frame), roundDepth = depthKeys().map((k) => ({ ...k })), roundCounts = countKeys().map((k) => ({ ...k }));
+check(roundFrames.join() === '0,40,104,168,208' && [1, 2, 3, 4].every((i) => !legInSolid(i)), 'delete: (five keyframes half way round a ball, frames 0, 40, 104, 168, 208; no leg passes through it)', `frames ${roundFrames}`);
+
+// A keyframe deleted in the Route tab, one row's trash button after another, against a fresh route of the keyframes left.
+for (const [name, out] of [['the third', [2]], ['the middle three', [1, 2, 3]], ['the second and the fourth', [1, 3]]] as [string, number[]][]) {
+    keyRound();
+    const ids = routeKeys().map((k) => k.id);
+    for (const i of out) deleteKeyframe(ids[i]);
+    const byTab = played(), left = roundDepth.filter((_, i) => !out.includes(i)), want = freshRoute(left, roundCounts);
+    check(byTab === want, `delete: ${name} deleted in the Route tab: the route is the one a fresh route of the keyframes left would be - views, depth curve, counts and handles, to the digit`, halfFramesApart(byTab, want));
+    // The same keys selected on the timeline's Depth track, and its own Delete.
+    keyRound();
+    const whole = JSON.stringify(anim().sequence), ids2 = depthKeys().map((k) => k.id), stepsAt = anim().undoStack.length;
+    anim().selectKeyframes(out.map((i) => `${ROUTE_TRACK}::${ids2[i]}`), false);
+    anim().deleteSelectedKeyframes();
+    const byTimeline = played();
+    check(byTimeline === want && anim().undoStack.length === stepsAt + 1, `delete: ${name} deleted ON THE TIMELINE: the same route again (its neighbours' handles are worked out again, its iteration key goes), still one undo step`,
+        `${halfFramesApart(byTimeline, want)}, ${anim().undoStack.length - stepsAt} steps`);
+    anim().undo();
+    check(JSON.stringify(anim().sequence) === whole, `delete: (and that step undone brings ${name} back as it was)`);
+}
+
+// The rows selected, and deleted together.
+keyRound();
+{
+    const whole = JSON.stringify(anim().sequence), ids = routeKeys().map((k) => k.id), stepsAt = anim().undoStack.length;
+    const went = deleteKeyframes([ids[3], ids[1], ids[2], 'no such keyframe']);
+    const together = played();
+    check(went === 3 && routeKeys().map((k) => k.id).join() === [ids[0], ids[4]].join() && countKeys().map((k) => k.frame).join() === '0,208' && anim().undoStack.length === stepsAt + 1,
+        'delete: three keyframes deleted together are ONE undo step, their iteration keys with them', `${went} went, ${routeKeys().length} left, counts at ${countKeys().map((k) => k.frame)}, ${anim().undoStack.length - stepsAt} steps`);
+    check(routeKeys().map((k) => k.frame).join() === '0,208' && legInSolid(1), 'delete: the keyframes that stay keep their times - one leg of 208 frames - and that leg now passes through the ball, which the solid check finds',
+        `frames ${routeKeys().map((k) => k.frame)}, through ${legInSolid(1)}`);
+    const auto = legFrames(routeKeys()[0], routeKeys()[1], 30);
+    console.log(`     (that leg: 208 frames where K would time it ${auto}; the pace along it ${[0.1, 0.5, 0.9].map((u) => routePaceAt(208 * u, 30).toFixed(2)).join(', ')} decades a second)`);
+    anim().undo();
+    check(JSON.stringify(anim().sequence) === whole && routeKeys().length === 5, 'delete: and that one step undone brings all three back');
+    const want = freshRoute([roundDepth[0], roundDepth[4]], roundCounts);
+    check(together === want, 'delete: deleted together they leave the route a fresh one of the two keyframes left would be, to the digit', halfFramesApart(together, want));
+}
+
+// Clear route.
+keyRound();
+{
+    const stepsAt = anim().undoStack.length;
+    scrubRouteTo(104);                               // the route drives the camera
+    const stood = host.getView();
+    calls.length = 0;
+    clearRoute();
+    check(routeKeys().length === 0 && Object.keys(anim().sequence.tracks).length === 0 && anim().undoStack.length === stepsAt + 1 && anim().currentFrame === 0,
+        'clear: Clear route takes every keyframe and its iteration key in ONE undo step, and the playhead is back at frame 0',
+        `${routeKeys().length} keyframes, tracks ${Object.keys(anim().sequence.tracks)}, ${anim().undoStack.length - stepsAt} steps, frame ${anim().currentFrame}`);
+    check(setViews().length === 0 && sameCamera(host.getView(), stood) && !routeDrives() && calls.some((c) => c.name === 'setParams' && c.patch['dzFormula.autoIterations'] === true),
+        'clear: the camera stays where it is and is the user\'s: no view is set, and the renderer\'s own iteration rule is back', `${setViews().length} setView, drives ${routeDrives()}`);
+    anim().undo();
+    check(routeKeys().length === 5 && routeKeys().map((k) => k.frame).join() === roundFrames.join() && countKeys().length === 5, 'clear: that one step undone brings the whole route back');
+    // With a recorded free look, and a count keyed by hand on no keyframe's frame.
+    useAnimationStore.setState((s) => ({ sequence: { ...s.sequence, tracks: { ...s.sequence.tracks, ...Object.fromEntries(LOOK_TRACKS.map((id) => [id, {
+        id, type: 'float' as const, label: id, keyframes: [0, 208].map((frame) => ({ id: `${id}-${frame}`, frame, value: 0.1, interpolation: 'Linear' as const, autoTangent: false, brokenTangents: false })),
+    }])) } } }));
+    anim().addKeyframe(ROUTE_ITERATIONS_TRACK, 20, 43, 'Linear');
+    const whole = JSON.stringify(anim().sequence), stepsThen = anim().undoStack.length;
+    clearRoute();
+    check(routeKeys().length === 0 && !lookKeyed() && LOOK_TRACKS.every((id) => !anim().sequence.tracks[id]) && countKeys().map((k) => `${k.frame}:${k.value}`).join() === '20:43' && anim().undoStack.length === stepsThen + 1,
+        'clear: a recorded free look goes with the route, in the same step; a count keyed on no keyframe\'s frame stays', `look ${lookKeyed()}, counts ${countKeys().map((k) => k.frame)}, ${anim().undoStack.length - stepsThen} steps`);
+    clearRoute();
+    check(anim().undoStack.length === stepsThen + 1, 'clear: with no keyframe it does nothing, and leaves no step');
+    anim().undo();
+    check(JSON.stringify(anim().sequence) === whole, 'clear: and one undo brings keyframes, counts and the free look back, as they were');
+}
+
+// The seconds field: the length of the leg that arrives at a keyframe.
+keyRound();
+{
+    anim().setDuration(250);
+    const ids = routeKeys().map((k) => k.id), views = JSON.stringify(routeKeys().map((k) => [k.depth, k.view, k.heading])), counts = countKeys().map((k) => k.value).join(), stepsAt = anim().undoStack.length;
+    setLegSeconds(ids[2], 5);                        // the leg 2 -> 3 was 64 frames; five seconds are 150
+    const now = routeKeys().map((k) => k.frame);
+    check(now.join() === '0,40,190,254,294' && anim().undoStack.length === stepsAt + 1,
+        'seconds: a leg given five seconds: its keyframe and every later one move by the same 86 frames, the earlier ones stay, in one undo step', `frames ${now}, ${anim().undoStack.length - stepsAt} steps`);
+    check(JSON.stringify(routeKeys().map((k) => [k.depth, k.view, k.heading])) === views && routeKeys().map((k) => k.id).join() === ids.join()
+        && countKeys().map((k) => k.frame).join() === now.join() && countKeys().map((k) => k.value).join() === counts && anim().durationFrames === 294,
+        'seconds: only time changes: the same keyframes, views, depths and counts, each iteration key on its keyframe, and the timeline grows to hold the route', `counts at ${countKeys().map((k) => k.frame)}, length ${anim().durationFrames}`);
+    setLegSeconds(ids[2], 5);
+    setLegSeconds(ids[0], 3);
+    setLegSeconds(ids[1], Number.NaN);
+    check(anim().undoStack.length === stepsAt + 1 && routeKeys().map((k) => k.frame).join() === now.join(), 'seconds: the same length again, the first keyframe (no leg arrives at it) and no number at all change nothing and leave no step');
+    setLegSeconds(ids[4], 0);
+    check(routeKeys().map((k) => k.frame).join() === '0,40,190,254,255', 'seconds: the least is one frame', `frames ${routeKeys().map((k) => k.frame)}`);
+    anim().undo();
+    anim().undo();
+    check(routeKeys().map((k) => k.frame).join() === roundFrames.join() && countKeys().map((k) => k.frame).join() === roundFrames.join(), 'seconds: two undos put every keyframe and count back where it was');
+    // While a route renders, none of the three changes it.
+    const held = JSON.stringify(anim().sequence), heldSteps = anim().undoStack.length;
+    setRouteRendering(true);
+    deleteKeyframes([ids[1], ids[2]]);
+    setLegSeconds(ids[2], 9);
+    clearRoute();
+    setRouteRendering(false);
+    check(JSON.stringify(anim().sequence) === held && anim().undoStack.length === heldSteps, 'render: while the route is rendered a delete of several, a typed leg and Clear route change nothing and leave no step');
+}
+ball = null;
 
 stopSync();
 console.log(failed === 0 ? '\nroute: all green' : `\nroute: ${failed} FAILED`);

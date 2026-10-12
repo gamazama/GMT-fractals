@@ -28,8 +28,9 @@
  *     Cam). From the navigation (`deep-zoom/DeepZoomNavigation.tsx`): `noteMove` / `noteTurn` (the
  *     hands moved or turned the camera: it is theirs), `stopRoutePlayback` (a hand TAKES the
  *     controls) and `lookTurned` (a turn while the route plays: a free look, which takes nothing).
- *     `diveBegan` from a dive (`deep-zoom/diveControl.ts`). `pauseRoute` and `clearLook` from the
- *     Route tab.
+ *     `diveBegan` from a dive (`deep-zoom/diveControl.ts`). From the Route tab: `pauseRoute`,
+ *     `clearLook`, `deleteKeyframes` (one keyframe or the rows selected), `setLegSeconds` (a row's
+ *     seconds field: the length of the leg that arrives at it) and `clearRoute` (all of it).
  *   - THE OTHER WAY TO MAKE A ROUTE is to cut it from the trail (`deep-zoom/trail.ts`: what the app
  *     remembers of how the camera was flown). `routeFromTrail()` replaces the route with one whose
  *     keyframes are the trail's own samples; `setRouteSmoothing()` cuts it again from the same
@@ -126,10 +127,37 @@
  *     counts as set by hand.
  *   - HANDLES. A keyframe's handles on the depth curve are the timeline's own (auto) until somebody
  *     shapes them. While they are, they are worked out again when the keyframe takes a new view
- *     (it is written as a new key: its id changes) and when a neighbour is deleted; left as they
+ *     (it is written as a new key: its id changes) and when a neighbour is deleted - here
+ *     (`deleteKeyframes`) or on the timeline (`installRoute`: grep `healHandles`); left as they
  *     were, a much deeper view makes the depth dip and rise on the way. Shaped handles are never
  *     touched here.
- *   - `host.thumbnail` restarts the still. It is called when a keyframe is set, never on a timer.
+ *   - A DELETE MOVES NO KEYFRAME IN TIME. The leg that swallowed the deleted ones is as long as
+ *     they were together, and it runs straight from the one keyframe to the other: what the
+ *     deleted keyframes led the camera round, it may now pass through. The solid check says so in
+ *     the list; the leg's length is its row's seconds field. Measured 2026-10-12 in the app, five
+ *     keyframes half way round the bulb, the middle three deleted: one leg of 125 frames where K
+ *     would time 81, 0.25 to 0.44 decades a second, 0.61 from the bulb's centre, shown in red.
+ *   - `host.thumbnail` restarts the still. It is called when a keyframe is set, and once for each
+ *     keyframe of a route cut from the trail (PICTURES below). Never on a timer that goes on.
+ *   - PICTURES OF A CUT ROUTE (`takeOwedPictures`). A keyframe set with K is pictured from the
+ *     screen. A keyframe cut from the trail was never on screen as a keyframe, so a moment after
+ *     the cut the camera is put on each in turn and its picture taken, a task at a time
+ *     (`PICTURE_TASK_MS`), until none is owed; then nothing runs. WITHIN ONE TASK the camera goes
+ *     to a keyframe, the renderer is stepped BY HAND (`host.step`: its picture of a view needs
+ *     the reference orbit and the depth of that view, which only a frame works out - with no
+ *     frame run the picture is of the place the camera came from, seen 2026-10-12), the picture
+ *     is taken, and the camera is put back on the very view it had with a frame of it run. So
+ *     the user's camera is never anywhere else when a task ends, no frame of a keyframe reaches
+ *     the screen, and the route, the trail and the navigation are told of none of it
+ *     (`picturing`). The count is the one keyed at the keyframe, the renderer's own rule held off
+ *     for the task: the rule only raises, and a picture taken from a deeper place came out with
+ *     that place's count (42 for a keyframe keyed at 32).
+ *     WHAT IT COSTS: the still starts again once the last picture is taken, as it does after K,
+ *     and the page is slow while it runs (a keyframe is two frames of the renderer's work and a
+ *     96-pixel one; what was measured is in the PICTURES @assumption below). It waits while the
+ *     timeline plays, the hands fly, a dive flies or a route renders. A route cut again from the
+ *     same trail (the smoothing) keeps the pictures of the samples it had (`pictured`). A
+ *     keyframe from a loaded scene still shows its number.
  *   - The solid check asks the renderer for one reference orbit a sample (milliseconds at depth):
  *     it runs a moment after a keyframe changes, a leg a task, never per frame, and it waits while
  *     the hands fly or the timeline plays (a cut route has up to 300 legs). It reads the
@@ -218,6 +246,42 @@
  *   fly step run with the moves taken out, the roll's ease dropped when playback stops - is wiring
  *   no node check reaches. Driven in the app on 2026-10-11 (debug/scratch/r5/app-look.mts: a look
  *   drag and Q while a route plays, Pause, W, a recorded pass, a scene saved and loaded, Clear).
+ * @invariant Clear route is ONE animation-undo step: every keyframe, each one's iteration key and
+ *   the recorded free look go in it - proven by: npm run check:deep-zoom-route ("clear: Clear
+ *   route takes every keyframe and its iteration key in ONE undo step ...", "clear: a recorded free
+ *   look goes with the route, in the same step ..."). Falsified 2026-10-12: a second `snapshot()`
+ *   in `clearRoute` -> 3 red (2 steps).
+ * @invariant A typed leg moves its keyframe AND every later one by the same number of frames, and
+ *   none before it - proven by: npm run check:deep-zoom-route ("seconds: a leg given five seconds
+ *   ...", "seconds: the least is one frame"). Falsified 2026-10-12: `setLegSeconds` moving the
+ *   leg's own keyframe only -> 3 red (frames 0, 40, 190, 208: the fourth swallowed).
+ * @invariant Several keyframes deleted together are ONE animation-undo step - proven by: npm run
+ *   check:deep-zoom-route ("delete: three keyframes deleted together are ONE undo step ...").
+ *   Falsified 2026-10-12: a `snapshot()` a keyframe in `deleteKeyframes` -> that line red (3 steps).
+ * @assumption A keyframe deleted ON THE TIMELINE leaves the route a fresh route of the keyframes
+ *   left would be, its neighbours' handles worked out again (`healHandles`, from the follower in
+ *   `installRoute`). The check has a line for it ("delete: ... deleted ON THE TIMELINE: the same
+ *   route again ..."), written after the fix and never red itself. The SAME COMPARISON was red
+ *   before the fix existed, 2026-10-12, run as a scratch on the tree at a20c5405
+ *   (debug/scratch/route-fixes/delete-measure.mts, git-ignored): 252, 403 and 414 of 417 half
+ *   frames differed from the fresh route, the depth curve by up to 0.048 decades; after it, 0.
+ * @assumption The other "delete:", "clear:" and "seconds:" lines are green and were NOT falsified
+ *   (three breaks were the stage's allowance): a keyframe deleted in the Route tab leaves the
+ *   route a fresh one would be, to the digit (it did before this stage too: measured first); the
+ *   keyframes that stay keep their times; after Clear the camera is the user's with no view set
+ *   and the iteration rule handed back; each step undone brings back what it took; a typed leg
+ *   changes time only and the timeline grows; none of the three acts while a route renders.
+ * @assumption PICTURES: every keyframe of a cut route gets the picture of its own view at its
+ *   keyed count, the camera is put back to the digit, the trail, the heading and the undo stack
+ *   are not touched, and a route cut again draws only its new samples - green lines in
+ *   check:deep-zoom-trail ("picture: ..."), none falsified, against a fake renderer whose
+ *   "frame" is a counter. IN THE REAL APP, once, 2026-10-12 (headless Chrome on the GPU, a 1440 x
+ *   900 window, the live frame 288 x 320; debug/scratch/route-fixes/app-six.mts, git-ignored): a
+ *   route of 11 keyframes down to 1e-8 had every picture 1.1 s after the click (a quarter second
+ *   of waiting, then 79 ms a keyframe: about 1.0 s for 10), one of 3 round the bulb after 0.33 s;
+ *   the camera was the same view object for object afterwards, and at every animation frame in
+ *   between; the still went from 64 samples to 0 and was at 64 again 1.2 to 1.4 s later. A
+ *   keyframe costs two live frames and one 96-pixel draw: on a larger frame, more.
  * @invariant A keyed count arrives whole up to the renderer's ceiling for the formula in force: 400
  *   on the Mandelbulb (the ray march's own, `RAY_ITER_MAX`), 500 on the Mandelbox - `api.dz.setView`
  *   and `api.setIters` hold a count under `itersMax()` and nothing lower - proven by: npm run
@@ -255,7 +319,7 @@ import {
     trailDirections, trailFrames, trailHeadingNow, trailToHere, trailTurned, trailViewSet,
 } from './trail';
 import type { RouteTiming, TrailSample } from './trail';
-import { flushHostSync, holdAutoIterations } from './useHostSync';
+import { autoIterationsHeld, flushHostSync, holdAutoIterations } from './useHostSync';
 
 /** The route's track: one key a keyframe. */
 export const ROUTE_TRACK = 'camera.depth';
@@ -285,6 +349,12 @@ const LOOK_LABELS = ['Look pan', 'Look tilt', 'Look roll'] as const;
 export const LOOK_FIT_TOLERANCE = Math.PI / 1800;
 
 const THUMBNAIL_PX = 96;
+/** How long one task goes on taking the pictures a cut route is owed, before the page gets a turn (PICTURES in the header). */
+const PICTURE_TASK_MS = 30;
+/** No more pictures than this are kept (the oldest go): a route cut again and again would hold megabytes. */
+const PICTURES_KEPT = 1200;
+/** A typed leg is no longer than this (`setLegSeconds`): an hour. */
+export const ROUTE_TYPED_LEG_SECONDS = 3600;
 const SOLID_CHECK_DELAY_MS = 250;
 /** How often a depth reading is asked on while its rays are unfinished (as a dive does at take-off). */
 const DEPTH_ASKS = 16;
@@ -317,7 +387,8 @@ export interface RouteKey {
 interface RouteUi {
     /** Bumped when the camera changes hands, so a reader can ask `cameraOnRoute()` again. */
     rev: number;
-    /** A picture of each keyframe, by key id, taken when it was set. This session only. */
+    /** A picture of each keyframe, by key id: taken when it was set, or a moment after the route was
+     *  cut from the trail (PICTURES in the header). This session only. */
     thumbnails: Record<string, string>;
     /** By key id: the leg that ARRIVES at this keyframe passes through the solid. */
     solid: Record<string, boolean>;
@@ -450,6 +521,11 @@ let forced = false;
 let drift: V3 | null = null;
 /** How many `setView`s there have been (a dive that one of them ended leaves no heading). */
 let jumps = 0;
+/** Dives in flight (`diveBegan` to its end). */
+let diving = 0;
+/** True while the pictures of a cut route are taken (`takeOwedPictures`): the views set then are
+ *  nobody's move - the camera is back where it stood, to the digit, before the task ends. */
+let picturing = false;
 
 const sameCamera = (a: RouteView, b: RouteView): boolean =>
     a.cam[0] === b.cam[0] && a.cam[1] === b.cam[1] && a.cam[2] === b.cam[2]
@@ -467,8 +543,8 @@ export function takeCamera(): void {
 
 /** The route is driving the camera: the last view came from the timeline and nobody has moved it since. */
 export const routeDrives = (): boolean => driving;
-/** The hook's own `setView` is running (for a `viewSet` listener that must tell it from a jump). */
-export const routeSetsView = (): boolean => own;
+/** The hook's own `setView` is running, or a picture's (for a `viewSet` listener that must tell it from a jump). */
+export const routeSetsView = (): boolean => own || picturing;
 /** The timeline is playing a route. With no keyframe there is no route: the timeline may play
  *  its other tracks while the hands fly, as it always could. */
 export const routePlays = (): boolean => anim().isPlaying && route().keys.length > 0;
@@ -532,8 +608,10 @@ export function pauseRoute(): void {
 export function diveBegan(): () => void {
     stopRoutePlayback();
     takeCamera();
+    diving++;
     const from = getHost()?.getView().cam, at = jumps;
     return () => {
+        diving = Math.max(0, diving - 1);
         const host = getHost();
         if (!host || !from || at !== jumps || host.getView().cam.every((c, i) => c === from[i])) return;
         const look = host.orientation(), across = Math.cos(look.pitch);
@@ -947,7 +1025,7 @@ function write(on: RouteKey | undefined, frame: number | null, skipSnapshot = fa
     const key = route().keys.find((k) => k.frame === target);
     if (!key) return null;
     const picture = host.thumbnail(THUMBNAIL_PX);
-    if (picture) useRoute.setState((s) => ({ thumbnails: { ...s.thumbnails, [key.id]: picture } }));
+    if (picture) keepPictures({ [key.id]: picture });
     if (target > anim().durationFrames) anim().setDuration(target);
     anim().seek(target);
     // The camera already stands on this keyframe: the scrub brings the timeline's values level and sets no view.
@@ -963,25 +1041,77 @@ function write(on: RouteKey | undefined, frame: number | null, skipSnapshot = fa
     return key.id;
 }
 
+/**
+ * `left`: the depth track's keys once some of `was` are gone. A key that lost a neighbour, and whose
+ * handles are still the timeline's own, pointed at a key that is not there any more: its handles are
+ * worked out again. Every other key is handed back as the very object it was.
+ */
+function healHandles(was: readonly Keyframe[], left: readonly Keyframe[]): Keyframe[] {
+    const index = new Map(was.map((k, i) => [k.id, i]));
+    const same = (a: BezierHandle | undefined, b: BezierHandle): boolean => !!a && a.x === b.x && a.y === b.y;
+    return left.map((k, j) => {
+        const i = index.get(k.id);
+        if (i === undefined || k.interpolation !== 'Bezier' || !k.autoTangent) return k;
+        if (was[i - 1]?.id === left[j - 1]?.id && was[i + 1]?.id === left[j + 1]?.id) return k;
+        const { l, r } = AnimationMath.calculateTangents(k, left[j - 1], left[j + 1], 'Auto', true);
+        return same(k.leftTangent, l) && same(k.rightTangent, r) ? k : { ...k, leftTangent: l, rightTangent: r };
+    });
+}
+
+/** The route was edited here: a camera the route holds follows the edit. With no keyframe left
+ *  there is no route to hold it: the camera is the user's where it stands. */
+function routeEdited(): void {
+    if (route().keys.length === 0) takeCamera();
+    else if (driving) animationEngine.scrub(anim().currentFrame);
+    bump();
+}
+
 /** Remove a keyframe, and the iteration key at its frame. One animation-undo step. */
 export function deleteKeyframe(id: string): void {
-    const r = route(), key = r.keys.find((k) => k.id === id);
-    if (!key || !r.depth || routeRendering()) return;
+    deleteKeyframes([id]);
+}
+
+/**
+ * Remove these keyframes, each with the iteration key at its frame: ONE animation-undo step for
+ * all of them. The keyframes that stay keep their times, so a leg that swallowed others is as long
+ * as they were together (its length is the row's seconds field: `setLegSeconds`). Returns how many
+ * went.
+ */
+export function deleteKeyframes(ids: readonly string[]): number {
+    const r = route(), wanted = new Set(ids), gone = r.keys.filter((k) => wanted.has(k.id));
+    if (gone.length === 0 || !r.depth || routeRendering()) return 0;
     anim().snapshot();
-    const at = r.depth.keyframes.findIndex((k) => k.id === id), left = r.depth.keyframes.filter((k) => k.id !== id);
-    // Its two neighbours' handles, where they are still the timeline's own, pointed at it: worked out again.
-    for (const j of [at - 1, at]) {
-        const k = left[j];
-        if (!k || k.interpolation !== 'Bezier' || !k.autoTangent) continue;
-        const { l, r: right } = AnimationMath.calculateTangents(k, left[j - 1], left[j + 1], 'Auto', true);
-        left[j] = { ...k, leftTangent: l, rightTangent: right };
-    }
-    const swaps = [{ trackId: ROUTE_TRACK, newKeys: left }];
-    const kept = r.iters?.keyframes.filter((k) => Math.abs(k.frame - key.frame) >= 0.5);
+    const swaps = [{ trackId: ROUTE_TRACK, newKeys: healHandles(r.depth.keyframes, r.depth.keyframes.filter((k) => !wanted.has(k.id))) }];
+    const kept = r.iters?.keyframes.filter((c) => !gone.some((k) => Math.abs(c.frame - k.frame) < 0.5));
     if (r.iters && kept && kept.length !== r.iters.keyframes.length) swaps.push({ trackId: ROUTE_ITERATIONS_TRACK, newKeys: kept });
     anim().replaceKeyframes(swaps);
-    if (driving) animationEngine.scrub(anim().currentFrame);         // the camera is the route's: it follows the edit
+    routeEdited();
+    return gone.length;
+}
+
+/**
+ * Clear the route: every keyframe goes, each with the iteration key at its frame, and the recorded
+ * free look with them (the three look tracks, as `clearLook`). The playhead returns to frame 0;
+ * the camera stays where it is and is the user's. ONE animation-undo step brings all of it back
+ * (the playhead is no part of a step). Nothing with no keyframe, or while the route is rendered.
+ * The trail is left as it is: a route can be cut from it again.
+ */
+export function clearRoute(): void {
+    const r = route();
+    if (r.keys.length === 0 || routeRendering()) return;
+    stopAt = null;
+    if (anim().isPlaying) anim().pause();
+    takeCamera();
+    const tracks = anim().sequence.tracks;
+    const counts = r.iters?.keyframes.filter((c) => !r.keys.some((k) => Math.abs(c.frame - k.frame) < 0.5)) ?? [];
+    // `removeTracks` takes the step. An iterations track that would be left empty goes with the
+    // others; the keys of one that is not are written after it, inside the same step.
+    anim().removeTracks([ROUTE_TRACK, ...LOOK_TRACKS.filter((id) => tracks[id]), ...(r.iters && counts.length === 0 ? [ROUTE_ITERATIONS_TRACK] : [])]);
+    if (r.iters && counts.length > 0 && counts.length !== r.iters.keyframes.length) anim().replaceKeyframes([{ trackId: ROUTE_ITERATIONS_TRACK, newKeys: counts }]);
+    anim().seek(0);
+    animationEngine.scrub(0);                                        // the timeline's other tracks: their values at frame 0
     bump();
+    showToast('Route cleared. One undo on the timeline brings it back', 'info', 5000);
 }
 
 // ── a route cut from the trail ───────────────────────────────────────────────────────────────────
@@ -1027,6 +1157,11 @@ function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
     anim().replaceKeyframes([{ trackId: ROUTE_TRACK, newKeys: depthKeys }, { trackId: ROUTE_ITERATIONS_TRACK, newKeys: countKeys }]);
     depthKeys.forEach((k, j) => made.set(k.id, { trail, sample: pick.index[j], smoothing }));
     for (const id of made.keys()) { if (made.size <= MADE_KEPT) break; made.delete(id); }
+    // Their pictures: the ones this trail's samples already have (the route cut again), the rest a moment from now.
+    const known = pictured.get(trail), have: Record<string, string> = {};
+    owed = depthKeys.filter((k, j) => { const p = known?.get(pick.index[j]); if (p) have[k.id] = p; return !p; }).map((k) => k.id);
+    keepPictures(have);
+    picturesSoon();
 
     // (A recorded free look is left as it is: where it turns the last keyframe, the camera does not stand on it.)
     const end = frames[frames.length - 1], last = routeShownAt(frames[frames.length - 1]) ?? viewOfSample(trail[trail.length - 1]), host = getHost();
@@ -1080,7 +1215,31 @@ export function retimeRoute(flown: boolean): void {
     const now = from
         ? trailFrames(from.trail, keys.map((k) => made.get(k.id)?.sample ?? 0), timing(), flown, was[0])
         : evenFrames(keys.map(zoomKey), timing(), was);
-    if (now.every((f, i) => f === was[i])) return;
+    moveKeyframes(r, was, now);
+}
+
+/**
+ * Give the leg that ARRIVES at this keyframe another length, in seconds: the keyframe and every
+ * later one move by the difference. A frame at least, `ROUTE_TYPED_LEG_SECONDS` at most. Key times
+ * only: views, depths and counts stay, and so does every leg but this one. One animation-undo
+ * step; none when the leg already has that length. (A recorded free look stays at its frames, as
+ * it does for the two timings.)
+ */
+export function setLegSeconds(id: string, seconds: number): void {
+    const r = route(), i = r.keys.findIndex((k) => k.id === id);
+    if (i < 1 || !(seconds >= 0) || routeRendering()) return;
+    const was = r.keys.map((k) => k.frame);
+    const by = Math.max(1, Math.round(Math.min(ROUTE_TYPED_LEG_SECONDS, seconds) * anim().fps)) - (was[i] - was[i - 1]);
+    if (by === 0) return;
+    stopAt = null;
+    if (anim().isPlaying) anim().pause();
+    moveKeyframes(r, was, was.map((f, j) => (j < i ? f : f + by)));
+}
+
+/** The route's keyframes go from the frames `was` to the frames `now`, with everything keyed on
+ *  its two tracks between them. One animation-undo step; none when no key moves. */
+function moveKeyframes(r: Built, was: readonly number[], now: readonly number[]): void {
+    if (!r.depth || now.every((f, i) => f === was[i])) return;
     /** A frame of the old timing in the new one: a keyframe's exactly, the frames between two in proportion. */
     const warp = (f: number): number => {
         const top = was.length - 1;
@@ -1116,6 +1275,83 @@ export function retimeRoute(flown: boolean): void {
     anim().seek(at);
     if (driving) animationEngine.scrub(at); else lastFrame = at;
     bump();
+}
+
+// ── pictures of keyframes that were not set from the screen ──────────────────────────────────────
+
+/** The keyframes of the last cut that have no picture yet, in route order (PICTURES in the header). */
+let owed: string[] = [];
+/** By trail: the picture taken at a sample. A route cut again from the same trail draws only the samples that are new. */
+const pictured = new WeakMap<readonly TrailSample[], Map<number, string>>();
+
+/** Pictures by key id, into the Route tab's list. Past `PICTURES_KEPT` the oldest go. */
+function keepPictures(add: Record<string, string>): void {
+    if (Object.keys(add).length === 0) return;
+    useRoute.setState((s) => {
+        const all = { ...s.thumbnails, ...add }, ids = Object.keys(all);
+        for (const id of ids.slice(0, Math.max(0, ids.length - PICTURES_KEPT))) delete all[id];
+        return { thumbnails: all };
+    });
+}
+
+/**
+ * Take the pictures a cut route is owed, for as long as `budgetMs`: one keyframe at least when one
+ * is owed. Each is the view shown at its keyframe's frame, drawn with the count keyed there (the
+ * renderer's own iteration rule held off meanwhile, as when the route drives): the camera is PUT
+ * there, a frame is run, the picture is taken - and before this returns the camera is put back
+ * where it stood, the very view it was, and a frame of it is run. So no frame of a keyframe is
+ * ever shown, and nothing else sees the camera anywhere but where the user left it. Nothing is
+ * done, and nothing is dropped, while something else has the camera: a render, a playing timeline,
+ * a flight, a dive. Returns how many are still owed.
+ */
+export function takeOwedPictures(budgetMs = Infinity): number {
+    const host = getHost(), state = host?.bootParams() ? host.telemetry() : null;
+    if (!host || !state || state.error) { owed = []; return 0; }     // no renderer to draw them: they keep their numbers
+    if (owed.length === 0 || !state.ready || routeRendering() || anim().isPlaying || isFlying() || diving > 0) return owed.length;
+    const r = route(), here = host.getView(), held = autoIterationsHeld(), began = performance.now(), taken: Record<string, string> = {};
+    const { roll: _roll, ...look } = here;                           // every look value as the renderer has it: only the camera differs
+    // One frame works out the reference orbit and the depth of a view that was set. The shell's renderer draws
+    // every depth one way ('deep'); under the developer lever's other two, the frame after a jump is still drawn
+    // the way the LAST depth asked for, and a second one is run.
+    const frames = host.diagnostics().levers.mode === 'deep' ? 1 : 2;
+    const run = (): void => { for (let i = 0; i < frames; i++) host.step(performance.now()); };
+    let away = false;
+    picturing = true;
+    try {
+        while (owed.length > 0 && (!away || performance.now() - began < budgetMs)) {
+            const id = owed.shift() as string, key = r.keys.find((k) => k.id === id);
+            if (!key || useRoute.getState().thumbnails[id]) continue;   // gone (an undo, a newer edit), or it has one
+            const view = routeShownAt(key.frame) ?? key.view, count = itersAt(r, key.frame);
+            holdAutoIterations(count > 0);                           // the rule only raises a count: a picture would depend on where the camera stood
+            host.setView({ ...look, cam: view.cam, yaw: view.yaw, pitch: view.pitch, ...(view.roll ? { roll: view.roll } : {}), iters: count || here.iters });
+            away = true;
+            run();
+            const picture = host.thumbnail(THUMBNAIL_PX);
+            if (!picture) continue;                                  // nothing can be drawn now: it keeps its number
+            taken[id] = picture;
+            const from = made.get(id);
+            if (from) pictured.set(from.trail, (pictured.get(from.trail) ?? new Map<number, string>()).set(from.sample, picture));
+        }
+        if (away) { host.setView(here); run(); }
+    } finally {
+        holdAutoIterations(held);
+        picturing = false;
+    }
+    keepPictures(taken);
+    return owed.length;
+}
+
+let pictureRun = 0;
+/** The owed pictures, a moment from now and a task at a time; a newer call drops this one. It ends when none is owed. */
+function picturesSoon(): void {
+    const run = ++pictureRun;
+    const task = (): void => {
+        if (run !== pictureRun || owed.length === 0) return;
+        const before = owed.length, left = takeOwedPictures(PICTURE_TASK_MS);
+        // Nothing taken: something else has the camera. Asked again as the solid check is.
+        if (left > 0) setTimeout(task, left === before ? SOLID_CHECK_DELAY_MS : 0);
+    };
+    setTimeout(task, SOLID_CHECK_DELAY_MS);
 }
 
 // ── does a leg pass through the solid ────────────────────────────────────────────────────────────
@@ -1189,6 +1425,7 @@ export function installRoute(): void {
         takeCamera();
         if (!host) return;
         offViewSet = host.on('viewSet', () => {
+            if (picturing) return;                                   // a picture's view: the camera is back before anything can fly from it
             drift = null;
             jumps++;
             trailViewSet();                                          // not flown: the trail keeps the place aside
@@ -1225,5 +1462,11 @@ export function installRoute(): void {
         }
         if (gone.size > 0) anim().replaceKeyframes([{ trackId: ROUTE_ITERATIONS_TRACK, newKeys: counts.filter((c) => !gone.has(c.id)) }]);
         if (moves.length > 0) anim().updateKeyframes(moves);
+        // A keyframe deleted on the timeline: the handles its neighbours pointed at it with are worked out again, as
+        // `deleteKeyframes` does it (PITFALLS: HANDLES). Left as they were, the depth between the two is not the route's.
+        if (before.keyframes.some((k) => !frameOf.has(k.id))) {
+            const healed = healHandles(before.keyframes, after.keyframes);
+            if (healed.some((k, i) => k !== after.keyframes[i])) anim().replaceKeyframes([{ trackId: ROUTE_TRACK, newKeys: healed }]);
+        }
     });
 }
