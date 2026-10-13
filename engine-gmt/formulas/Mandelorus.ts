@@ -169,6 +169,7 @@ export const Mandelorus: FractalDefinition = {
       }
     },
     "lighting": {
+      "specularModel": 1,
       "advancedLighting": true,
       "ptEnabled": true,
       "renderMode": 0,
@@ -196,7 +197,7 @@ export const Mandelorus: FractalDefinition = {
             "z": 0.41340674852481984
           },
           "color": "#ffffff",
-          "intensity": 1.5,
+          "intensity": 1.88,
           "falloff": 0,
           "falloffType": "Quadratic",
           "fixed": false,
@@ -216,7 +217,7 @@ export const Mandelorus: FractalDefinition = {
             "z": 0
           },
           "color": "#ff8800",
-          "intensity": 0.5,
+          "intensity": 0.625,
           "falloff": 0,
           "falloffType": "Quadratic",
           "fixed": false,
@@ -236,7 +237,7 @@ export const Mandelorus: FractalDefinition = {
             "z": 0
           },
           "color": "#0088ff",
-          "intensity": 0.25,
+          "intensity": 0.313,
           "falloff": 0,
           "falloffType": "Quadratic",
           "fixed": true,

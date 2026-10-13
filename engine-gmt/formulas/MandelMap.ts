@@ -192,6 +192,7 @@ export const MandelMap: FractalDefinition = {
       }
     },
     "lighting": {
+      "specularModel": 1,
       "advancedLighting": true,
       "ptEnabled": true,
       "renderMode": 0,

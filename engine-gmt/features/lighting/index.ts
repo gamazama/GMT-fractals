@@ -48,7 +48,7 @@ export interface LightingState {
      *  threshold. 1 = matched; old path-traced scenes are pinned to their pre-fix
      *  ratio by migration v8 (app-gmt/migrations.ts). */
     ptShadowTolerance: number;
-    specularModel: number; // 0=Blinn-Phong (fast), 1=Cook-Torrance GGX (quality)
+    specularModel: number; // 0=Blinn-Phong (Fastest preset, older scenes), 1=Cook-Torrance GGX (the default)
     lights: LightParams[];
 }
 
@@ -100,10 +100,14 @@ export const getLightFromSlice = (slice: LightingState | undefined, i: number): 
     return normalizeLight(slice.lights[i]);
 };
 
+// The rig a scene gets when it brings no lights of its own. Intensities are the
+// pre-2026-10-13 rig (1.5 / 0.5 / 0.25) times 1.11: with Cook-Torrance as the default
+// specular model the same rig on default materials read 11-14% darker, measured on the
+// seven lightless Box Fold default scenes (ADR-0139).
 const DEFAULT_LIGHTS: LightParams[] = [
-    { id: generateLightId(), type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#fff4e6', intensity: 1.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 5500 },
-    { id: generateLightId(), type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#FFD6AA', intensity: 0.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 3500 },
-    { id: generateLightId(), type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#E0EEFF', intensity: 0.25, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 7500 }
+    { id: generateLightId(), type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#fff4e6', intensity: 1.67, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 5500 },
+    { id: generateLightId(), type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#FFD6AA', intensity: 0.56, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 3500 },
+    { id: generateLightId(), type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#E0EEFF', intensity: 0.28, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 7500 }
 ];
 
 export const LightingFeature: FeatureDefinition = {
@@ -204,14 +208,21 @@ export const LightingFeature: FeatureDefinition = {
         },
 
         // --- SPECULAR MODEL (Engine Panel) ---
+        // Cook-Torrance is the model (ADR-0139): its highlight is weighted by Fresnel, as the
+        // path tracer's is, so Direct and Path Tracing agree on how much of the light a
+        // surface mirrors. Blinn-Phong reflects the highlight at full strength — at the same
+        // settings its specular is several times Cook-Torrance's and veils the surface colour
+        // in white. It stays for two things: the Fastest quality preset (it is up to ~9%
+        // cheaper per frame on a light scene) and scenes authored under it, which name it
+        // or are pinned to it by migration v10 (app-gmt/migrations.ts).
         specularModel: {
-            type: 'float', default: 0.0, label: 'Specular Model', shortId: 'sm',
+            type: 'float', default: 1.0, label: 'Specular Model', shortId: 'sm',
             group: 'engine_settings',
             options: [
                 { label: 'Blinn-Phong (Fast)', value: 0.0, estCompileMs: 0 },
-                { label: 'Cook-Torrance (Quality)', value: 1.0, estCompileMs: 30 }  // L6: measured ~free (+6/29ms; §2.6); was 400
+                { label: 'Cook-Torrance (Quality)', value: 1.0, estCompileMs: 70 }  // cold compile +53 / +86 ms on ~2.7 s, paired n=7, 2026-10-13
             ],
-            description: 'BRDF model for direct lighting. Cook-Torrance is physically accurate, with negligible compile cost.',
+            description: 'How direct light makes highlights. Cook-Torrance weights them the way the path tracer does. Blinn-Phong is a little faster and much brighter: it is what the Fastest quality preset uses, and what scenes made before Cook-Torrance became the default keep.',
             onUpdate: 'compile',
             noAccumReset: true
         },

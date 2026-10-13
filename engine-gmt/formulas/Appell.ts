@@ -128,6 +128,7 @@ export const Appell: FractalDefinition = {
       }
     },
     "lighting": {
+      "specularModel": 1,
       "advancedLighting": true,
       "ptEnabled": true,
       "renderMode": 0,

@@ -127,7 +127,7 @@ export const Dodecahedron: FractalDefinition = {
                 glowIntensity: 0, glowSharpness: 1, glowColor: "#ffffff", glowMode: false
             },
             geometry: { juliaMode: false, juliaX: -0.495, juliaY: 0.43, juliaZ: -0.07, hybridMode: false },
-            lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 538, shadowIntensity: 1, shadowBias: 0 },
+            lighting: { specularModel: 1, advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 538, shadowIntensity: 1, shadowBias: 0 },
             quality: { detail: 2, fudgeFactor: 0.618, pixelThreshold: 0.2, maxSteps: 300, distanceMetric: 3, stepJitter: 0.15, estimator: 5 },
             colorGrading: { saturation: 1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             optics: { camFov: 30, dofStrength: 0, dofFocus: 5.416511696387403 }
@@ -139,9 +139,9 @@ export const Dodecahedron: FractalDefinition = {
         targetDistance: 8.7922319978922,
         cameraMode: "Orbit",
         lights: [
-            { type: 'Directional', position: { x: 0.3935750958329095, y: 1.1219073945240998, z: 2.531297422652509 }, rotation: { x: -0.1760895376460553, y: -0.04312640645659912, z: 0.00380748198692117 }, color: "#FFE6D1", intensity: 0.43559999999999993, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 5100 },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Directional', position: { x: 0.3935750958329095, y: 1.1219073945240998, z: 2.531297422652509 }, rotation: { x: -0.1760895376460553, y: -0.04312640645659912, z: 0.00380748198692117 }, color: "#FFE6D1", intensity: 0.649, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 5100 },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.745, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.745, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

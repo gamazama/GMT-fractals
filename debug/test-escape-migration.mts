@@ -29,6 +29,8 @@ import { applyMigrations } from '../engine/migrations';
 import { virtualScaleFor } from '../engine/features/modulation/paramMapping';
 import '../app-gmt/migrations'; // registers v1 escape migration as a side effect
 import { loadGMFScene } from '../engine-gmt/utils/FormulaFormat';
+import { registry } from '../engine-gmt/engine/FractalRegistry';
+import { SCALABILITY_PRESETS, SUBSYSTEM_LIGHTING } from '../engine-gmt/types/viewport';
 
 registerFeatures();
 
@@ -318,6 +320,75 @@ console.log('\n[9] v9 — old path-traced Sphere lights are rewritten into Fallo
   assert((junk.features as any).lighting.lights[2].unifiedFalloff === true, 'non-object entries in the array do not stop the pass');
   const point = light0(applyMigrations(pt([{ type: 'Point', intensity: 1 }])));
   assert(point.unifiedFalloff === undefined && point.range === undefined, 'a Point light gains nothing');
+}
+
+// --- Test 10: v10 Blinn-Phong stays with what was authored under it ---------------
+// @see docs/adr/0139-cook-torrance-is-the-direct-specular-model.md
+console.log('\n[10] v10 — a preset that sets up its look but names no specular model keeps Blinn-Phong');
+{
+  const sm = featureRegistry.get('lighting')!.params.specularModel as any;
+  assert(sm?.default === 1.0, 'lighting.specularModel defaults to 1 (Cook-Torrance)');
+  assert(Array.isArray(sm.options) && sm.options.some((o: any) => o.value === 0.0) && sm.options.some((o: any) => o.value === 1.0),
+    'both models stay selectable (0 Blinn-Phong, 1 Cook-Torrance)');
+  const model = (p: any) => p?.features?.lighting?.specularModel;
+
+  // The shapes that predate the choice. A full save from before the param existed:
+  const oldSave = applyMigrations({ formula: 'Mandelbulb', version: 5, features: { lighting: { shadows: true, shadowSoftness: 16, ptBounces: 3 }, materials: { specular: 1.64, roughness: 0.4 } } });
+  assert(model(oldSave) === 0, 'a save with a lighting slice and no specularModel is pinned to Blinn-Phong');
+
+  // A legacy preset keeps its lights at the top level and may carry no lighting slice at all.
+  const legacyLights = applyMigrations({ formula: 'Mandelbulb', features: { coreMath: { iterations: 9 } }, lights: [{ type: 'Point', intensity: 2 }] });
+  assert(model(legacyLights) === 0, 'top-level lights and no specularModel: pinned (the lighting slice is created)');
+
+  const materialsOnly = applyMigrations({ formula: 'Mandelbulb', features: { materials: { specular: 2, roughness: 0.2 } } });
+  assert(model(materialsOnly) === 0, 'a materials slice and no specularModel: pinned');
+
+  // REAL fixture: a Formula Workshop file bakes its lights in and names no model.
+  assert(model(m1) === 0, 'BioCube.gmf (baked lights, no specularModel) is pinned to Blinn-Phong');
+
+  // What must NOT be pinned.
+  const named1 = applyMigrations({ formula: 'Mandelbulb', features: { lighting: { specularModel: 1, shadows: true }, materials: { specular: 2 } } });
+  const named0 = applyMigrations({ formula: 'Mandelbulb', features: { lighting: { specularModel: 0, shadows: true } } });
+  assert(model(named1) === 1 && model(named0) === 0, 'a preset that names its model keeps it (1 stays 1, 0 stays 0)');
+
+  const nothingAuthored = applyMigrations({ formula: 'Mandelbulb', features: { coreMath: { iterations: 9 }, quality: { fudgeFactor: 0.5 } } });
+  assert((nothingAuthored.features as any).lighting === undefined,
+    'a preset with no lights, lighting or materials gains no lighting slice (it takes the default model)');
+
+  const emptySlices = applyMigrations({ formula: 'Mandelbulb', features: { lighting: {}, materials: {} }, lights: [] });
+  assert(model(emptySlices) === undefined, 'empty slices and an empty lights array count as nothing authored');
+
+  // The version tag is not persisted, so a save/reload replays the chain: the pin must hold,
+  // and a model the user chose afterwards must not be pinned back.
+  delete (oldSave as any)._migrationVersion;
+  assert(model(applyMigrations(oldSave)) === 0, 'a second pass keeps the pin');
+  (oldSave.features as any).lighting.specularModel = 1;
+  delete (oldSave as any)._migrationVersion;
+  assert(model(applyMigrations(oldSave)) === 1, 'a pinned scene the user then moved to Cook-Torrance stays there');
+
+  // Every built-in default scene is lit for Cook-Torrance. One that sets up lights or
+  // materials must say so, or the rule above pins it to Blinn-Phong and it renders too
+  // bright; a sparse one (the Box Folds) names nothing and takes the default. The two
+  // named holdouts are scenes the light rescale could not carry across — their look IS the
+  // Blinn-Phong highlight — and they keep that model until they are retuned by eye.
+  const HOLDOUTS = ['BoxBulb', 'Tetrabrot'];
+  const defs = (registry.getAll() as any[]).filter(d => d?.defaultPreset);
+  const after = (d: any) => model(applyMigrations(JSON.parse(JSON.stringify(d.defaultPreset))));
+  assert(defs.length >= 50, `the registry is populated (${defs.length} default scenes)`);
+  const pinned = defs.filter(d => after(d) === 0).map(d => d.id).sort();
+  assert(JSON.stringify(pinned) === JSON.stringify(HOLDOUTS),
+    `no built-in default scene ends on Blinn-Phong except the holdouts (on it: ${pinned.join(', ') || 'none'})`);
+  const naming = defs.filter(d => after(d) === 1).length;
+  assert(naming >= 45, `the lit built-ins name Cook-Torrance (${naming} of ${defs.length})`);
+
+  // Blinn-Phong is otherwise reached only through the Fastest quality preset.
+  const tierModel = (presetId: string) => {
+    const preset = SCALABILITY_PRESETS.find(p => p.id === presetId)!;
+    return SUBSYSTEM_LIGHTING.tiers[preset.subsystems.lighting_quality]?.overrides?.lighting?.specularModel;
+  };
+  assert(tierModel('fastest') === 0.0, 'the Fastest preset selects Blinn-Phong');
+  const others = SCALABILITY_PRESETS.filter(p => p.id !== 'fastest' && p.id !== 'preview').map(p => p.id);
+  assert(others.length >= 3 && others.every(id => tierModel(id) === 1.0), `every other lit preset selects Cook-Torrance (${others.join(', ')})`);
 }
 
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);

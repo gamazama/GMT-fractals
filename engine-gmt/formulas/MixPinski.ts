@@ -154,7 +154,7 @@ export const MixPinski: FractalDefinition = {
                 ]
             },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false },
-            lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 5.636765862528907, shadowSteps: 112, shadowIntensity: 1, shadowBias: 0.002 },
+            lighting: { specularModel: 1, advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 5.636765862528907, shadowSteps: 112, shadowIntensity: 1, shadowBias: 0.002 },
             quality: { detail: 2.5, fudgeFactor: 1, pixelThreshold: 0.5, maxSteps: 300, distanceMetric: 1, estimator: 1.0 }, // Estimator 1 = Linear — matches (r-offset)/dr for IFS
             optics: { camFov: 25, dofStrength: 0, dofFocus: 2.2105886936187744 }
         },
@@ -165,9 +165,9 @@ export const MixPinski: FractalDefinition = {
         targetDistance: 2.767302989959717,
         cameraMode: "Fly",
         lights: [
-            { type: 'Point', position: { x: -0.8183725352111588, y: 1.3532257824970233, z: 1.5729904550803229 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 3, falloff: 1, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: -0.8183725352111588, y: 1.3532257824970233, z: 1.5729904550803229 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 3.9, falloff: 1, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.65, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.65, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

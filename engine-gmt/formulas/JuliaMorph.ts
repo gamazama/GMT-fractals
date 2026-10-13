@@ -268,6 +268,7 @@ export const JuliaMorph: FractalDefinition = {
                 ptEmissionMult: 1
             },
             lighting: {
+                specularModel: 1,
                 shadows: true,
                 shadowSoftness: 41.7859226170808,
                 shadowIntensity: 0.92,
@@ -306,7 +307,7 @@ export const JuliaMorph: FractalDefinition = {
                 position: { x: 2.056650977487994, y: -0.7418778505604411, z: 3.39849758131238 },
                 rotation: { x: 0, y: 0, z: 0 },
                 color: "#ffffff",
-                intensity: 8.76,
+                intensity: 11.7,
                 falloff: 0,
                 falloffType: "Quadratic", fixed: false, visible: true, castShadow: true
             },
@@ -315,7 +316,7 @@ export const JuliaMorph: FractalDefinition = {
                 position: { x: -0.37117243582015064, y: -1.5852765971855902, z: 3.0489919017830487 },
                 rotation: { x: 0, y: 0, z: 0 },
                 color: "#ff8800",
-                intensity: 0.5,
+                intensity: 0.665,
                 falloff: 0,
                 falloffType: "Quadratic", fixed: false, visible: true, castShadow: true
             },
@@ -324,7 +325,7 @@ export const JuliaMorph: FractalDefinition = {
                 position: { x: 0, y: -5, z: 2 },
                 rotation: { x: 0, y: 0, z: 0 },
                 color: "#E0EEFF", useTemperature: true, temperature: 7500,
-                intensity: 0.25,
+                intensity: 0.333,
                 falloff: 0,
                 falloffType: "Quadratic", fixed: false, visible: false, castShadow: true
             }

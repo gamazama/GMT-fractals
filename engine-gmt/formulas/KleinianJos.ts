@@ -213,7 +213,7 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
                 glowIntensity: 0.0, glowSharpness: 3.0, glowMode: false, glowColor: '#ffffff',
                 aoIntensity: 0.3, aoSpread: 0.1, aoMode: false,
             },
-            lighting: { shadows: true, shadowSoftness: 12.0, shadowIntensity: 1, shadowBias: 0.002 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 12.0, shadowIntensity: 1, shadowBias: 0.002 },
             quality: {
                 detail: 2, fudgeFactor: 0.9, pixelThreshold: 0.5,
                 maxSteps: 220, estimator: 1, distanceMetric: 0,

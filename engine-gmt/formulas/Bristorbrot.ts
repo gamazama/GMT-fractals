@@ -100,7 +100,7 @@ export const Bristorbrot: FractalDefinition = {
                 juliaMode: true, juliaX: 1.04, juliaY: 0.21, juliaZ: 0.81,
                 hybridCompiled: true, hybridMode: true, hybridIter: 1, hybridScale: 1, hybridMinR: 0.79, hybridFixedR: 1.08, hybridFoldLimit: 0.87, hybridSwap: false
             },
-            lighting: { shadows: true, shadowSoftness: 2, shadowIntensity: 0.92, shadowBias: 0.015 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 2, shadowIntensity: 0.92, shadowBias: 0.015 },
             // Lowered fudgeFactor to 0.6 to fix slicing artifacts
             quality: { detail: 2.8, fudgeFactor: 0.6, pixelThreshold: 0.5, maxSteps: 300, aaMode: "Auto", aaLevel: 1 },
             optics: { dofStrength: 0, dofFocus: 1.368 }
@@ -111,9 +111,9 @@ export const Bristorbrot: FractalDefinition = {
         sceneOffset: { x: 1, y: 1, z: 2, xL: -0.17139723987914707, yL: -0.09973834195017878, zL: -0.12121507460186143 },
         cameraMode: "Orbit",
         lights: [
-            { type: 'Point', position: { x: 0.16245054993746125, y: 0.326925950685747, z: -2.2309267197330493 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 39.8, falloff: 0.6, falloffType: "Quadratic", fixed: true, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.16245054993746125, y: 0.326925950685747, z: -2.2309267197330493 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 57.7, falloff: 0.6, falloffType: "Quadratic", fixed: true, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.725, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.725, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

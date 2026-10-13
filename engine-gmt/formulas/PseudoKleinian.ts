@@ -95,7 +95,7 @@ export const PseudoKleinian: FractalDefinition = {
             },
             colorGrading: { active: true, saturation: 1.11, levelsMin: 0.01, levelsMax: 1.004, levelsGamma: 0.496 },
             geometry: { juliaMode: false, juliaX: -0.28, juliaY: 2, juliaZ: -2, hybridMode: false },
-            lighting: { shadows: true, shadowSoftness: 178.25, shadowIntensity: 1, shadowBias: 0.000016 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 178.25, shadowIntensity: 1, shadowBias: 0.000016 },
             quality: { fudgeFactor: 0.48, detail: 7.7, pixelThreshold: 0.3, maxSteps: 384, estimator: 4.0, distanceMetric: 2 },
             optics: { camFov: 37, dofStrength: 0.00147, dofFocus: 1.235 },
             reflections: { enabled: true, reflectionMode: 1, steps: 128, mixStrength: 1, roughnessThreshold: 0.5 }
@@ -106,9 +106,9 @@ export const PseudoKleinian: FractalDefinition = {
         targetDistance: 1.0379663705825806,
         cameraMode: "Fly",
         lights: [
-            { type: 'Point', position: { x: 4.677060177682062, y: 0.8489393025420574, z: 1.254369368841062 }, rotation: { x: 1.092, y: 0.667, z: 0.415 }, color: "#FFA757", intensity: 12.96, falloff: 109.253, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 4.557440677764606, y: 1.1, z: -0.16 }, rotation: { x: 0, y: 0, z: 0 }, color: "#A9A9A9", intensity: 27.1441, falloff: 3.528, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 4.677024051602566, y: 0.8488697555642045, z: 1.2543798336180192 }, rotation: { x: 0, y: 0, z: 0 }, color: "#4E83FF", intensity: 28.4, falloff: 261.407, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true }
+            { type: 'Point', position: { x: 4.677060177682062, y: 0.8489393025420574, z: 1.254369368841062 }, rotation: { x: 1.092, y: 0.667, z: 0.415 }, color: "#FFA757", intensity: 25.1, falloff: 109.253, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 4.557440677764606, y: 1.1, z: -0.16 }, rotation: { x: 0, y: 0, z: 0 }, color: "#A9A9A9", intensity: 52.7, falloff: 3.528, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 4.677024051602566, y: 0.8488697555642045, z: 1.2543798336180192 }, rotation: { x: 0, y: 0, z: 0 }, color: "#4E83FF", intensity: 55.1, falloff: 261.407, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true }
         ],
     }
 };

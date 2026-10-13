@@ -129,7 +129,7 @@ export const PseudoKleinian06: FractalDefinition = {
                 glowIntensity: 0.02, glowSharpness: 30, glowColor: '#88ccff', glowMode: false,
                 aoIntensity: 0.4, aoSpread: 0.1, aoMode: false,
             },
-            lighting: { shadows: true, shadowSoftness: 60, shadowIntensity: 1, shadowBias: 0.002 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 60, shadowIntensity: 1, shadowBias: 0.002 },
             quality: {
                 detail: 1, fudgeFactor: 0.8, pixelThreshold: 0.9, maxSteps: 500,
                 aaMode: 'Auto', aaLevel: 1, distanceMetric: 1.0, estimator: 4.0,

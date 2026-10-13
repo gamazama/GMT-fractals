@@ -125,7 +125,7 @@ export const MarbleMarcher: FractalDefinition = {
                 aoIntensity: 0.44, aoSpread: 0.28, aoMode: false
             },
             geometry: { juliaMode: false, juliaX: -2, juliaY: 0.86, juliaZ: -2, hybridMode: false, hybridIter: 2, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1 },
-            lighting: { shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.0007 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.0007 },
             quality: { detail: 1.1, fudgeFactor: 0.62, pixelThreshold: 0.5, maxSteps: 300, distanceMetric: 1.0 },
             optics: { dofStrength: 0, dofFocus: 4.65 }
         },
@@ -136,9 +136,9 @@ export const MarbleMarcher: FractalDefinition = {
         targetDistance: 0.5,
         cameraMode: "Orbit",
         lights: [
-            { type: 'Point', position: { x: 0.936, y: -2.75, z: 6.21 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 8, falloff: 0.67, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: -5, y: -2, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0, y: 0, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.936, y: -2.75, z: 6.21 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 6.88, falloff: 0.67, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: -5, y: -2, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.86, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0, y: 0, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.86, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

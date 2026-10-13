@@ -141,6 +141,7 @@ export const MandelBolic: FractalDefinition = {
                 julia: { x: 0, y: 0, z: 0 }
             },
             lighting: {
+                specularModel: 1,
                 advancedLighting: true,
                 ptEnabled: true,
                 renderMode: 0,

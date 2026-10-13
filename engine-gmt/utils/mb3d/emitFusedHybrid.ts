@@ -428,7 +428,11 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       // fog colour (TimeMachine's blue sky, Genetic Menger's green). Absent ⇒ no fog.
       atmosphere: { glowIntensity: 0, ...(lit.atmosphere ?? {}) },
       optics: { camFov: cam.fov },         // MB3D fovY (degrees)
-      ...(lit.lights.length > 0 ? { lighting: { lights: lit.lights } } : {}),
+      // Blinn-Phong (specularModel 0) whenever the scene's own lights are imported:
+      // MB3D shades with a Phong highlight, and mapLighting's amplitudes and material
+      // were calibrated against GMT's Blinn-Phong. A headerless load brings nothing to
+      // preserve and takes the default model. @see docs/adr/0139
+      ...(lit.lights.length > 0 ? { lighting: { lights: lit.lights, specularModel: 0 } } : {}),
       ...(lit.material ? { materials: lit.material } : {}),
       ...(lit.coloring ? { coloring: lit.coloring } : {}),
     },

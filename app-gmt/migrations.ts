@@ -276,10 +276,11 @@ registerMigration({
 //  - NARROW on purpose, as v6: only renderMode = Path Tracing is pinned. A
 //    Direct scene never showed the old ratio, and pinning every loaded preset
 //    would hand the old shadows to every formula switch and every new scene.
-//  - Known gap: a compact share LINK stores only what differs from defaults and
-//    is decoded onto a full default preset (utils/Sharing.ts), so a link made
-//    before the fix cannot be told from one made after. Old path-traced links
-//    load with the fix.
+//  - Share links are covered too. (Corrected 2026-10-13: this bullet first
+//    claimed a link stores only what differs from defaults, so an old one could
+//    not be told from a new one. It does not — every feature slice is emitted
+//    whole; grep `READ BEFORE EDITING THE SKIP-LIST` in utils/UrlStateEncoder.ts.
+//    A link made before the fix simply lacks the key, like an old file.)
 // @see docs/adr/0093-zoom-normalized-shadow-march.md (update 2026-10-13)
 const PIXEL_THRESHOLD_DEFAULT = 0.5;   // quality.pixelThreshold default, for saves that omit it
 
@@ -425,6 +426,51 @@ registerMigration({
                 light.unifiedFalloff = true;
             });
         }
+        return p;
+    },
+});
+
+// v10 (2026-10-13) — Cook-Torrance is the Direct specular model (ADR-0139);
+// Blinn-Phong stays with what was authored under it. lighting.specularModel now
+// defaults to 1. A preset that sets up its own look — lights, a lighting slice
+// or a materials slice — but names no model was lit and exposed against
+// Blinn-Phong's far stronger highlight, so it is pinned to 0 and renders as it
+// was saved. Measured on the built-in default scenes: unpinned, the same lights
+// come out 0-78% darker under Cook-Torrance, a quarter darker on a typical one.
+//  - Most files need no help: saves, PNGs, gallery items and share links have
+//    carried the full lighting slice, model included, for as long as the param
+//    has existed. The rule is for what predates it (more than half of the
+//    owner's own archive of text saves) and for sparse presets — Formula
+//    Workshop files, Mandelbulb3D imports — that bake lights in and say
+//    nothing more.
+//  - NARROW on purpose, as v6 and v8: a preset with nothing of its own to
+//    preserve (an AI-written formula carries coreMath and quality only) is left
+//    alone and takes the default.
+//  - Content-keyed, because the version tag is not persisted and a save/reload
+//    replays this chain: once pinned the key exists, and a scene the user then
+//    moves to Cook-Torrance names 1.
+//  - The built-in default scenes name 1 (their lights were rescaled for it), so
+//    the rule passes them by. A built-in that forgets to would be pinned here
+//    and render too bright; `npm run test:migrations` section [10] checks all
+//    of them.
+// A formula switch from the picker never reaches the pin: setFormula
+// (store/engineStore.ts, grep `Preserve compile-time engine params`) writes the
+// current model into any preset that names none before this runs.
+// @see docs/adr/0139-cook-torrance-is-the-direct-specular-model.md
+const hasKeys = (v: any): boolean => !!v && typeof v === 'object' && Object.keys(v).length > 0;
+
+registerMigration({
+    version: 10,
+    id: 'app-gmt.blinn-phong-for-scenes-authored-under-it',
+    apply: (p: any) => {
+        const f = p?.features;
+        if (!f || typeof f !== 'object') return p;
+        if (f.lighting?.specularModel !== undefined) return p;   // names its model, or already pinned
+        // `p.lights` is the legacy top-level home (gmtPresetFields.ts reads it after migrations).
+        const authored = hasKeys(f.lighting) || hasKeys(f.materials) || (Array.isArray(p.lights) && p.lights.length > 0);
+        if (!authored) return p;
+        if (!f.lighting || typeof f.lighting !== 'object') f.lighting = {};
+        f.lighting.specularModel = 0;
         return p;
     },
 });

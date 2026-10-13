@@ -20,6 +20,12 @@ the *step dynamics* of all marches; this ADR unifies their *units*).
 > `npm run test:migrations`, section [8]. The pin is exact at device pixel ratio 1: the old formula
 > also had `uInternalScale` on the wrong side of the divide, and a scene does not record the DPR it
 > was viewed at.
+>
+> **Correction, later the same day:** the sentence above about share links is wrong. A link emits
+> every feature slice whole (grep `READ BEFORE EDITING THE SKIP-LIST` in `utils/UrlStateEncoder.ts`),
+> so one made before the fix lacks `ptShadowTolerance` exactly as an old file does and is pinned the
+> same way. Checked by encoding such a preset, decoding it with `parseShareString` and running the
+> migration chain: it comes out at 5 for pixelThreshold 0.2.
 
 ## Context
 

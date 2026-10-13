@@ -191,6 +191,7 @@ export const MengerAdvanced: FractalDefinition = {
                 vec3A: { x: 0, y: 0, z: 0.88 } // Rot X/Y/Z
             },
             lighting: {
+                specularModel: 1,
                 shadows: true,
                 shadowSoftness: 16,
                 shadowIntensity: 0.68,
@@ -203,7 +204,7 @@ export const MengerAdvanced: FractalDefinition = {
                         type: 'Point',
                         position: { x: -0.985, y: 1.872, z: 2.008 },
                         color: "#ffffff",
-                        intensity: 9.18,
+                        intensity: 15.3,
                         falloff: 0,
                         falloffType: "Quadratic",
                         fixed: false,

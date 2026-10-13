@@ -118,7 +118,7 @@ export const MengerSponge: FractalDefinition = {
             },
             colorGrading: { saturation: 1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false },
-            lighting: { shadows: true, shadowSoftness: 2000, shadowIntensity: 0.8, shadowBias: 0.001 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 2000, shadowIntensity: 0.8, shadowBias: 0.001 },
             quality: { fudgeFactor: 1, detail: 1, pixelThreshold: 0.001, maxSteps: 200, estimator: 5.0 },
             optics: { camFov: 50, dofStrength: 0, dofFocus: 10 },
             reflections: { enabled: true, steps: 64, mixStrength: 1, roughnessThreshold: 0.5 }
@@ -129,9 +129,9 @@ export const MengerSponge: FractalDefinition = {
         targetDistance: 2.622,
         cameraMode: "Orbit",
         lights: [
-            { type: 'Point', position: { x: -0.969, y: 1.465, z: 1.325 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 5, falloff: 0, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: -4, y: -2, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E8F0FF", useTemperature: true, temperature: 7000, intensity: 0.5, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 2.069, y: 1.017, z: 2.748 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFC58F", useTemperature: true, temperature: 3000, intensity: 0.3, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: true }
+            { type: 'Point', position: { x: -0.969, y: 1.465, z: 1.325 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 5.5, falloff: 0, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: -4, y: -2, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E8F0FF", useTemperature: true, temperature: 7000, intensity: 0.55, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 2.069, y: 1.017, z: 2.748 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFC58F", useTemperature: true, temperature: 3000, intensity: 0.33, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: true }
         ]
     }
 };

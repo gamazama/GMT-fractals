@@ -30,7 +30,7 @@ export const Modular: FractalDefinition = {
         formula: 'Modular',
         features: {
             coreMath: { iterations: 16, paramA: 8, paramB: 0, paramC: 0, paramD: 0, paramE: 0, paramF: 0 },
-            lighting: { shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.002 }
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.002 }
         },
         pipeline: JULIA_REPEATER_PIPELINE,
         cameraPos: { x: 0, y: 0, z: 4.0 },
