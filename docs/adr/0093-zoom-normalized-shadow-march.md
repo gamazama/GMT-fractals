@@ -6,6 +6,21 @@ the *step dynamics* of all marches; this ADR unifies their *units*).
 > **Update 2026-07-12 (path move; decision unchanged):** the MB3D Pascal source checkout cited
 > below moved from `h:/tmp/mb3d-probe/` to `H:/GMT/stuff/mb3d-probe/`.
 
+> **Update 2026-10-13 (the path tracer's `surfEps` now IS the primary `finalEps`; decision
+> unchanged):** the Decision says callers pass the primary march's `finalEps`, and that "the path
+> tracer reuses its existing NEE `biasEps`". That `biasEps` was not `finalEps` — it left out
+> `uPixelThreshold` (grep `visualLimitNEE` in `engine-gmt/shaders/chunks/pathtracer.ts`) — so
+> path-traced shadow and env-visibility rays tested 1/pixelThreshold times coarser than the surface
+> they left and self-shadowed on it. Measured on a detailed scene at pixelThreshold 0.2, one bounce:
+> shadows blocked 57% of the direct light, against 8% in Direct and 5% once matched, and raising
+> Shadow Bias to 0.02 alone cut it to 10%. The path tracer now uses the `trace.ts` / `pbr.ts` formula.
+> `lighting.ptShadowTolerance` (default 1) multiplies it, and migration v8 (`app-gmt/migrations.ts`)
+> loads scenes that were SAVED path traced with `1/pixelThreshold` there, so they render as they did.
+> Compact share links cannot be told apart by age and load with the fix. Guard:
+> `npm run test:migrations`, section [8]. The pin is exact at device pixel ratio 1: the old formula
+> also had `uInternalScale` on the wrong side of the divide, and a scene does not record the DPR it
+> was viewed at.
+
 ## Context
 
 The primary trace is fully zoom-aware: its hit threshold `finalEps` is cone-traced

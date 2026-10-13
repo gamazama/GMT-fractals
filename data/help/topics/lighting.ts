@@ -88,6 +88,12 @@ If any of these are missing, the light's popover shows an amber warning explaini
 - **Glossy and mirror surfaces show specular highlights from the light** — a bright reflection of the sphere itself on polished material. Point lights never produced this in the path tracer.
 - **Convergence is roughly twice as fast** for scenes with sphere lights — clean shadows in ~64-128 accumulation frames instead of 256+. The PT combines two estimators (next-event sampling + BSDF sampling) using Multiple Importance Sampling.
 
+## Brightness
+
+A Sphere light fades with distance exactly as its **Falloff Curve** and **Range** say — the same controls, with the same result, as a Point light, in both Direct and Path Tracing. Pick **Quadratic** with a Range for a physically accurate inverse-square lamp, or leave Range at 0 for a light that does not fade. The radius changes how soft the shadows are, not how bright the light is. Very close up — nearer than two radii — the light is treated as no wider than a 60° disc, so a large light next to a surface still lights it.
+
+Older path-traced scenes had an extra inverse-square fade built into their Sphere lights. When one is opened, those lights are rewritten with a Quadratic falloff, a Range and a Power that keep the look, so their numbers will have changed.
+
 ## The Visible Sphere toggle
 
 For Sphere lights, the **Visible Sphere** toggle controls *only* whether the glowing emitter ball is rendered in the viewport. The light continues to integrate as an area light when off — handy for getting a clean "invisible studio lighting" look while still benefitting from the physical shadows and reflections.

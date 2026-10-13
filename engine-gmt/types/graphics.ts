@@ -80,4 +80,12 @@ export interface LightParams {
     // this lets the user keep the physical light radius active for area sampling
     // while suppressing the rendered glowing ball. Defaults to false.
     hideEmitter?: boolean;
+    // Bookkeeping for migration v9 (app-gmt/migrations.ts), read by nothing else.
+    // Until 2026-10-13 the path tracer gave a Sphere light a built-in
+    // inverse-square on top of its own falloff; v9 rewrites such a light's
+    // Falloff / Range / Power so it keeps its look under the one falloff model.
+    // Saves do not record which migrations ran, so this key is what stops the
+    // rewrite repeating: a Sphere light WITHOUT it is an unconverted old one.
+    // Anything that makes a light a Sphere must therefore set it.
+    unifiedFalloff?: boolean;
 }

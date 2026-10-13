@@ -477,10 +477,12 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                         </div>
                     )}
 
-                    {/* Sphere area lights need much higher intensity to show up — sphere
-                        sampling spreads emission over 4πr², so small lights pay 1/r² in
-                        contribution. Bump EV ceiling to 20 (≈1M×) and raw ceiling to 10000
-                        with log mapping; Point/Directional lights keep the original ranges. */}
+                    {/* Sphere lights get EV ceiling 20 (≈1M×) and raw ceiling 10000 with
+                        log mapping. That dates from when the path tracer faded them with
+                        distance² on top of their own falloff; migration v9
+                        (app-gmt/migrations.ts) now writes that fade into Range + Power, and
+                        a converted light can sit anywhere up to these ceilings — which the
+                        migration reads. Point/Directional lights keep the original ranges. */}
                     {light.intensityUnit === 'ev' ? (
                         <Slider
                             label="Power (EV)"

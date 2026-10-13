@@ -254,3 +254,177 @@ registerMigration({
         return p;
     },
 });
+
+// v8 (2026-10-13) — path-traced shadow rays test at the surface's own threshold.
+// The path tracer's NEE epsilon (pathtracer.ts, grep `visualLimitNEE`) left
+// uPixelThreshold out of the footprint formula that the primary march and
+// Direct's shadows both use, so its shadow rays ran 1/pixelThreshold times
+// coarser than the surface they left and self-shadowed on it — over half the
+// direct light on a detailed surface at pixelThreshold 0.2. That is fixed;
+// lighting.ptShadowTolerance (default 1) is the ratio to the surface threshold.
+//
+// Scenes SAVED path traced were lit and exposed against that false shadow, so
+// they are pinned to the ratio they rendered with: 1/pixelThreshold. That is
+// the ratio at device pixel ratio 1, the app default. The old formula also had
+// uInternalScale (= DPR) on the wrong side of the divide, and a scene does not
+// record the DPR it was viewed at, so a scene authored at another DPR comes
+// back close rather than identical. Three things the rule depends on:
+//  - The version tag is not persisted (a save/reload replays this whole chain),
+//    so the test is CONTENT: a scene saved since the fix carries
+//    ptShadowTolerance explicitly and is left alone. Files, PNGs, gallery items
+//    and shared scenes all store the full parameter set.
+//  - NARROW on purpose, as v6: only renderMode = Path Tracing is pinned. A
+//    Direct scene never showed the old ratio, and pinning every loaded preset
+//    would hand the old shadows to every formula switch and every new scene.
+//  - Known gap: a compact share LINK stores only what differs from defaults and
+//    is decoded onto a full default preset (utils/Sharing.ts), so a link made
+//    before the fix cannot be told from one made after. Old path-traced links
+//    load with the fix.
+// @see docs/adr/0093-zoom-normalized-shadow-march.md (update 2026-10-13)
+const PIXEL_THRESHOLD_DEFAULT = 0.5;   // quality.pixelThreshold default, for saves that omit it
+
+registerMigration({
+    version: 8,
+    id: 'app-gmt.pt-shadow-tolerance',
+    apply: (p: any) => {
+        const l = p?.features?.lighting;
+        if (!l || typeof l !== 'object') return p;
+        if (l.ptShadowTolerance !== undefined) return p;   // saved since the fix, or already pinned
+        if (l.renderMode !== 1) return p;
+        const stored = p.features.quality?.pixelThreshold;
+        const threshold = typeof stored === 'number' && stored > 0 ? stored : PIXEL_THRESHOLD_DEFAULT;
+        // Clamp to the param's range; pixelThreshold's own range (0.1–2) maps onto it exactly.
+        l.ptShadowTolerance = Math.min(10, Math.max(0.5, 1 / threshold));
+        return p;
+    },
+});
+
+// v9 (2026-10-13) — a Sphere light's distance law is its own Falloff / Range
+// (ADR-0138). The path tracer used to give Sphere lights a built-in
+// inverse-square ON TOP of that falloff — about power / (2·d²) — which Direct
+// mode never applied. It is gone: a Sphere light now reads the same in both
+// render modes, and the same as a Point light with the same settings.
+//
+// A scene SAVED path traced was lit against that extra term, so its Sphere
+// lights are rewritten to keep their look under the one model: Quadratic
+// falloff, a Range short enough that the curve is inverse-square across the
+// scene, and Power rescaled to match in the far field
+// (P' · R² / (99·d²) = P / (2·d²)). Approximate, and accepted as such (owner,
+// 2026-10-13):
+//  - measured on a close-up scene, within 2–3% of the old image;
+//  - a light that ALREADY had a falloff of its own had two falloffs multiplied,
+//    which one curve cannot express. Its own falloff is folded into the Power
+//    at the one distance a preset records — the surface under the screen
+//    centre — so it matches there, and is dimmer nearer the light and brighter
+//    beyond;
+//  - a light whose Power or falloff is keyframed, LFO-driven or audio-driven is
+//    left as it is: those tracks are in the old units, and rescaling the static
+//    value under them would break the animation. It just loses the extra term.
+// A scene saved in Direct never showed the extra term; its lights are only marked.
+//
+// `unifiedFalloff` on the light is that mark. The version tag is not persisted
+// (a save/reload replays this chain), so without it the rewrite would compound
+// on every load; everything that makes a light a Sphere since sets it
+// (lightMenuUtils.ts). Lights are stored whole even in share links, so old
+// links convert too.
+// @see docs/adr/0138-sphere-lights-follow-the-lights-falloff.md
+
+/** Quadratic falloff is `1 / (1 + k·d²)` with `k = 99 / range²` — 1% at `range`;
+ *  Linear is `1 / (1 + k·d)` with `k = 99 / range`. With no Range, `k` is the
+ *  raw `falloff`. Grep `99.0 / (range * range)` in
+ *  engine-gmt/engine/managers/UniformManager.ts — this mirrors that packing. */
+const FALLOFF_RANGE_K = 99;
+const ownAttenuation = (light: any, d: number): number => {
+    const range = typeof light.range === 'number' ? light.range : 0;
+    const linear = light.falloffType === 'Linear';
+    const k = range > 0.001
+        ? FALLOFF_RANGE_K / (linear ? range : range * range)
+        : Math.max(0, typeof light.falloff === 'number' ? light.falloff : 0);
+    return 1 / (1 + k * (linear ? d : d * d));
+};
+
+/** Distance from a light to the surface under the screen centre, or undefined
+ *  when the preset lacks the camera fields. A fixed light is a headlamp: its
+ *  position is in camera space, looking down -Z
+ *  (grep `getLightShaderVector` in engine/plugins/navigation/core/VirtualSpace.ts). */
+const lightToSubjectDistance = (p: any, light: any): number | undefined => {
+    const t = p?.targetDistance;
+    const pos = light?.position;
+    if (!(typeof t === 'number' && t > 0) || !pos) return undefined;
+    if (light.fixed) return Math.hypot(pos.x, pos.y, pos.z + t);
+    const q = p.cameraRot;
+    const so = p.sceneOffset;
+    if (!q || !so) return undefined;
+    // forward = q · (0, 0, -1); the camera sits at sceneOffset.
+    const fx = -2 * (q.x * q.z + q.w * q.y);
+    const fy = -2 * (q.y * q.z - q.w * q.x);
+    const fz = -(1 - 2 * (q.x * q.x + q.y * q.y));
+    return Math.hypot(
+        pos.x - (so.x + (so.xL ?? 0) + fx * t),
+        pos.y - (so.y + (so.yL ?? 0) + fy * t),
+        pos.z - (so.z + (so.zL ?? 0) + fz * t),
+    );
+};
+
+/** Range given to a converted light, in radii: the curve's knee sits at about
+ *  radius / 2, so it is inverse-square from the sphere's surface outward. */
+const CONVERTED_RANGE_PER_RADIUS = 5;
+/** The Sphere power slider's ceilings (grep `INTENSITY_SPHERE` in
+ *  engine/features/modulation/paramMapping.ts, and the EV `max` in
+ *  LightControls.tsx). A tiny light converts to a huge Power; rather than write a
+ *  value the slider would clamp on first touch, the Range is widened to fit. */
+const SPHERE_POWER_MAX_RAW = 10000;
+const SPHERE_POWER_MAX_EV = 20;
+
+const convertLegacySphereLight = (p: any, light: any): void => {
+    const radius = typeof light.radius === 'number' ? light.radius : 0;
+    const isEv = light.intensityUnit === 'ev';
+    const stored = typeof light.intensity === 'number' ? light.intensity : 0;
+    const storedPower = isEv ? Math.pow(2, stored) : stored;
+    if (!(radius > 0.001) || !(storedPower > 0)) return;   // not a working sphere light: no look to keep
+
+    const subject = lightToSubjectDistance(p, light);
+    const power = storedPower * (subject === undefined ? 1 : ownAttenuation(light, subject));
+
+    const powerMax = isEv ? Math.pow(2, SPHERE_POWER_MAX_EV) : SPHERE_POWER_MAX_RAW;
+    const rangeThatFitsSlider = Math.sqrt(FALLOFF_RANGE_K * power / (2 * powerMax));
+    const range = Math.max(CONVERTED_RANGE_PER_RADIUS * radius, rangeThatFitsSlider);
+    const newPower = power * FALLOFF_RANGE_K / (2 * range * range);
+
+    light.falloffType = 'Quadratic';
+    light.range = range;
+    light.intensity = isEv ? Math.log2(newPower) : newPower;
+};
+
+/** Every target a keyframe track, LFO or modulation rule drives in this preset. */
+const drivenTargets = (p: any): Set<string> => {
+    const out = new Set<string>(Object.keys(p?.sequence?.tracks ?? {}));
+    for (const a of Array.isArray(p?.animations) ? p.animations : []) {
+        if (typeof a?.target === 'string') out.add(a.target);
+    }
+    for (const r of Array.isArray(p?.features?.modulation?.rules) ? p.features.modulation.rules : []) {
+        if (typeof r?.target === 'string') out.add(r.target);
+    }
+    return out;
+};
+
+registerMigration({
+    version: 9,
+    id: 'app-gmt.sphere-light-unified-falloff',
+    apply: (p: any) => {
+        const pathTraced = p?.features?.lighting?.renderMode === 1 || p?.renderMode === 'PathTracing';
+        const driven = pathTraced ? drivenTargets(p) : null;
+        // `p.lights` is the legacy top-level home (gmtPresetFields.ts reads it after migrations).
+        for (const lights of [p?.features?.lighting?.lights, p?.lights]) {
+            if (!Array.isArray(lights)) continue;
+            lights.forEach((light: any, i: number) => {
+                if (!light || typeof light !== 'object' || light.type !== 'Sphere') return;
+                if (light.unifiedFalloff !== undefined) return;   // made or converted since
+                const animated = !!driven && (driven.has(`lighting.light${i}_intensity`) || driven.has(`lighting.light${i}_falloff`));
+                if (pathTraced && !animated) convertLegacySphereLight(p, light);
+                light.unifiedFalloff = true;
+            });
+        }
+        return p;
+    },
+});

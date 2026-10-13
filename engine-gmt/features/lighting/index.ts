@@ -44,6 +44,10 @@ export interface LightingState {
     /** Sobol(2)+Cranley-Patterson rotation for the bounce direction seed. */
     ptSobolBounce: boolean;
     ptMaxLuminance: number;
+    /** Path-traced shadow-ray threshold as a multiple of the surface's own hit
+     *  threshold. 1 = matched; old path-traced scenes are pinned to their pre-fix
+     *  ratio by migration v8 (app-gmt/migrations.ts). */
+    ptShadowTolerance: number;
     specularModel: number; // 0=Blinn-Phong (fast), 1=Cook-Torrance GGX (quality)
     lights: LightParams[];
 }
@@ -308,6 +312,21 @@ export const LightingFeature: FeatureDefinition = {
             min: 0.5, max: 200.0, step: 0.5, scale: 'log',
             group: 'engine_settings', parentId: 'ptEnabled',
             description: 'Clamps per-sample luminance to suppress bright firefly spikes. Lower = cleaner but slightly biased. Raise to effectively disable.'
+        },
+        ptShadowTolerance: {
+            // 1 = the shadow ray tests at the threshold the surface was resolved
+            // at (trace.ts finalEps). Until 2026-10-13 the path tracer left
+            // uPixelThreshold out of that threshold (pathtracer.ts, grep
+            // visualLimitNEE), so its shadow rays ran 1/pixelThreshold times
+            // coarser and self-shadowed on the surface they left. Scenes saved
+            // path traced before the fix were lit against that false shadow, so
+            // migration v8 (app-gmt/migrations.ts) loads them with the old ratio
+            // here. The range is exactly 1/pixelThreshold over that param's own
+            // range (0.1–2), so every legacy value fits unclamped.
+            type: 'float', default: 1.0, label: 'Shadow Tolerance', shortId: 'pst', uniform: 'uPTShadowTolerance',
+            min: 0.5, max: 10.0, step: 0.01, scale: 'log',
+            group: 'engine_settings', parentId: 'ptEnabled',
+            description: 'How close a shadow ray may pass to a surface before it counts as blocked, in multiples of the surface hit threshold. 1 = matched. Higher adds self-shadow on fine detail. Older path-traced scenes load with the value that keeps their look.'
         },
         // --- RUNTIME CONTROL ---
         shadows: {

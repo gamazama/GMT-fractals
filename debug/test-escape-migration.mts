@@ -26,6 +26,7 @@ import '../engine-gmt/formulas/index';
 import { registerFeatures } from '../engine-gmt/features/index';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { applyMigrations } from '../engine/migrations';
+import { virtualScaleFor } from '../engine/features/modulation/paramMapping';
 import '../app-gmt/migrations'; // registers v1 escape migration as a side effect
 import { loadGMFScene } from '../engine-gmt/utils/FormulaFormat';
 
@@ -153,6 +154,170 @@ console.log('\n[7] v7 — modulation rule bands convert to Hz');
   // A scene with no modulation slice must not throw.
   const p7c = applyMigrations({ formula: 'Mandelbulb', features: {} });
   assert(!!p7c, 'a scene without modulation survives the migration');
+}
+
+// --- Test 8: v8 path-traced shadow tolerance -----------------------------------
+// @see docs/adr/0093-zoom-normalized-shadow-march.md (update 2026-10-13)
+console.log('\n[8] v8 — path-traced scenes keep their pre-fix shadow ratio');
+{
+  const tol = featureRegistry.get('lighting')!.params.ptShadowTolerance as any;
+  const thr = featureRegistry.get('quality')!.params.pixelThreshold as any;
+  assert(tol?.default === 1.0 && tol?.uniform === 'uPTShadowTolerance',
+    'lighting.ptShadowTolerance: default 1 (the fixed ratio), uPTShadowTolerance');
+  // The pin is 1/pixelThreshold. If either range moves, a legacy value would clamp
+  // and that scene would stop rendering as it was saved.
+  assert(Math.abs(tol.max - 1 / thr.min) < 1e-9 && Math.abs(tol.min - 1 / thr.max) < 1e-9,
+    'its range is exactly 1/pixelThreshold over pixelThreshold\'s range');
+  assert(thr?.default === 0.5, 'quality.pixelThreshold still defaults to 0.5 (the migration assumes it for saves that omit it)');
+
+  // REAL fixture: the one bundled path-traced scene (renderMode 1, pixelThreshold 0.2).
+  const ptPath = resolve(__dirname, '../public/scenes/metallic area light mandelbulb.gmf');
+  const { preset: ptPreset } = loadGMFScene(readFileSync(ptPath, 'utf8'));
+  const p8 = applyMigrations(JSON.parse(JSON.stringify(ptPreset)));
+  assert(Math.abs((p8.features as any).lighting.ptShadowTolerance - 5) < 1e-9,
+    'a saved path-traced scene at pixelThreshold 0.2 is pinned to 5');
+
+  const direct = applyMigrations({ formula: 'Mandelbulb', features: { lighting: { renderMode: 0 }, quality: { pixelThreshold: 0.2 } } });
+  assert((direct.features as any).lighting.ptShadowTolerance === undefined,
+    'a Direct scene is NOT pinned (it never showed the old ratio)');
+
+  const noMode = applyMigrations({ formula: 'Mandelbulb', features: { lighting: { ptBounces: 3 }, quality: { pixelThreshold: 0.2 } } });
+  assert((noMode.features as any).lighting.ptShadowTolerance === undefined,
+    'a preset that does not say Path Tracing is NOT pinned (formula switches stay on the fix)');
+
+  const noThr = applyMigrations({ formula: 'Mandelbulb', features: { lighting: { renderMode: 1 } } });
+  assert((noThr.features as any).lighting.ptShadowTolerance === 2,
+    'a path-traced save that omits pixelThreshold is pinned to 1/0.5 = 2');
+
+  const fresh = applyMigrations({ formula: 'Mandelbulb', features: { lighting: { renderMode: 1, ptShadowTolerance: 1 }, quality: { pixelThreshold: 0.2 } } });
+  assert((fresh.features as any).lighting.ptShadowTolerance === 1,
+    'a scene saved since the fix (explicit 1) is left alone');
+
+  // The version tag is not persisted, so a save/reload replays the chain. The pin
+  // must not be recomputed from a pixelThreshold the user changed afterwards.
+  delete (p8 as any)._migrationVersion;
+  (p8.features as any).quality.pixelThreshold = 1;
+  const p8b = applyMigrations(p8);
+  assert(Math.abs((p8b.features as any).lighting.ptShadowTolerance - 5) < 1e-9,
+    'a second pass keeps the pinned value');
+
+  const lo = applyMigrations({ formula: 'Mandelbulb', features: { lighting: { renderMode: 1 }, quality: { pixelThreshold: 0.01 } } });
+  const hi = applyMigrations({ formula: 'Mandelbulb', features: { lighting: { renderMode: 1 }, quality: { pixelThreshold: 40 } } });
+  assert((lo.features as any).lighting.ptShadowTolerance === 10 && (hi.features as any).lighting.ptShadowTolerance === 0.5,
+    'an out-of-range pixelThreshold clamps to the param range');
+
+  const bare = applyMigrations({ formula: 'Mandelbulb', features: {} });
+  assert(!!bare && (bare.features as any).lighting === undefined, 'a scene without a lighting slice survives and gains none');
+}
+
+// --- Test 9: v9 old path-traced Sphere lights convert into the one falloff model
+// @see docs/adr/0138-sphere-lights-follow-the-lights-falloff.md
+console.log('\n[9] v9 — old path-traced Sphere lights are rewritten into Falloff / Range / Power');
+{
+  // The two laws the conversion translates between, written out independently of
+  // the migration: what the old path tracer applied to a Sphere light (its own
+  // falloff times a built-in power / (2·d²)), and the Quadratic curve as
+  // UniformManager packs it.
+  const ownAtt = (l: any, d: number) => {
+    const range = l.range ?? 0, linear = l.falloffType === 'Linear';
+    const k = range > 0.001 ? 99 / (linear ? range : range * range) : Math.max(0, l.falloff ?? 0);
+    return 1 / (1 + k * (linear ? d : d * d));
+  };
+  const linearPower = (l: any) => l.intensityUnit === 'ev' ? Math.pow(2, l.intensity) : l.intensity;
+  const oldLook = (l: any, d: number) => linearPower(l) * ownAtt(l, d) / (2 * d * d);
+  const newLook = (l: any, d: number) => linearPower(l) * ownAtt(l, d);
+  const pt = (lights: any[], extra: any = {}) => ({ formula: 'Mandelbulb', features: { lighting: { renderMode: 1, lights } }, ...extra });
+  const sphere = (extra: any = {}) => ({ type: 'Sphere', position: { x: 0, y: 0, z: 0 }, intensity: 1, falloff: 0, falloffType: 'Quadratic', radius: 0.02, ...extra });
+  const light0 = (p: any) => (p.features as any).lighting.lights[0];
+
+  // The constants the migration copies from elsewhere still say what it assumes.
+  assert(readFileSync(resolve(__dirname, '../engine-gmt/engine/managers/UniformManager.ts'), 'utf8').includes('99.0 / (range * range)'),
+    'UniformManager still packs Quadratic falloff as 99 / range² (the migration mirrors it)');
+  assert(virtualScaleFor('lighting.light0_intensity', 'Sphere')?.max === 10000,
+    'the Sphere power slider still tops out at 10000 (the migration keeps converted Power under it)');
+
+  // A light with no falloff of its own: the old look is a pure inverse-square,
+  // and the converted light reproduces it from two radii outward.
+  const plain = sphere();
+  const plainOut = light0(applyMigrations(pt([JSON.parse(JSON.stringify(plain))])));
+  assert(plainOut.unifiedFalloff === true && plainOut.falloffType === 'Quadratic' && Math.abs(plainOut.range - 0.1) < 1e-9,
+    'a path-traced Sphere light is marked and given Quadratic falloff with Range = 5 radii');
+  const drift = (d: number) => newLook(plainOut, d) / oldLook(plain, d);
+  assert(Math.abs(drift(0.08) - 1) < 0.02 && Math.abs(drift(0.3) - 1) < 0.002 && Math.abs(drift(3) - 1) < 0.0001,
+    `its look matches the old law: ${drift(0.08).toFixed(4)} at 4 radii, ${drift(0.3).toFixed(4)} at 15, ${drift(3).toFixed(5)} at 150`);
+  assert(drift(0.04) > 0.9 && drift(0.04) < 1, `and stays within 10% at two radii (${drift(0.04).toFixed(3)})`);
+
+  // REAL fixture: the bundled path-traced scene. Its Sphere light has a falloff
+  // of its own (0.22), which is folded in at the subject distance.
+  const ptPath = resolve(__dirname, '../public/scenes/metallic area light mandelbulb.gmf');
+  const { preset: ptPreset } = loadGMFScene(readFileSync(ptPath, 'utf8'));
+  const rawLights = (ptPreset.features as any).lighting.lights as any[];
+  assert(rawLights[0].type === 'Sphere' && rawLights[0].falloff > 0 && rawLights.every(l => l.unifiedFalloff === undefined),
+    'fixture: a Sphere light with its own falloff, and no light carries the mark yet');
+  const before = JSON.parse(JSON.stringify(rawLights[0]));
+  const p9 = applyMigrations(JSON.parse(JSON.stringify(ptPreset)));
+  const after = light0(p9);
+  // The surface under the screen centre, derived here from the preset the long way round.
+  const q = (ptPreset as any).cameraRot, so = (ptPreset as any).sceneOffset, t = (ptPreset as any).targetDistance;
+  const fwd = [-2 * (q.x * q.z + q.w * q.y), -2 * (q.y * q.z - q.w * q.x), -(1 - 2 * (q.x * q.x + q.y * q.y))];
+  const subj = [so.x + (so.xL ?? 0) + fwd[0] * t, so.y + (so.yL ?? 0) + fwd[1] * t, so.z + (so.zL ?? 0) + fwd[2] * t];
+  const dSubj = Math.hypot(before.position.x - subj[0], before.position.y - subj[1], before.position.z - subj[2]);
+  assert(Math.abs(Math.hypot(...fwd) - 1) < 1e-9 && dSubj > before.radius,
+    `fixture: the subject sits ${dSubj.toFixed(3)} from the light, outside its radius ${before.radius.toFixed(3)}`);
+  const atSubject = newLook(after, dSubj) / oldLook(before, dSubj);
+  assert(Math.abs(atSubject - 1) < 0.03, `a light with its own falloff matches the old look at the subject (${atSubject.toFixed(4)})`);
+  assert(((p9.features as any).lighting.lights as any[]).slice(1).every((l: any, i: number) => JSON.stringify(l) === JSON.stringify(rawLights[i + 1])),
+    'the scene\'s other lights are untouched');
+
+  // Replay: the version tag is not persisted. A second pass must not rescale again.
+  delete (p9 as any)._migrationVersion;
+  const frozen = JSON.stringify(after);
+  assert(JSON.stringify(light0(applyMigrations(p9))) === frozen, 'a second pass leaves a converted light exactly as it is');
+
+  // A scene saved in Direct never showed the extra term: marked, not rewritten.
+  const directIn = sphere({ range: 3 });
+  const directOut = light0(applyMigrations({ formula: 'Mandelbulb', features: { lighting: { renderMode: 0, lights: [JSON.parse(JSON.stringify(directIn))] } } }));
+  assert(directOut.unifiedFalloff === true && directOut.intensity === directIn.intensity && directOut.range === 3,
+    'a Sphere light in a Direct scene is marked but keeps its Power and Range');
+
+  // Made since the change: the light menu sets the mark, and the light is left alone.
+  const freshOut = light0(applyMigrations(pt([sphere({ unifiedFalloff: true })])));
+  assert(freshOut.intensity === 1 && freshOut.range === undefined, 'a Sphere light that already carries the mark is not rewritten');
+
+  // Exposure-value power: the same gain, added in stops. (Radius 0.2 keeps both
+  // well under their slider ceilings, which differ: 10000 raw, 2^20 in EV.)
+  const evOut = light0(applyMigrations(pt([sphere({ radius: 0.2, intensityUnit: 'ev', intensity: 3 })])));
+  const rawOut = light0(applyMigrations(pt([sphere({ radius: 0.2, intensity: 8 })])));
+  assert(Math.abs(Math.pow(2, evOut.intensity) - rawOut.intensity) < 1e-6 * rawOut.intensity && evOut.range === rawOut.range,
+    'an EV light converts to the same linear power as its raw twin');
+
+  // A tiny light would convert past the slider: the Range widens instead, and the far field still matches.
+  const tiny = sphere({ radius: 0.002 });
+  const tinyOut = light0(applyMigrations(pt([JSON.parse(JSON.stringify(tiny))])));
+  assert(tinyOut.intensity <= 10000 * (1 + 1e-9) && tinyOut.range > 5 * 0.002,
+    `a tiny light's Power stops at the slider ceiling (${tinyOut.intensity.toFixed(1)}) with a wider Range (${tinyOut.range.toFixed(4)})`);
+  assert(Math.abs(newLook(tinyOut, 1) / oldLook(tiny, 1) - 1) < 0.01, 'and still matches the old law in the far field');
+
+  // Animated power: its tracks are in the old units, so the light is marked and left.
+  const keyed = applyMigrations(pt([sphere(), sphere()], { sequence: { tracks: { 'lighting.light0_intensity': { id: 'lighting.light0_intensity', keyframes: [] } } } }));
+  const kl = (keyed.features as any).lighting.lights;
+  assert(kl[0].intensity === 1 && kl[0].range === undefined && kl[0].unifiedFalloff === true, 'a light with a keyframed Power is marked, not rewritten');
+  assert(kl[1].range !== undefined, 'its un-animated neighbour is still converted');
+  const lfo = light0(applyMigrations(pt([sphere()], { animations: [{ target: 'lighting.light0_falloff' }] })));
+  assert(lfo.range === undefined && lfo.unifiedFalloff === true, 'the same for an LFO on its falloff');
+
+  // Legacy top-level home for lights, with the legacy top-level render mode.
+  const legacyTop = applyMigrations({ formula: 'Mandelbulb', features: {}, renderMode: 'PathTracing', lights: [sphere()] });
+  assert((legacyTop as any).lights[0].unifiedFalloff === true && (legacyTop as any).lights[0].range !== undefined,
+    'a Sphere light in the legacy top-level `lights` array converts too');
+
+  // Not a working sphere light, and junk in the array.
+  const dead = light0(applyMigrations(pt([sphere({ radius: 0 })])));
+  assert(dead.unifiedFalloff === true && dead.range === undefined, 'a Sphere light with no radius is marked and otherwise left');
+  const junk = applyMigrations(pt([null, 7, sphere()] as any[]));
+  assert((junk.features as any).lighting.lights[2].unifiedFalloff === true, 'non-object entries in the array do not stop the pass');
+  const point = light0(applyMigrations(pt([{ type: 'Point', intensity: 1 }])));
+  assert(point.unifiedFalloff === undefined && point.range === undefined, 'a Point light gains nothing');
 }
 
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);

@@ -319,9 +319,11 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                </div>
            )}
            
-           {/* --- Power slider (all modes) — Sphere lights get extended range
-                because sphere sampling spreads emission over 4πr², so small
-                lights pay 1/r² in contribution and need much higher intensity. */}
+           {/* --- Power slider (all modes) — Sphere lights get extended range.
+                It dates from when the path tracer faded them with distance² on top
+                of their own falloff; migration v9 (app-gmt/migrations.ts) now writes
+                that fade into Range + Power, and a converted light can sit anywhere
+                up to this ceiling. */}
            {currentLight.intensityUnit === 'ev' ? (
                <Slider
                  label="Power (EV)"
