@@ -29,6 +29,7 @@ export const APP_ENTRYPOINTS = {
   'gradient-explorer': ['gradient-explorer/v2/main.tsx'],
   'gradient-explorer-next': ['gradient-explorer/v2/main.tsx'],
   'demo': ['index.tsx'],
+  'deep-zoom': ['deep-zoom/main.tsx'],
 };
 
 const RESOLVE_EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.mts', '.css', '.glsl', '.json'];

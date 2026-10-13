@@ -8,10 +8,14 @@ export interface CopiedKeyframe {
     leftTangent?: any;
     rightTangent?: any;
     originalTrackId: string;
+    /** The key's app data, carried through the clipboard (`Keyframe.payload`). */
+    payload?: unknown;
 }
 
 export type HistoryItem =
-    | { type: 'SEQUENCE', data: AnimationSequence }
+    // `durationFrames` is the timeline's length when the step was taken: undo and redo put it
+    // back with the sequence (a tool that grew the timeline, the length field itself).
+    | { type: 'SEQUENCE', data: AnimationSequence, durationFrames: number }
     // `audioClips` rides along because `setFps('match')` remaps
     // `AudioClip.startFrame` by the same `r = newFps/oldFps` it applies to
     // keyframes. Without it, undo restores the keys and leaves the clip at
@@ -57,6 +61,8 @@ export interface PlaybackSliceActions {
     setIsScrubbing: (v: boolean) => void;
     setIsCameraInteracting: (v: boolean) => void;
     seek: (frame: number) => void;
+    /** Set the timeline's length. No undo step of its own: a caller that wants one takes
+     *  `snapshot()` first, once per committed change (the toolbar's length field does). */
     setDuration: (frames: number) => void;
     /** Change the project framerate.
      *  - mode 'keep' (default): keyframes stay at their frame index, so wall-clock
@@ -112,7 +118,10 @@ export interface SequenceSliceActions {
     removeTracks: (ids: string[]) => void;
     setTrackBehavior: (trackId: string, behavior: TrackBehavior) => void;
     
-    addKeyframe: (trackId: string, frame: number, value: number, interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
+    /** Add a key, replacing any key already at `frame`. `payload` is the key's app data
+     *  (`Keyframe.payload`): a key written with one keeps the `value` it is given, and a track
+     *  registered in `engine/animation/payloadTrackRegistry.ts` takes no key without one. */
+    addKeyframe: (trackId: string, frame: number, value: number, interpolation?: 'Linear' | 'Step' | 'Bezier', payload?: unknown) => void;
     batchAddKeyframes: (frame: number, updates: { trackId: string, value: number }[], interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
     /** Recording-only fast path — writes the same per-track values at every
      *  integer frame in `[startFrame, endFrame]` in a single store update,
@@ -129,6 +138,11 @@ export interface SequenceSliceActions {
     removeKeyframe: (trackId: string, keyframeId: string) => void;
     updateKeyframe: (trackId: string, keyframeId: string, updates: Partial<Keyframe>) => void;
     updateKeyframes: (updates: { trackId: string, keyId: string, patch: Partial<Keyframe> }[]) => void;
+    /** Swap whole keyframe arrays, for the tools that add and remove keys (bake, simplify,
+     *  the pencil, a ctrl-drag copy); `updateKeyframes` can only patch keys that exist. The
+     *  caller sorts and takes the undo snapshot. A payload track drops a swap in which any
+     *  key lacks a payload. */
+    replaceKeyframes: (updates: { trackId: string, newKeys: Keyframe[] }[]) => void;
     
     deleteSelectedKeyframes: () => void;
     deleteAllKeys: () => void;
@@ -144,6 +158,7 @@ export interface SequenceSliceActions {
     
     simplifySelectedKeys: (tolerance?: number) => void;
 
+    /** Take an undo step: the sequence and the timeline's length as they are now. */
     snapshot: () => void;
     undo: () => boolean;
     redo: () => boolean;

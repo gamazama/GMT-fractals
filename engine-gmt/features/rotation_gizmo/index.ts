@@ -4,7 +4,7 @@
  * Carries NO params on purpose: which gizmos are open (and where their pucks
  * sit) is session UI state in the standalone rotationGizmoStore, never
  * serialized into presets. This feature exists only to mount the DOM overlay
- * through the standard viewportConfig path (DomOverlays → OverlayHost) — the
+ * through the standard viewportConfig path (engine/plugins/viewport/FeatureOverlays.tsx) — the
  * same seam LightGizmo and DrawingOverlay use. The per-frame display update
  * is a TICK_PHASE.OVERLAY tick registered in features/ui.tsx.
  *

@@ -214,6 +214,8 @@ export const useViewportMode = () => {
 
 export { ViewportFrame } from './viewport/ViewportFrame';
 export type { ViewportFrameProps } from './viewport/ViewportFrame';
+export { FeatureOverlays } from './viewport/FeatureOverlays';
+export type { FeatureOverlaysProps } from './viewport/FeatureOverlays';
 export { ViewportModeControls } from './viewport/ViewportModeControls';
 export type { ViewportModeControlsProps } from './viewport/ViewportModeControls';
 export { FixedResolutionControls } from './viewport/FixedResolutionControls';

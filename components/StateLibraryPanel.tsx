@@ -11,6 +11,18 @@
  *   - Save / Duplicate / Delete action buttons (hover-revealed)
  *   - Empty-state placeholder
  *   - Slot-shortcut hint (Ctrl+1..9) shown beside the first 9 entries
+ *   - Optional second line per row (`renderMeta`) — a fact derived from the
+ *     snapshot, so it survives a rename
+ *   - Optional derived display order (`sortBy`) — and with it, drag-reorder off
+ *
+ * Pitfall — A ROW'S NUMBER IS ITS STORED POSITION, NOT ITS PLACE ON SCREEN.
+ * The slot hint and the number in an empty thumbnail are the snapshot's index
+ * in `snapshots`. Without `sortBy` the two are the same thing. With it they
+ * part, on purpose: the slot keys registered by
+ * `engine/store/installStateLibrary.ts` index the stored array and know
+ * nothing of this panel's order, so the digit a row shows has to stay the
+ * digit that recalls it. A sorted list therefore shows its digits out of
+ * sequence. (grep `index` in the row loop — it is always the stored index.)
  *
  * NOT owned (provide via slot props or skip):
  *   - Cardinal-direction toolbar (GMT-specific)
@@ -19,10 +31,11 @@
  *   - "New" button — pass via toolbarBefore/After or render below the list
  *
  * Snapshot type is generic; the panel only touches `id`, `label`,
- * `thumbnail`, and passes the full snapshot back to handlers + `isModified`.
+ * `thumbnail`, and passes the full snapshot back to handlers + `isModified`
+ * + `renderMeta` + `sortBy`. What a snapshot's state MEANS stays with the app.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TrashIcon, DragHandleIcon, SaveIcon, CopyIcon } from './Icons';
 import type { StateSnapshot } from '../engine/store/createStateLibrarySlice';
 
@@ -58,12 +71,48 @@ export interface StateLibraryPanelProps<T> {
     onDuplicate: (id: string) => void;
     /** Delete the snapshot — immediate, no confirmation. */
     onDelete: (id: string) => void;
-    /** Drag-reorder. */
+    /** Drag-reorder. Indices are positions in `snapshots`. Never called
+     *  while `sortBy` is set. */
     onReorder: (fromIndex: number, toIndex: number) => void;
 
     /** Optional dirty-check — when it returns true for the active
      *  snapshot, the label renders italic amber with a `*` prefix. */
     isModified?: (snap: StateSnapshot<T>) => boolean;
+
+    /**
+     * Optional second line under a row's label: a short fact about the
+     * snapshot, in the app's own words. Called with the whole snapshot each
+     * time the row renders. Derive the text from `snap.state` (anything but
+     * the label) and it survives a rename — which is the point: a fact that
+     * was only ever written into the default label is gone the first time
+     * the row is renamed.
+     *
+     * One line, truncated. Return null / undefined / false for a row with
+     * nothing to show and no line is rendered for it. Absent = rows are
+     * exactly as before; no element is added.
+     */
+    renderMeta?: (snap: StateSnapshot<T>) => React.ReactNode;
+
+    /**
+     * Optional DISPLAY order: an `Array.prototype.sort` comparator over
+     * snapshots. Display only — `snapshots` is not sorted in place and
+     * nothing is written back, so the stored order is what it was.
+     *
+     * While it is set the order is derived, so drag-reorder is OFF: rows
+     * render no drag handle, claim no drag, and `onReorder` is never called.
+     * Pass undefined again to hand the order back to the user.
+     *
+     * A result of 0 is a tie and ties keep their stored order (the sort is
+     * stable, and reads NaN as 0). A comparator that returns NaN for only
+     * SOME pairs — a subtraction where some snapshots lack the field — is
+     * inconsistent, and where those rows land is then undefined: place them
+     * explicitly (first or last) inside the comparator.
+     *
+     * Pitfall — slot numbers stay STORED positions (see the file header).
+     * Do not number rows in display order to tidy a sorted list: the digit
+     * on a row would then recall a different row.
+     */
+    sortBy?: (a: StateSnapshot<T>, b: StateSnapshot<T>) => number;
 
     /** Empty-state copy. Defaults to "No saved snapshots". */
     emptyState?: string;
@@ -105,9 +154,27 @@ export interface StateLibraryPanelProps<T> {
  *   (`if (e.defaultPrevented) return`). Guarded by
  *   `npm run smoke:statelibrary-drop`, which asserts reorder AND
  *   file-drop passthrough so a fix for one can't silently break the other.
- * @assumption Slot-shortcut hint is hardcoded to the first 9 rows. Rows
- *   at index >= 9 render no `Ctrl+N` hint regardless of how many
- *   snapshots exist. Matches the slice's `count: 9` default.
+ * @assumption Slot-shortcut hint is hardcoded to the first 9 STORED
+ *   positions. Snapshots at index >= 9 of `snapshots` render no `Ctrl+N`
+ *   hint regardless of how many exist or where `sortBy` shows them.
+ *   Matches the slice's `count: 9` default.
+ * @invariant Under `sortBy` the rows follow the comparator while every
+ *   number a row prints (slot hint, empty-thumbnail number) stays its index
+ *   in `snapshots`, and `snapshots` itself is left in the order it came in
+ *   — proven by: npx tsx debug/test-state-library-options.mts ("each row
+ *   prints its stored slot number", "the caller's array is not reordered").
+ * @invariant `sortBy` set = no drag handle in any row (nothing in the list
+ *   is draggable). `renderMeta` absent, or returning null for a row = no
+ *   second-line element in that row — proven by:
+ *   npx tsx debug/test-state-library-options.mts ("no row is draggable under
+ *   sortBy", "no second line without renderMeta", "a null result renders no
+ *   line").
+ * @assumption The drag HANDLERS are also off under `sortBy` (a row claims
+ *   no drag, `onReorder` is never called). The node test reads markup and
+ *   cannot see event handlers; this was driven in a browser on 2026-10-08
+ *   (a synthetic dragstart / dragover / drop on rows and a real mouse drag:
+ *   stored order unchanged, `defaultPrevented` false on dragover and drop)
+ *   and has no standing guard.
  * @assumption `isModified` is consulted ONLY for the active row —
  *   non-active rows never render the modified marker even if dirty.
  *   The cyan highlight already identifies which row is "live"; the
@@ -141,6 +208,8 @@ export function StateLibraryPanel<T>({
     onDelete,
     onReorder,
     isModified,
+    renderMeta,
+    sortBy,
     emptyState = 'No saved snapshots',
     slotHintPrefix = 'Ctrl+',
     presets,
@@ -153,6 +222,31 @@ export function StateLibraryPanel<T>({
     const [editId, setEditId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
     const [drag, setDrag] = useState<DragState | null>(null);
+
+    // `sortBy` derives the order, so the user cannot also set it by hand.
+    const reorderable = !sortBy;
+
+    // Drop any drag state when `sortBy` arrives. Measured 2026-10-08 with this
+    // effect removed: dragstart, then `sortBy` set and cleared with no
+    // `dragend` in between, and the next drag over a row was claimed
+    // (`defaultPrevented` true on dragover and drop) and reordered the list —
+    // what the @invariant on foreign drags below forbids. With it: unclaimed,
+    // order unchanged.
+    // @assumption That `dragend` can go missing: the handle unmounts under
+    //   `sortBy`, and an event fired on a detached node does not bubble to
+    //   React's root listener. The test above simulated the loss by not
+    //   dispatching one; a real browser drag across the switch was not driven.
+    useEffect(() => {
+        if (!reorderable) setDrag(null);
+    }, [reorderable]);
+
+    // Display rows. `index` is ALWAYS the snapshot's position in `snapshots`
+    // (the stored array), never its place on screen: the slot hint, the
+    // empty-thumbnail number and `onReorder`'s indices all mean the stored
+    // array, and so do the slot keys. Sorting this COPY leaves the caller's
+    // array — usually live store state — in the order it came in.
+    const rows = snapshots.map((snap, index) => ({ snap, index }));
+    if (sortBy) rows.sort((a, b) => sortBy(a.snap, b.snap));
 
     const handleRenameStart = (snap: StateSnapshot<T>) => {
         setEditId(snap.id);
@@ -243,15 +337,16 @@ export function StateLibraryPanel<T>({
                     </div>
                 )}
 
-                {snapshots.map((snap, index) => {
+                {rows.map(({ snap, index }) => {
                     const isActive = activeId === snap.id;
                     const modified = isActive && (isModified?.(snap) ?? false);
-                    const isDragOver = drag && drag.overIndex === index && drag.fromIndex !== index;
+                    const isDragOver = reorderable && drag && drag.overIndex === index && drag.fromIndex !== index;
+                    const meta = renderMeta?.(snap);
                     return (
                         <div
                             key={snap.id}
-                            onDragOver={(e) => handleDragOver(e, index)}
-                            onDrop={(e) => handleDrop(e, index)}
+                            onDragOver={reorderable ? (e) => handleDragOver(e, index) : undefined}
+                            onDrop={reorderable ? (e) => handleDrop(e, index) : undefined}
                             onClick={() => onSelect(snap.id)}
                             className={`flex items-center gap-1.5 p-1.5 rounded border transition-all group ${
                                 isActive
@@ -259,16 +354,19 @@ export function StateLibraryPanel<T>({
                                     : 'bg-line/5 border-transparent hover:border-line/10'
                             } ${isDragOver ? 'border-accent-400/70 border-dashed' : ''}`}
                         >
-                            {/* Drag handle — only this child is draggable */}
-                            <div
-                                draggable
-                                onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, index); }}
-                                onDragEnd={handleDragEnd}
-                                className="cursor-grab opacity-0 group-hover:opacity-40 hover:!opacity-80 transition-opacity flex-shrink-0"
-                                title="Drag to reorder"
-                            >
-                                <DragHandleIcon />
-                            </div>
+                            {/* Drag handle — only this child is draggable. Not
+                                rendered at all while `sortBy` owns the order. */}
+                            {reorderable && (
+                                <div
+                                    draggable
+                                    onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, index); }}
+                                    onDragEnd={handleDragEnd}
+                                    className="cursor-grab opacity-0 group-hover:opacity-40 hover:!opacity-80 transition-opacity flex-shrink-0"
+                                    title="Drag to reorder"
+                                >
+                                    <DragHandleIcon />
+                                </div>
+                            )}
 
                             {/* Thumbnail */}
                             <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-surface-section border border-line/5">
@@ -325,6 +423,13 @@ export function StateLibraryPanel<T>({
                                             `??`, which does not catch `''`. */}
                                         {modified ? `*${snap.label || 'Untitled'}` : (snap.label || 'Untitled')}
                                     </span>
+                                )}
+                                {/* Second line — only when the app asked for one AND it
+                                    returned something, so a row without it is unchanged. */}
+                                {meta != null && meta !== false && (
+                                    <div data-snapshot-meta className="text-[9px] leading-tight text-fg-dim truncate">
+                                        {meta}
+                                    </div>
                                 )}
                                 {slotHintPrefix !== null && index < 9 && (
                                     <span className="text-[7px] text-fg-faint">

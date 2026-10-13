@@ -21,9 +21,9 @@ extraction), ADR-0062 (low-latency `desynchronized` present, default on — grep
 - **Don't bypass the event bus to talk to the worker.** `engine.setUniform` on the
   engine-core stub is a no-op. UI and animation code goes through `FRACTAL_EVENTS`
   so engine-gmt's bridge forwards it.
-- **Capabilities are a formal wire contract.** `REGISTER_FORMULA` carries them;
-  they used to be silently dropped. `supportsDifs` is now the `estimator:difs`
-  token. Adding a capability means updating the wire contract, not a side channel.
+- **Capabilities are a formal wire contract.** `REGISTER_FORMULA` carries them
+  (`supportsDifs` is the `estimator:difs` token). Adding a capability means updating
+  the wire contract, not a side channel.
 - Engine-core stub vs engine-gmt real is a genuine type-graft. Casts here are
   sometimes legitimate — document why at the cast site.
 - **Never `const engine = getProxy()` at module scope.** `setProxy()` (called
@@ -43,13 +43,11 @@ npm run smoke:export-watchdog   # boots app-gmt: the per-frame export stall watc
                                 # (WorkerExporter), plus one real frame on the live worker
 ```
 
-`renderExportFrame` had no timeout until 2026-09-02: a dropped EXPORT_FRAME_DONE
-left the export dialog pending forever. The watchdog is a NO-PROGRESS window
-(60 s default, `opts.stallMs`), not a ceiling — a frame that keeps beating is
-never aborted however long a 4K path-traced frame takes. Heartbeats come from
-inside the sample loop about once per second of GPU time.
+The export watchdog is a NO-PROGRESS window (60 s default, `opts.stallMs`), not a
+ceiling: a frame that keeps beating is never aborted. Heartbeats come from inside the
+sample loop about once per second of GPU time.
 
 ## Main thread must mirror worker reality
 
-Two render-loop stall bugs both came from main-thread gates that had drifted from
-what the worker was actually doing. If you add a gate on one side, check the other.
+If you add a gate on one side, check the other: main-thread gates that drift from what
+the worker is doing stall the render loop.

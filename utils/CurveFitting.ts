@@ -43,19 +43,47 @@ export const dpIndices = (vals: number[], eps: number): number[] => {
 /** Recompute Auto (Catmull-Rom) tangents for the Bezier keyframes matched by `pred`
  *  (default: every key), leaving Step/Linear and hand-broken (`autoTangent === false`)
  *  keys untouched. Shared by the curve fit, add-key, Bias and Pencil so the
- *  "smooth out of the box" convention lives in one place. Expects `keys` sorted by frame. */
+ *  "smooth out of the box" convention lives in one place. Expects `keys` sorted by frame.
+ *  `isLog`: the keys are an exponential track's (`engine/animation/logTrackRegistry.ts`), so
+ *  the tangents are worked out in log space, where they are evaluated. */
 export const reTangentBezier = (
     keys: Keyframe[],
     pred?: (k: Keyframe, i: number) => boolean,
+    isLog = false,
 ): Keyframe[] =>
     keys.map((k, n) => {
         if (k.interpolation !== 'Bezier' || k.autoTangent === false) return k;
         if (pred && !pred(k, n)) return k;
         const prev = n > 0 ? keys[n - 1] : undefined;
         const next = n < keys.length - 1 ? keys[n + 1] : undefined;
-        const { l, r } = AnimationMath.calculateTangents(k, prev, next, 'Auto');
+        const { l, r } = AnimationMath.calculateTangents(k, prev, next, 'Auto', isLog);
         return { ...k, leftTangent: l, rightTangent: r, tangentMode: 'Aligned' as const, autoTangent: true };
     });
+
+/**
+ * AN EXPONENTIAL TRACK IS FITTED IN ITS LOG. Its curve is solved in (frame, ln value) and its
+ * tangents are ln-units (`AnimationMath.interpolate`), so there a fit is the plain fit: take the
+ * samples to their logs, fit, and take the KEY VALUES back (the tangents are already in the
+ * right units). `lnSamples` gives the samples in that space, or null when the plain one is
+ * meant - a plain track, or a sample at or below zero, which has no log.
+ */
+const lnSamples = (samples: number[], isLog: boolean): number[] | null =>
+    (isLog && samples.every((v) => v > 0) ? samples.map(Math.log) : null);
+const expValues = (keys: Keyframe[]): Keyframe[] => keys.map((k) => ({ ...k, value: Math.exp(k.value) }));
+
+/**
+ * The Pencil's simplify tolerance for a track: `share` of the range its keys span, measured in
+ * the space the stroke is fitted in. On an exponential track that is the LOG range (the result
+ * is in ln-units, what `fitSamplesToKeys(..., isLog)` reads): a share of the plain range is
+ * wider than every decade below the top one, and a stroke collapsed to two or three keys.
+ */
+export const strokeTolerance = (keys: Keyframe[], isLog = false, share = 0.02): number => {
+    const ln = isLog && keys.every((k) => k.value > 0);
+    let mn = Infinity, mx = -Infinity;
+    keys.forEach((k) => { const v = ln ? Math.log(k.value) : k.value; if (v < mn) mn = v; if (v > mx) mx = v; });
+    const range = (isFinite(mx - mn) && mx > mn) ? mx - mn : 1;
+    return Math.max(1e-6, range * share);
+};
 
 /**
  * How long a FITTED tangent's time arm is, as a fraction of its span.
@@ -275,7 +303,11 @@ export const fitKeysToSamples = (
     idx: number[],
     frameOf: (sampleIndex: number) => number,
     idPrefix: string,
+    /** The samples are an exponential track's values: fit their logs. @see lnSamples */
+    isLog = false,
 ): Keyframe[] => {
+    const ln = lnSamples(samples, isLog);
+    if (ln) return expValues(fitKeysToSamples(ln, idx, frameOf, idPrefix));
     const keys: Keyframe[] = idx.map((i, n) => ({
         id: `${idPrefix}-k${n}`,
         frame: frameOf(i),
@@ -365,6 +397,8 @@ export const spliceSpan = (
     hi: number,
     spanKeys: Keyframe[],
     seamOnly = true,
+    /** An exponential track's keys: the seam is healed in log space. @see reTangentBezier */
+    isLog = false,
 ): Keyframe[] | null => {
     const kept = keys.filter((k) => k.frame < lo || k.frame > hi);
     const merged = [...kept, ...spanKeys].sort((a, b) => a.frame - b.frame);
@@ -420,8 +454,8 @@ export const spliceSpan = (
     reach(firstSpan - 1, 'rightTangent', firstSpan, true);
     reach(lastSpan + 1, 'leftTangent', lastSpan, true);
     return seamOnly
-        ? reTangentBezier(merged, (_k, i) => i === firstSpan - 1 || i === firstSpan || i === lastSpan || i === lastSpan + 1)
-        : reTangentBezier(merged, (_k, i) => i >= firstSpan - 1 && i <= lastSpan + 1);
+        ? reTangentBezier(merged, (_k, i) => i === firstSpan - 1 || i === firstSpan || i === lastSpan || i === lastSpan + 1, isLog)
+        : reTangentBezier(merged, (_k, i) => i >= firstSpan - 1 && i <= lastSpan + 1, isLog);
 };
 
 /**
@@ -501,7 +535,14 @@ export const fitSamplesToKeys = (
     startFrame: number,
     eps: number,
     idPrefix: string,
-): Keyframe[] => fitKeysToSamples(samples, dpIndices(samples, eps), (i) => startFrame + i, idPrefix);
+    /** The samples are an exponential track's values: placed and fitted in their logs, with
+     *  `eps` in ln-units (`strokeTolerance`). @see lnSamples */
+    isLog = false,
+): Keyframe[] => {
+    const s = lnSamples(samples, isLog) ?? samples;
+    const keys = fitKeysToSamples(s, dpIndices(s, eps), (i) => startFrame + i, idPrefix);
+    return s === samples ? keys : expValues(keys);
+};
 
 // --- 1. Fast Bezier Evaluation ---
 function evaluateBezier1D(t: number, p0: number, p1: number, p2: number, p3: number) {

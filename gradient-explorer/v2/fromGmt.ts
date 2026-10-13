@@ -29,6 +29,13 @@
  *
  * Nothing goes BACK: the owner cancelled a gradient hand-back on 2026-09-07 — the working
  * gradient already reaches GMT's My Gradients through the shared Recent group.
+ *
+ * NOT GMT ALONE SINCE 2026-10-09. The trip can start in any app listed in `EXPLORER_HOSTS`
+ * (palette/core/explorerHandoff.ts) — Deep Zoom is the second — and `?from=<id>` says which
+ * (`openedByHost`). Everything above holds for each of them with its own name and page: the
+ * gradient arrives used "From Deep Zoom", and "Back to Deep Zoom" closes this tab while the Deep
+ * Zoom tab answers. The one difference is the fallback: only GMT stashes its scene for the trip,
+ * so another host's page opens as it would on its own (it ignores the `?from=gx` it is given).
  */
 import type { MouseEvent } from 'react';
 import {
@@ -36,15 +43,14 @@ import {
   pingExplorerTrip,
   announceExplorerReturn,
   EXPLORER_TRIP_PARAM,
+  EXPLORER_HOSTS,
+  explorerHostOf,
+  type ExplorerHostId,
   type ExplorerIncoming,
 } from '../../palette/core/explorerHandoff';
 import { useFavientsStore } from '../../palette/store/favientsStore';
 import { useWorkingStore } from '../../palette/store/workingStore';
 import { setHeroPick } from '../../palette/store/heroSelection';
-import { FROM_GMT } from './shareUrl';
-
-/** The provenance a gradient from GMT is used with (`use(…, source)`). */
-export const FROM_GMT_SOURCE = 'From GMT';
 
 const query = (): URLSearchParams => {
   try {
@@ -54,20 +60,32 @@ const query = (): URLSearchParams => {
   }
 };
 
-/** This page was opened by GMT's Explorer button — `?from=gmt`, not merely a GMT referrer
- *  (`cameFromGmt` also accepts that, for showing the link at all). */
-export const openedByGmtButton = typeof window !== 'undefined' && query().get('from') === FROM_GMT;
+/** The host app whose Explorer button opened this page — `?from=<id>`, not merely a GMT
+ *  referrer (`cameFrom` in ./shareUrl also accepts that, for showing the link at all). Null when
+ *  no button did. */
+export const openedByHost: ExplorerHostId | null = typeof window !== 'undefined' ? explorerHostOf(query().get('from')) : null;
 const tripId = typeof window !== 'undefined' ? query().get(EXPLORER_TRIP_PARAM) : null;
 
-/** Where "Back to GMT" goes when it cannot close this tab — and the links' `href`, so a
- *  middle-click or "open in new tab" also brings the stashed scene. */
-export const BACK_TO_GMT_HREF = openedByGmtButton ? 'app-gmt.html?from=gx' : 'app-gmt.html';
+/** The provenance a gradient handed over by a host is used with (`use(…, source)`): "From GMT",
+ *  "From Deep Zoom". */
+export const FROM_HOST_SOURCE = `From ${EXPLORER_HOSTS[openedByHost ?? 'gmt'].name}`;
+
+/** What the host's page is asked with when this tab could not close itself. GMT restores the
+ *  scene it stashed for the trip on exactly this flag (`takeGxTripStash`,
+ *  engine-gmt/utils/sceneStash.ts — `debug/test-scene-stash.mts` [4] reads this line as text);
+ *  a host that stashes nothing ignores it. */
+const RETURN_QUERY = '?from=gx';
+
+/** Where "Back to …" goes when it cannot close this tab — and the links' `href`, so a
+ *  middle-click or "open in new tab" also brings GMT's stashed scene. A page no button opened
+ *  links to GMT, plain, as it always did. */
+export const BACK_HREF = EXPLORER_HOSTS[openedByHost ?? 'gmt'].page + (openedByHost ? RETURN_QUERY : '');
 
 // Read-and-clear once, cached: session.ts asks first (before the first render), the shell takes
 // it on mount. `undefined` = not read yet; `null` = nothing (or already applied).
 let incoming: ExplorerIncoming | null | undefined;
 const readIncoming = (): ExplorerIncoming | null => {
-  if (incoming === undefined) incoming = openedByGmtButton ? takeExplorerIncoming() : null;
+  if (incoming === undefined) incoming = openedByHost ? takeExplorerIncoming() : null;
   return incoming;
 };
 
@@ -87,17 +105,17 @@ export const applyGradientFromGmt = (): boolean => {
     setHeroPick({
       mode: 'favients',
       key: fav.id,
-      payload: { config: fav.config, name: fav.name, source: FROM_GMT_SOURCE, favId: fav.id, ...(fav.origin ? { origin: fav.origin } : {}) },
+      payload: { config: fav.config, name: fav.name, source: FROM_HOST_SOURCE, favId: fav.id, ...(fav.origin ? { origin: fav.origin } : {}) },
     });
     return true;
   }
-  useWorkingStore.getState().use(g.config, g.name, FROM_GMT_SOURCE);
+  useWorkingStore.getState().use(g.config, g.name, FROM_HOST_SOURCE);
   return true;
 };
 
 /** "Back to GMT" — see the file header. */
 export const goBackToGmt = async (): Promise<void> => {
-  if (openedByGmtButton && tripId && (await pingExplorerTrip(tripId))) {
+  if (openedByHost && tripId && (await pingExplorerTrip(tripId))) {
     window.close();
     // `closed` flips synchronously where measured; give any browser that closes a beat later
     // that beat before deciding the close was refused.
@@ -107,11 +125,11 @@ export const goBackToGmt = async (): Promise<void> => {
       return;
     }
   }
-  window.location.href = BACK_TO_GMT_HREF;
+  window.location.href = BACK_HREF;
 };
 
 /** The links' click: a plain left click goes through `goBackToGmt`; a modified or middle click
- *  is left to the browser (it opens `BACK_TO_GMT_HREF` in a new tab or window). */
+ *  is left to the browser (it opens `BACK_HREF` in a new tab or window). */
 export const onBackToGmtClick = (e: MouseEvent): void => {
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   e.preventDefault();

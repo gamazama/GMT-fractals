@@ -47,7 +47,7 @@ outlived it — app-gmt mounts one, v2 mounts the rest.
 | The hero (the stops editor) and the tray faces | `v2/WorkingHero.tsx`, `v2/Tray.tsx`, `v2/SourceBands.tsx` |
 | The wall, the set rail, the ground | `v2/BrowseStage.tsx`, `v2/SetRail.tsx`, `v2/useGroundSource.ts`, `v2/GroundList.tsx` |
 | Share links, "Back to GMT" | `v2/shareUrl.ts` |
-| Arriving from GMT with its gradient, and "Back to GMT" since 2026-09-23 | `v2/fromGmt.ts` (grep `applyGradientFromGmt`, `goBackToGmt`, `BACK_TO_GMT_HREF`) and ADR-0126 |
+| Arriving from GMT with its gradient, and "Back to GMT" since 2026-09-23; from Deep Zoom too since 2026-10-09 | `v2/fromGmt.ts` (grep `applyGradientFromGmt`, `goBackToGmt`, `openedByHost`, `BACK_HREF`), `EXPLORER_HOSTS` in `palette/core/explorerHandoff.ts`, and ADR-0126 |
 | The Paint face (brushes on the gradient's 256-texel ramp) | `palette/components/paint/` (`PaintFace.tsx`, `PaintSurface.tsx`, `brushDraw.ts`) and `palette/store/paintStore.ts` since 2026-09-26 (shared with GMT's Gradient Studio); the Explorer's Apply sink is `v2/paint/workingPaintSink.ts`; the brush maths in `palette/core/paintRamp.ts`, and ADR-0129 |
 | Undo bringing back the interface (the face, the inspected stop, the armed Mix slot, Filters) | `v2/uiHistory.ts` and ADR-0120 |
 | Sharing to GX Global (the confirm, the rights line, the chip's flash) | `v2/contributeToGlobal.ts` and ADR-0119 |

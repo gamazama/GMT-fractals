@@ -35,16 +35,8 @@ npm run test:partial-apply
 npm run test:session-hold
 ```
 
-`smoke:orbit` was permanently RED on unmodified `main` until 2026-07-29 (an 8 s
-poll window against a SwiftShader sample cost of 13–15 s). It is green now, and
-the window is the only thing that changed. It guards the camera gesture and the
-accumulation-hold release — **not** whether the renderer produced pixels; see the
-blind-spot note in [`navigation.md`](./navigation.md).
-
-`smoke:statelibrary-drop` is the camera-manager guard: it boots app-gmt at
-`localhost:3400/` and drives the Camera Manager's `savedCameras` list directly.
-Do NOT reach for `smoke:camera` here — that one boots `fluid-toy.html` and
-asserts fluid-toy's own `julia` camera slice through `engine/plugins/Camera.ts`.
-fluid-toy imports engine-gmt only for `support` and `feedback`, so nothing under
-`engine-gmt/features/**` or `engine-gmt/store/**` is in its bundle and no change
-to this rule's scope can make it fail.
+`smoke:orbit` guards the camera gesture and the accumulation-hold release — **not**
+whether the renderer produced pixels ([`navigation.md`](./navigation.md)).
+`smoke:statelibrary-drop` is the camera-manager guard: it drives the Camera Manager's
+`savedCameras` list in app-gmt. Not `smoke:camera`: it boots `fluid-toy.html`, which
+imports nothing under this rule's paths.

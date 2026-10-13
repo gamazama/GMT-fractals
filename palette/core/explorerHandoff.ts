@@ -4,6 +4,12 @@
  * import it — app-gmt writes (`app-gmt/explorerTrip.ts`), the Explorer reads
  * (`gradient-explorer/v2/fromGmt.ts`) — and `palette/` may import neither app.
  *
+ * MORE THAN ONE HOST SINCE 2026-10-09. "The studio" below is whichever app made the trip: the
+ * apps that can are listed in `EXPLORER_HOSTS` (GMT, and Deep Zoom through
+ * `deep-zoom/explorerTrip.ts`), the Explorer's URL names the one it came from (`?from=<id>`), and
+ * "Back to …" returns to that app's page. What only GMT has is the stashed scene behind the
+ * fallback in point 2: another host's page is opened plain.
+ *
  * 1. THE INCOMING GRADIENT — a one-shot localStorage key. The studio writes the gradient it
  *    wants the Explorer to open on (`{ config, name, favId? }`) just before `window.open`;
  *    the Explorer reads and clears it once, at boot, and makes it the working gradient in
@@ -40,6 +46,31 @@
 import type { GradientConfig } from '../../types';
 import { safeLocalGet, safeLocalSet, safeLocalRemove } from '../../store/safeLocalStorage';
 import { coerceGradientConfig } from './editorConfig';
+
+/**
+ * The apps whose My Gradients panel can open the Explorer and get a way back. The key is the
+ * `?from=` value on the Explorer's URL (`openGradientExplorer` in palette/installFavients.ts
+ * writes it, `gradient-explorer/v2/fromGmt.ts` reads it); `page` is where "Back to <name>" goes
+ * when the Explorer's tab cannot simply close. Data, not an import: `palette/` names no app's code.
+ */
+export const EXPLORER_HOSTS = {
+  gmt: { name: 'GMT', page: 'app-gmt.html' },
+  'deep-zoom': { name: 'Deep Zoom', page: 'deep-zoom.html' },
+} as const;
+export type ExplorerHostId = keyof typeof EXPLORER_HOSTS;
+
+/** A `?from=` value as a host id, or null when it names none. */
+export const explorerHostOf = (from: string | null | undefined): ExplorerHostId | null =>
+  typeof from === 'string' && Object.prototype.hasOwnProperty.call(EXPLORER_HOSTS, from) ? (from as ExplorerHostId) : null;
+
+/**
+ * One flat colour — a single stop, or every stop the same colour: there is nothing in it to
+ * explore, and a host sends nothing rather than open the Explorer on it (owner, 2026-09-24; a
+ * fresh Mandelbulb's gradient 1 is one white stop). A RAMP gradient (ADR-0122, `stops: []`) is
+ * never flat by this test.
+ */
+export const isFlatGradient = (config: GradientConfig): boolean =>
+  config.stops.length > 0 && new Set(config.stops.map((s) => String(s.color).toUpperCase())).size < 2;
 
 /** localStorage key of the one-shot incoming gradient. */
 export const EXPLORER_INCOMING_KEY = 'gmt.gx.incoming';

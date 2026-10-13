@@ -5,11 +5,9 @@ import { useEngineStore } from '../store/engineStore';
 import HistogramProbe from './HistogramProbe';
 import { AnimationSystem } from '../engine/animation/AnimationSystem';
 import { PerformanceMonitor } from './PerformanceMonitor';
-import { featureRegistry } from '../engine/FeatureSystem';
-import { componentRegistry } from './registry/ComponentRegistry';
-import { z } from './ui';
 import { useMobileLayout } from '../hooks/useMobileLayout';
 import { FixedResolutionControls } from '../engine/plugins/viewport/FixedResolutionControls';
+import { FeatureOverlays } from '../engine/plugins/viewport/FeatureOverlays';
 import { CompositionOverlay } from './viewport/CompositionOverlay';
 import { CompilingIndicator } from './CompilingIndicator';
 import { setMouseOverCanvas } from '../engine/worker/ViewportRefs';
@@ -44,60 +42,6 @@ interface ViewportAreaProps {
     activeHint?: unknown | null;
     onDismissHint?: () => void;
 }
-
-const DomOverlays: React.FC = () => {
-    const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
-    const state = useEngineStore();
-    const actions = useEngineStore();
-
-    return (
-        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: z('shellViewportOverlay') }}>
-            {overlays.map(config => {
-                const Component = componentRegistry.get(config.componentId);
-                const featureId = config.id;
-                const sliceState = (state as any)[featureId];
-                if (Component && sliceState) {
-                    return (
-                        <Component
-                            key={config.id}
-                            featureId={featureId}
-                            sliceState={sliceState}
-                            actions={actions}
-                        />
-                    );
-                }
-                return null;
-            })}
-        </div>
-    );
-};
-
-const SceneOverlays: React.FC = () => {
-    const overlays = featureRegistry.getViewportOverlays().filter(o => !o.type || o.type === 'scene');
-    const state = useEngineStore();
-    const actions = useEngineStore();
-
-    return (
-        <>
-            {overlays.map(config => {
-                const Component = componentRegistry.get(config.componentId);
-                const featureId = config.id;
-                const sliceState = (state as any)[featureId];
-                if (Component && sliceState) {
-                    return (
-                        <Component
-                            key={config.id}
-                            featureId={featureId}
-                            sliceState={sliceState}
-                            actions={actions}
-                        />
-                    );
-                }
-                return null;
-            })}
-        </>
-    );
-};
 
 export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
     const state = useEngineStore();
@@ -188,7 +132,9 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
 
             <div ref={canvasContainerRef} style={wrapperStyle} className="relative bg-surface group z-0">
                 {/* R3F Canvas — transparent overlay. Apps install a render
-                    surface via SceneOverlays or by replacing this component. */}
+                    surface via a scene-type feature overlay or by replacing
+                    this component. Both overlay kinds come from the engine's
+                    one host (engine/plugins/viewport/FeatureOverlays.tsx). */}
                 <Canvas
                     gl={{
                         alpha: true,
@@ -202,10 +148,10 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
                     dpr={state.dpr}
                     onPointerDown={(e) => (e.target as Element).setPointerCapture(e.pointerId)}
                 >
-                    <SceneOverlays />
+                    <FeatureOverlays type="scene" />
                 </Canvas>
 
-                <DomOverlays />
+                <FeatureOverlays />
 
                 {!isCleanFeed && (
                     <CompositionOverlay width={isFixed ? w : viewportSize.w} height={isFixed ? h : viewportSize.h} />

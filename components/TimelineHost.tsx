@@ -8,14 +8,21 @@
  * Any engine-based app that wants keyframe animation UI renders this
  * once (usually at the root, alongside the viewport). The keyframe
  * buttons on primitives are meaningless without it.
+ *
+ * THE RENDER DIALOG is the timeline toolbar's child, so it exists only
+ * while the timeline is shown. This host therefore opens the timeline
+ * when the dialog is asked for from elsewhere (`openRenderPopup()` in
+ * `engine/animation/renderPopupRegistry.ts`), and clears that request
+ * when the timeline goes, so it is not shown again by itself later.
  */
 
-import React, { Suspense, useState, useCallback } from 'react';
+import React, { Suspense, useState, useCallback, useEffect } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
 import { TimelineOpenIcon } from './Icons';
 import { useShortcut } from '../engine/plugins/Shortcuts';
 import { lazyWithFallback } from './ui/lazyWithFallback';
+import { closeRenderPopup, isRenderPopupOpen, subscribeRenderPopup } from '../engine/animation/renderPopupRegistry';
 
 const Timeline = lazyWithFallback(() => import('./Timeline'), 'The timeline');
 
@@ -75,6 +82,11 @@ export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) =>
         category: 'Timeline',
         handler: togglePlay,
     });
+
+    // The render dialog (see the header): asked for, it brings the timeline up; when the
+    // timeline goes, so does the request.
+    useEffect(() => subscribeRenderPopup(() => { if (isRenderPopupOpen()) setShowTimeline(true); }), []);
+    useEffect(() => { if (!showTimeline || hidden) closeRenderPopup(); }, [showTimeline, hidden]);
 
     if (hidden) return null;
 

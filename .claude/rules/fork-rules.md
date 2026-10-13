@@ -11,12 +11,8 @@ Read: [`docs/policy/engine-fork-rules.md`](../../docs/policy/engine-fork-rules.m
 
 **Genericize, don't fork.** When GMT needs something engine-core can't express,
 extend the engine *in a way another app could also use*, then express GMT's case
-through it. The `PanelManifest` `items` model is the canonical example;
-`setFormulaParamResolver` and `selectMovementLock`'s feature-driven
-`interactionConfig.blockCamera` are smaller ones.
-
-Divergence between GMT and engine-gmt belongs in `engine-gmt/` — a plugin library —
-not in GMT-shaped escape hatches inside engine-core.
+through it. GMT-specific divergence belongs in `engine-gmt/`, not in escape hatches
+inside engine-core.
 
 ## Dual state is design, not a bug
 
@@ -32,9 +28,3 @@ and is the reliable way to tell which one is actually live.
 
 `modular` and `camera` are patched slices. When auditing a generic engine-core
 path, check whether the app has patched it before concluding the generic path runs.
-
-## One source of truth for shared resources
-
-Component-class CSS, formula presets, scene fields, modulation events — one module
-that injects/registers, many consumers. If you're copy-pasting a config block
-across entries or apps, lift it into the engine.

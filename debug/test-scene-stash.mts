@@ -148,10 +148,14 @@ console.log('\n[4] the GX restore needs its flag');
   // Anchored on the assignment: the file's header mentions the same URL in prose, and a looser
   // match read the comment (F11 stayed green on the first cut).
   const src = readFileSync(new URL('../gradient-explorer/v2/fromGmt.ts', import.meta.url), 'utf8');
-  const href = /export const BACK_TO_GMT_HREF = openedByGmtButton \? '([^']+)'/.exec(src)?.[1] ?? '';
+  // Since 2026-10-09 the link is a host's page plus this one query (the Explorer has more than
+  // one host app), so the query is what is read. Falsified that day: '?from=gxx' there -> red.
+  const query = /\nconst RETURN_QUERY = '([^']+)';/.exec(src)?.[1] ?? '';
+  const usesIt = /export const BACK_HREF = [^;\n]*\(openedByHost \? RETURN_QUERY : ''\)/.test(src);
+  const href = query && usesIt ? `app-gmt.html${query}` : '';
   writeSceneStash('gx', GMF, { now: T0 });
   ok(!!href && takeGxTripStash(new URL(href, 'https://app.gmt-fractals.com/').search, T0)?.gmf === GMF,
-    `the Explorer's fallback link carries the flag this gate reads (${href || 'no app-gmt.html?… literal found'}; flag ${GX_RETURN_QUERY.param}=${GX_RETURN_QUERY.value})`);
+    `the Explorer's fallback link carries the flag this gate reads (${href || 'no RETURN_QUERY literal on BACK_HREF found'}; flag ${GX_RETURN_QUERY.param}=${GX_RETURN_QUERY.value})`);
 }
 
 console.log('\n[5] a failed write leaves nothing');

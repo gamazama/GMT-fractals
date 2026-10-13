@@ -1,4 +1,6 @@
 import { getThemeColor } from '../engine/store/colorSchemeStore';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
+import { isPayloadTrack } from '../engine/animation/payloadTrackRegistry';
 
 export interface GraphViewTransform {
     panX: number; // Frame offset
@@ -76,6 +78,65 @@ export const valueToPixel = (value: number, transform: GraphViewTransform) => {
 export const pixelToValue = (py: number, transform: GraphViewTransform) => {
     const centerY = transform.height / 2;
     return transform.panY + (centerY - py) / transform.scaleY;
+};
+
+// --- A TRACK'S OWN SPACE: GRAPH Y ---
+/**
+ * The graph editors plot every track on ONE vertical number line, in graph units. A plain
+ * track sits at its value. An exponential track (`engine/animation/logTrackRegistry.ts`) sits
+ * at its EXPONENT, log10(value), one unit a decade: that is the space such a track is eased in,
+ * so the drawn curve is the played one and a straight line is a constant rate of scale.
+ *
+ * SEAM. Whatever turns a value into a pixel, or a pointer move into a value, goes through these
+ * functions - the curve and its keys (`GraphRendererBuilder`), the selected keys, handles and
+ * gutter labels (`GraphRenderer`), the hit test and both drags (`hooks/useGraphInteraction.ts`),
+ * the selection box (`components/graph/GraphSelectionBBox.tsx`) and the host's own `v2p` / `p2v`
+ * (`components/GraphEditor.tsx`). A site that does its own arithmetic draws or edits a plain
+ * track where an exponential one is.
+ *
+ * PITFALLS.
+ *   - A key's TANGENT y on an exponential track is in natural-log units (that is what
+ *     `AnimationMath.interpolate` solves in), not in decades: scale it by `tangentGraphY`.
+ *   - `isLog` is false for a plain track and every function is then the identity or a plain sum.
+ *   - A key at or below zero on an exponential track has no exponent: it is plotted at its plain
+ *     value, and playback eases that segment in plain values too.
+ *
+ * @invariant On an exponential track a handle is drawn at the Bezier control point playback
+ *   solves with - proven by: npm run test:log-curves ("[G] a handle sits on the control
+ *   point the evaluator uses").
+ * @assumption The rest of that test's [G] lines (a key dragged `d` graph units moves `d`
+ *   decades, the gutter's labels, the fitted view) and its [P] line for this file (a plain
+ *   track gets the plain sum back) are green and were not each seen red.
+ */
+export const toGraphY = (value: number, isLog: boolean): number => (isLog && value > 0 ? Math.log10(value) : value);
+export const fromGraphY = (y: number, isLog: boolean): number => (isLog ? Math.pow(10, y) : y);
+/** Graph units per unit of a tangent's y. */
+export const tangentGraphY = (isLog: boolean): number => (isLog ? Math.LOG10E : 1);
+
+/** A tangent handle's graph Y: the key's own plus the tangent's rise. Over `range` (the track's
+ *  normalised range, in graph units) it is the 0..1 place inside it. */
+export const graphHandleY = (value: number, tangentY: number, isLog: boolean, range?: { min: number; span: number } | null): number => {
+    const y = toGraphY(value, isLog) + tangentY * tangentGraphY(isLog);
+    return range ? (y - range.min) / range.span : y;
+};
+
+/** `value` moved by `dy` graph units. */
+export const offsetGraphY = (value: number, dy: number, isLog: boolean): number =>
+    (isLog && value > 0 && dy !== 0 ? fromGraphY(Math.log10(value) + dy, true) : value + dy);
+
+/** The value a key takes when dragged `dy` graph units from `start`, or undefined on a payload
+ *  track (`engine/animation/payloadTrackRegistry.ts`): there a key moves in time only. */
+export const draggedKeyValue = (trackId: string, start: number, dy: number): number | undefined =>
+    (isPayloadTrack(trackId) ? undefined : offsetGraphY(start, dy, isLogTrack(trackId)));
+
+/** A gutter label: on an exponential axis the VALUE at that graph Y (1e-10, 0.001, 250). */
+export const formatGraphY = (y: number, isLog: boolean): string => {
+    if (!isLog) return y.toString();
+    if (Math.abs(y) < 4.5) return String(Number(Math.pow(10, y).toPrecision(3)));
+    // Mantissa and exponent apart, so a line far outside a double's range still reads (1e400).
+    let exponent = Math.floor(y), mantissa = Number(Math.pow(10, y - exponent).toPrecision(3));
+    if (mantissa >= 10) { mantissa /= 10; exponent++; }
+    return `${mantissa}e${exponent}`;
 };
 
 // Helper to determine nice grid steps for Values (Float)

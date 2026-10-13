@@ -11,7 +11,7 @@ import { CloseIcon, MenuIcon, KeyStatus, LoopIcon, WaveRecordIcon } from '../Ico
 import { KeyframeButton } from '../KeyframeButton';
 import { z } from '../ui/zIndex';
 import { getLayerHost } from '../ui/layerHost';
-import { getLiveValue, evaluateTrackValue } from '../../utils/timelineUtils';
+import { getLiveValue, cameraKeyStatus } from '../../utils/timelineUtils';
 import {
     PlayIcon, PauseIcon, StopIcon, RecordIcon,
     BarsIcon, CurveIcon, CheckeredFlagIcon, CheckIcon
@@ -25,6 +25,9 @@ import {
 import {
     getRenderPopup,
     subscribeRenderPopup,
+    openRenderPopup,
+    closeRenderPopup,
+    isRenderPopupOpen,
 } from '../../engine/animation/renderPopupRegistry';
 import {
     getRenderAdjuncts,
@@ -100,46 +103,10 @@ const KeyCamButton: React.FC = () => {
         if (ids.length) removeTracks(ids);
     };
 
-    const getStatus = (): KeyStatus => {
-        let hasAnyTrack = false;
-        let hasKeyAtFrame = false;
-        let isDirty = false;
-
-        for (const tid of tracks) {
-            const track = sequence.tracks[tid];
-            if (track) {
-                hasAnyTrack = true;
-                const k = track.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
-
-                if (k) hasKeyAtFrame = true;
-
-                if (!isPlaying) {
-                    const currentVal = getLiveValue(tid, false, currentFrame, sequence);
-                    let timelineVal = 0;
-
-                    if (k) {
-                        timelineVal = k.value;
-                    } else {
-                        timelineVal = evaluateTrackValue(track.keyframes, currentFrame, tid.includes('rotation'));
-                    }
-
-                    if (Math.abs(timelineVal - currentVal) > 0.001) {
-                        isDirty = true;
-                    }
-                }
-            }
-        }
-
-        if (!hasAnyTrack) return 'none';
-
-        if (hasKeyAtFrame) {
-            return isDirty ? 'keyed-dirty' : 'keyed';
-        } else {
-            return isDirty ? 'dirty' : 'partial';
-        }
-    };
-
-    const status = getStatus();
+    // The reading itself is `cameraKeyStatus` (utils/timelineUtils.ts): each track judged in
+    // its own space, the curve taken as it plays.
+    const status: KeyStatus = cameraKeyStatus(tracks, sequence, currentFrame,
+        isPlaying ? null : (tid) => getLiveValue(tid, false, currentFrame, sequence));
 
     return (
         <div
@@ -207,7 +174,9 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     const setDeterministicPlayback = useAnimationStore((s) => s.setDeterministicPlayback);
 
     const handleContextMenu = useHelpContextMenu();
-    const [showRender, setShowRender] = useState(false);
+    // Whether the render dialog is open lives in the registry, so a panel button can open it too
+    // (`openRenderPopup`). The dialog is still drawn here, as this toolbar's child.
+    const showRender = useSyncExternalStore(subscribeRenderPopup, isRenderPopupOpen, isRenderPopupOpen);
     const [showMenu, setShowMenu] = useState(false);
     // 'keep' = key at frame 30 stays at frame 30 (visual time shifts).
     // 'match' = key at 1.0s stays at 1.0s (frame index is remapped).
@@ -283,6 +252,17 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     const handleSeek = (f: number) => {
         seek(f);
         animationEngine.scrub(f);
+    };
+
+    // The length field: ONE undo step per committed change. The field opens a gesture on
+    // pointer-down and again when a typed value is committed (`onDragStart`), and a gesture
+    // may change nothing (a click to type), so the step is taken with the gesture's first
+    // real change: one per drag, one per typed value, none for a click.
+    const lengthStepDue = useRef(false);
+    const changeLength = (frames: number) => {
+        if (frames === useAnimationStore.getState().durationFrames) return;
+        if (lengthStepDue.current) { lengthStepDue.current = false; snapshot(); }
+        setDuration(frames);
     };
 
     return (
@@ -381,10 +361,11 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                     <div className="w-10 h-5 bg-surface-sunken rounded border border-line/10 relative">
                         <DraggableNumber
                             value={storeDuration}
-                            onChange={setDuration}
+                            onChange={changeLength}
                             step={1} min={10} max={10000}
                             overrideText={storeDuration.toFixed(0)}
-                            onDragStart={snapshot}
+                            onDragStart={() => { lengthStepDue.current = true; }}
+                            onDragEnd={() => { lengthStepDue.current = false; }}
                             sensitivity={0.15}
                         />
                     </div>
@@ -394,7 +375,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
                 {RenderPopupComponent && (
                     <button
-                        onClick={() => setShowRender(!showRender)}
+                        onClick={() => (showRender ? closeRenderPopup() : openRenderPopup())}
                         className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors text-[10px] ${showRender ? 'bg-accent-900 border-accent-500 text-fg' : 'bg-transparent border-line/20 text-fg-muted hover:text-fg hover:bg-line/5'}`}
                         title="Render Video"
                         data-help-id="export.video"
@@ -511,7 +492,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 <CloseIcon />
             </button>
 
-            {showRender && RenderPopupComponent && <RenderPopupComponent onClose={() => setShowRender(false)} />}
+            {showRender && RenderPopupComponent && <RenderPopupComponent onClose={closeRenderPopup} />}
 
             {activeAdjunct && <activeAdjunct.Dialog onClose={() => setActiveAdjunct(null)} />}
         </div>

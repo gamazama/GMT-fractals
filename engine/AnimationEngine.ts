@@ -40,6 +40,7 @@ export type ScrubHook = (ctx: ScrubContext) => void;
 export class AnimationEngine {
     private binders: Map<string, ValueSetter> = new Map();
     private overriddenTracks: Set<string> = new Set();
+    private heldOnRecord: Set<string> = new Set();
 
     private preScrubHooks: ScrubHook[] = [];
     private postScrubHooks: ScrubHook[] = [];
@@ -60,6 +61,14 @@ export class AnimationEngine {
     
     public setOverriddenTracks(ids: Set<string>) {
         this.overriddenTracks = ids;
+    }
+
+    /** The `camera.*` tracks record-camera mode does NOT let go of. Set by
+     *  `registerCameraKeyTracks` from its entries' `releaseOnRecord: false`
+     *  (the flag lives there; this is where `scrub` can read it without
+     *  importing a module that imports the stores). */
+    public setCameraTracksHeldOnRecord(ids: Set<string>) {
+        this.heldOnRecord = ids;
     }
 
     /** Register a function that runs before/after every scrub frame.
@@ -292,9 +301,14 @@ export class AnimationEngine {
      *   dropped — bool/enum/string/image tracks get no step/interpolation
      *   behaviour from the engine.
      * @assumption `ignoreCamera = isPlaying && isRecording && recordCamera`
-     *   skips ALL `camera.*` tracks in record-camera mode; `camera.position`
+     *   skips the `camera.*` tracks in record-camera mode; `camera.position`
      *   and `camera.offset` are also hardcoded-skipped unconditionally
      *   (legacy carve-out).
+     * @invariant In record-camera mode a `camera.*` track registered with
+     *   `releaseOnRecord: false` (`registerCameraKeyTracks`) is still driven,
+     *   and every other `camera.*` track, registered or not, is let go —
+     *   proven by: npm run test:key-payload ("is still driven while the
+     *   camera is recorded", "is let go").
      */
     public scrub(frame: number) {
         if (!this.animStore) return;
@@ -326,7 +340,7 @@ export class AnimationEngine {
 
             if (track.id.includes('camera.position') || track.id.includes('camera.offset')) continue;
 
-            if (ignoreCamera && track.id.startsWith('camera.')) continue;
+            if (ignoreCamera && track.id.startsWith('camera.') && !this.heldOnRecord.has(track.id)) continue;
 
             // Camera-pair tracks (pan + DD-pair lo-words tied to a zoom
             // track) interpolate via the linear-in-zoom formula so a

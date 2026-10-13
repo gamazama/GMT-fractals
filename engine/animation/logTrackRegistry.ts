@@ -27,36 +27,58 @@
  * `TrackUtils.updateNeighbors` and `timelineUtils` all thread
  * `isLogTrack(trackId)` into `AnimationMath.calculateTangents`.
  *
- * @assumption Any NEW code that computes tangents for a track must pass
- *   `isLogTrack(trackId)` through to `AnimationMath.calculateTangents`.
+ * THE EDITING SIDE works in that space too (2026-10-11). Everything that draws
+ * such a track or turns a pointer move into a value goes through GRAPH Y
+ * (`toGraphY` in `utils/GraphUtils.ts`: the track at its exponent, one unit a
+ * decade), and the curve tools take the flag: `reTangentBezier`, `spliceSpan`,
+ * `fitKeysToSamples` / `fitSamplesToKeys` and `strokeTolerance` in
+ * `utils/CurveFitting.ts` (grep `isLog` there), reached from the selection
+ * box's Bias handle and the Pencil. The status readers compare a live value
+ * with the curve as it plays, as a ratio (`differsOnTrack`, `cameraKeyStatus`
+ * in `utils/timelineUtils.ts`), and a key dropped between two Bezier keys is
+ * split off the curve in log (`addKeyframe`, grep `inLog`).
+ *
+ * PITFALL. A key at or below zero has no log: that key, or the segment it
+ * ends, is handled in plain values everywhere (played, drawn, fitted).
+ *
+ * @invariant Re-tangenting, the seam heal and the fit of a sampled curve give,
+ *   on an exponential track, the curve the same operation gives when done by
+ *   hand on the logs of the values, to 1e-9 decades; the Pencil's tolerance is
+ *   2 % of the LOG range; a plain track gets what it got before, to the bit —
+ *   proven by: npm run test:log-curves ("[T] ...", "[F] ...", "[E] ...",
+ *   "[P] ..."). Before: the same keys tangented as a plain track played 0.99
+ *   decades off on that test's 24-decade track and 0.35 on its 6-decade one
+ *   (the 2026-07 audit measured 1.34 and 0.30 on its own), and a stroke over
+ *   the deep half kept 2 keys.
+ * @invariant A handle is drawn on the control point playback solves with;
+ *   between two keys Key Cam reads 'partial' while the live value is the
+ *   curve's and 'dirty' when it is 1 % off; a key added between two Bezier
+ *   keys lies on the curve and leaves it where it was — proven by:
+ *   npm run test:log-curves ("[G] a handle sits ...", "[K] ...", "[S] ...").
+ *
+ * @assumption Any NEW code that computes tangents for a track, evaluates it,
+ *   or maps its values to pixels must pass `isLogTrack(trackId)` on:
+ *   `AnimationMath.calculateTangents`, `evaluateTrackValue`, `toGraphY`.
  *   Handles authored in linear-value space and then evaluated as
  *   log-units give a curve nobody asked for.
- *
- * @bug PRODUCTION: two curve-tool paths still author tangents in LINEAR
- *   value space on a log track. (1) `utils/CurveFitting.ts`
- *   `reTangentBezier`, reached from the graph editor's Bias handle
- *   (`components/graph/GraphSelectionBBox.tsx`) and from `spliceSpan`'s seam
- *   heal, which the Pencil tool (`hooks/usePencilTool.ts`) commits through.
- *   It takes a `Keyframe[]` and no trackId, so there is nothing to derive the
- *   flag from. (2) The Pencil's drawn span itself: since 8bdfa814
- *   `fitSamplesToKeys` no longer re-tangents through (1) but SOLVES its
- *   tangents against the samples (`fitKeysToSamples`), and it solves them in
- *   linear value units too. Live for any app registering a log track — today
- *   that is fluid-toy's `julia.zoom`, which IS plotted and editable in the
- *   graph editor. Measured on the Bias path: authoring the same keys both
- *   ways diverges by up to 1.34 decades (22x) on a 24-decade track, 0.30
- *   decades (2x) on an everyday 6-decade zoom; auto-tangents collapse toward
- *   flat because a linear-space slope is a rounding error in log-units. NOTE
- *   the Pencil path has a further, larger defect that fixing both alone will
- *   not cure: `components/GraphEditor.tsx`'s Douglas-Peucker epsilon
- *   (`range * 0.02`) is in linear value units and collapses a log-track
- *   stroke to 2-3 keys. See PROPOSALS.md (overnight audit, cycle 2).
- *   `engine-gmt/animation/cameraBinders.ts` had the same omission and was
- *   fixed 2026-07-28; it was latent (no GMT camera track is log-registered).
+ * @assumption The WIRING of the above into the editors is not reached by a
+ *   node test: `GraphRendererBuilder` / `GraphRenderer` drawing through graph
+ *   Y, `useGraphInteraction`'s hit test and drags, the selection box, the
+ *   Pencil's target in `components/GraphEditor.tsx`. Measured once in the
+ *   three apps on 2026-10-11 (drawn curve against played curve to 1.5 px; a
+ *   key and a handle dragged, the stored numbers against the pointer's move).
+ * @assumption Still in plain values on an exponential track, none of them
+ *   reachable on a payload track: Smooth and Bounce (`calculateSmoothingUpdates`,
+ *   `utils/ConstrainedSmoothing.ts`) average the values themselves; Simplify
+ *   (`simplifyTrack`) resamples with its own plain evaluator; the smoothing
+ *   brush (`smoothSpan`, palette only today); a `Continue` tail adds a
+ *   log-unit slope to a plain value, in playback and in the drawing alike;
+ *   the key inspector's value field drags in plain steps.
  *
  * @see docs/adr/0015-animation-log-and-camera-pair-value-spaces.md — its
  *   Decision section predates the Bezier-on-log support added in 05eb7849
  *   and still says Bezier is unsupported here; the code is the truth.
+ * @see docs/adr/0136-keys-carry-app-data.md
  */
 
 const logTracks = new Set<string>();

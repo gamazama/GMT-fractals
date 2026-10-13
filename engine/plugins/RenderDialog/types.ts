@@ -36,6 +36,37 @@ export interface RenderDialogStatus {
     setStatusText:    (s: string) => void;
     setIsRendering:   (b: boolean) => void;
     setIsStopping:    (b: boolean) => void;
+    /** What the dialog shows once the run has ended, in place of the
+     *  form: a few plain lines and, optionally, a command line with a
+     *  Copy button. A runner that never calls it goes straight back to
+     *  the form, as every runner did before this existed. Call it
+     *  before `setIsRendering(false)`. */
+    setResult:        (r: RenderDialogResult | null) => void;
+    /** Put a question to the user and wait for the answer: the dialog
+     *  shows it in place of the form or the progress, one button an
+     *  option, and resolves with the chosen option's `id`. If the dialog
+     *  goes away while it is open it resolves with `question.cancel`. It
+     *  never rejects. The dialog knows nothing of what is asked: the
+     *  runner writes the words. A runner that never asks never sees it. */
+    ask:              (question: RenderDialogQuestion) => Promise<string>;
+}
+
+export interface RenderDialogResult {
+    lines:    string[];
+    /** A line to run elsewhere (an ffmpeg call for a folder of frames). */
+    command?: string;
+}
+
+/** A question a runner asks while a run is starting (`status.ask`). */
+export interface RenderDialogQuestion {
+    /** What is asked, in a few plain lines. */
+    lines:   string[];
+    /** The answers, a button each, in this order. `primary`: the one the
+     *  dialog draws as the expected answer. */
+    options: Array<{ id: string; label: string; title?: string; primary?: boolean }>;
+    /** The `id` it resolves with when nobody can answer any more (the
+     *  dialog was closed under it). */
+    cancel:  string;
 }
 
 export interface RenderDialogDeps<TExtra = Record<string, unknown>> {
@@ -74,6 +105,21 @@ export interface RenderDialogResolutionPreset {
     h:     number;
 }
 
+export type RenderDialogDefaults<TExtra = Record<string, unknown>> =
+    Partial<RenderDialogConfig> & { extra?: TExtra };
+
+/** One named set of form values: a button above the form that patches
+ *  it (the install option `presets`). */
+export interface RenderDialogPreset {
+    /** The button's text. */
+    label:  string;
+    /** Its tooltip: what it sets, in a line. */
+    title?: string;
+    /** The fields to change, given the form as it stands. Called on the
+     *  click, so it may read live state (the sizes on offer now). */
+    apply:  (cfg: RenderDialogConfig) => Partial<RenderDialogConfig>;
+}
+
 export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     /** App-specific per-frame pipeline. Plugin handles UI + form +
      *  flags + status; runner handles encoder lifecycle. */
@@ -83,12 +129,50 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     title?: string;
 
     /** Initial form defaults. Apps override the standard fields here;
-     *  `extra` carries the app-specific bag. */
-    defaults?: Partial<RenderDialogConfig> & { extra?: TExtra };
+     *  `extra` carries the app-specific bag. A FUNCTION is called each
+     *  time the dialog opens, for defaults that depend on what is on the
+     *  timeline then (the deep zoomer: its route's first and last
+     *  keyframe). */
+    defaults?: RenderDialogDefaults<TExtra> | (() => RenderDialogDefaults<TExtra>);
+
+    /** OPT-IN, for an app whose runner makes every frame itself and
+     *  writes one file a frame into a folder the user picks
+     *  (`engine/export/frameFolder.ts`). It adds the format
+     *  "PNG sequence (folder)" to the dropdown - `VIDEO_FORMATS`' PNG
+     *  sequence under that name - and, while that format is selected:
+     *  the start label "Select output folder…", one Cancel button during
+     *  the run instead of Interrupt / Resume / Finish / Discard, and no
+     *  encoder probe (the format is available exactly where the browser
+     *  can write into a folder; the dialog says so in one line where it
+     *  cannot). The RUNNER asks for the folder (`pickFrameFolder`, first
+     *  thing, inside the click), and it is the runner that looks into it:
+     *  frames found there are a question for `status.ask`, not a box on
+     *  the form.
+     *  Without this option nothing above exists: the dialog is what it
+     *  was. To offer ONLY that format, also pass a `formatFilter`;
+     *  without one the video formats are listed beside it, and for those
+     *  the dialog is the video dialog (the encoder probe, the bitrate,
+     *  Interrupt / Resume / Finish / Discard) - the runner serves both. */
+    frameFolder?: boolean;
+
+    /** Default false. True: the size is one of `resolutionPresets` and
+     *  nothing else - no Width / Height fields and no "Custom" entry;
+     *  a size that is not in the list (the presets changed under it)
+     *  snaps to the preset with the nearest long edge. For an app whose
+     *  picture has a shape of its own, where a width and a height typed
+     *  apart could not both be honoured. */
+    fixedSizes?: boolean;
+
+    /** OPT-IN: named sets of form values, each a small button in a row
+     *  above the form ("Draft": a small size and one sample, for a quick
+     *  look before the real render). A click patches the form with what
+     *  `apply` returns and starts nothing. Absent or empty: no row. */
+    presets?: RenderDialogPreset[];
 
     /** Standard form-control visibility. Apps that don't have TSAA
      *  set `showSamplesPerFrame: false`; apps that don't want frame-
-     *  step set `showFrameStep: false`. Defaults: all true. */
+     *  step set `showFrameStep: false`. Defaults: all true. The bitrate
+     *  is never shown for the `frameFolder` format (it has none). */
     showSamplesPerFrame?: boolean;
     showFrameStep?:       boolean;
     showBitrate?:         boolean;

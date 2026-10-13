@@ -23,12 +23,17 @@ export interface RenderingViewProps {
     cfg:              RenderDialogConfig;
     showSamplesPerFrame: boolean;
     extraSummary?:    React.ReactNode;
+    /** A run that writes frames into a folder (the install option `frameFolder`): one Cancel
+     *  button, which is `onDiscard` - there is no file to finish early or to throw away, the
+     *  frames written stay where they are - and a bar that does not pulse (a render on this
+     *  thread's own GPU context should not be made to present the window every frame). */
+    plain?:           boolean;
 }
 
 export const RenderingView: React.FC<RenderingViewProps> = ({
     onStop, onResume, onConfirmStitch, onDiscard,
     progress, statusText, elapsedTime, etaRange, lastFrameTime, isStopping,
-    cfg, showSamplesPerFrame, extraSummary,
+    cfg, showSamplesPerFrame, extraSummary, plain = false,
 }) => {
     const fmt = VIDEO_FORMATS[cfg.formatIndex];
 
@@ -49,7 +54,7 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
                         className="h-full bg-gradient-to-r from-accent-600 to-accent-400 relative"
                         style={{ width: `${progress}%` }}
                     >
-                        <div className="absolute inset-0 bg-line/20 animate-pulse-live" />
+                        {!plain && <div className="absolute inset-0 bg-line/20 animate-pulse-live" />}
                     </div>
                 </div>
             </div>
@@ -89,7 +94,15 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
             </div>
 
             <div className="mt-auto pt-2">
-                {!isStopping ? (
+                {plain ? (
+                    <Button
+                        onClick={onDiscard}
+                        label="Cancel"
+                        variant="danger"
+                        icon={<StopIcon />}
+                        fullWidth
+                    />
+                ) : !isStopping ? (
                     <Button
                         onClick={onStop}
                         label="Interrupt Render"

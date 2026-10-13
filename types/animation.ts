@@ -56,6 +56,13 @@ export interface Keyframe {
      *   - (broken keys use the brokenTangents flag instead.)
      */
     tangentMode?: 'Aligned' | 'Unified';
+    /**
+     * App data that travels with the key: plain JSON the engine carries and never reads
+     * (a camera view too exact for one number, say). Treat it as immutable — copies of a
+     * key share it. Whoever keeps a key keeps its payload; what a track of such keys
+     * allows is the contract in `engine/animation/payloadTrackRegistry.ts`.
+     */
+    payload?: unknown;
 }
 
 export interface Track {

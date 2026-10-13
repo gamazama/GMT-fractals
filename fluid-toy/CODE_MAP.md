@@ -137,7 +137,7 @@ transferable upload).
 
 ## UI components (`components/`)
 
-- `DomOverlays.tsx`, `JuliaCPicker.tsx`, `MandelbrotPicker.tsx`,
+- `JuliaCPicker.tsx`, `MandelbrotPicker.tsx`,
   `ViewLibraryPanel.tsx`, `PresetGrid.tsx`, `HotkeysCheatsheet.tsx`,
   `QualityBadge.tsx`, `DeepZoomStatus.tsx`, `DeepZoomBench.tsx`.
 - Topbar / panel widgets: `FluidToggleButton.tsx` (the one-click

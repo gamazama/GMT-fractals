@@ -1,8 +1,11 @@
 /**
  * installGradientStudio — bring up GMT's Gradient Studio in a host: the panel's manifest entry,
  * its component, the popout in every gradient editor's header, the Paint face's sink, and the
- * close watcher that bakes a live face. app-gmt calls it; the Explorer never does (it IS the
- * faces' first host), and fluid-toy does not today — nothing in here is GMT-specific, so it could.
+ * close watcher that bakes a live face. app-gmt and (since 2026-10-09) Deep Zoom call it; the
+ * Explorer never does (it IS the faces' first host), and fluid-toy does not today — nothing in
+ * here is GMT-specific, so it could. A host whose picture is not driven by uniform events shows
+ * a live face by reading the published preview: grep `useGradientParamPreview` in
+ * `deep-zoom/GradientSync.tsx`.
  *
  *   • `gradientStudioPanelEntry()` — spread into the host's `applyPanelManifest` list. A float
  *     panel with BARE chrome (`PanelDefinition.chrome`): no title bar, float-only, the card's

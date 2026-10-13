@@ -84,6 +84,37 @@ export function deriveTrackBinding(input: TrackBindingInput): TrackBinding {
 }
 
 /**
+ * The naming rule read the other way: where in a SCENE (`getPreset`'s shape) a
+ * feature param's track writes. `features` is the scene's `features` object.
+ *
+ *   `<featureId>.<param>`           → ['features', featureId, param]
+ *   `<featureId>.<param>_<axis>`    → ['features', featureId, param, axis], when the
+ *                                     scene holds `param` as a vector with that axis
+ *                                     (else `<param>_<axis>` is a scalar's own name)
+ *   `<featureId>.<param>.<axis>`    → the same (the older spelling)
+ *
+ * Null for an id that is not a feature param's: no such feature in the scene, or no
+ * param in the id. Those tracks are bound by hand (`binderRegistry`) and only their
+ * app knows where they write. The cases are the ones `AnimationEngine.getBinder`
+ * (case 4) binds a track by: keep the two in step.
+ *
+ * Read by the export version (`store/engineStore.ts`: what the timeline drives is
+ * left out of its comparison).
+ */
+export function trackScenePath(trackId: string, features: Record<string, unknown>): string[] | null {
+    const [featureId, param, third] = trackId.split('.');
+    const slice = features[featureId];
+    if (!param || !slice || typeof slice !== 'object') return null;
+    const axed = /^(.+)_([xyzw])$/.exec(param);
+    if (axed) {
+        const vector = (slice as Record<string, unknown>)[axed[1]];
+        if (vector && typeof vector === 'object' && axed[2] in vector) return ['features', featureId, axed[1], axed[2]];
+    }
+    if (third === 'x' || third === 'y' || third === 'z' || third === 'w') return ['features', featureId, param, third];
+    return ['features', featureId, param];
+}
+
+/**
  * Build a THREE.Vector{2,3,4} from the `liveModulations` entries for a
  * binding when ANY axis is currently modulated. Returns `undefined`
  * when no axis is live — consumers then fall back to the unmodulated

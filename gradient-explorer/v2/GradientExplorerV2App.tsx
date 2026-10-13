@@ -89,8 +89,9 @@ import { useGroundSetIds, setGroundSetId, toggleGroundSetId, getGroundSetIds } f
 import { membersOfMany, parseSetId, groupSetId } from '../../palette/core/groundSets';
 import { loadGxSessionText } from './session';
 import { useGlobalSet } from '../../palette/store/globalSetStore';
-import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
-import { applyGradientFromGmt, goBackToGmt, onBackToGmtClick, BACK_TO_GMT_HREF } from './fromGmt';
+import { shareUrlFor, takeShareFromLocation, cameFrom } from './shareUrl';
+import { applyGradientFromGmt, goBackToGmt, onBackToGmtClick, BACK_HREF } from './fromGmt';
+import { EXPLORER_HOSTS } from '../../palette/core/explorerHandoff';
 import { Icon } from './ui/Icon';
 import { ShellMenuButton, FeedbackWindow } from './ShellMenu';
 import { HelpOverlay } from '../../engine/plugins/Help';
@@ -106,14 +107,20 @@ import { modKeyLabel } from '../../engine/plugins/Shortcuts';
  * studio (a text link ~100 px wide in a 390 px bar). Undo / Redo stay buttons — they are hit
  * again and again, and a menu would turn each one into two taps.
  */
+/** "Back to GMT" / "Back to Deep Zoom": the app this page was opened from (./shareUrl `cameFrom`),
+ *  null when it was not opened from one. */
+const BACK_LABEL = cameFrom ? `Back to ${EXPLORER_HOSTS[cameFrom].name}` : null;
+/** Its tooltip. GMT's keeps the words it had (`debug/smoke-gmt-gx-handoff.mts` finds the link by them). */
+const BACK_TITLE = cameFrom === 'gmt' ? 'Back to the GMT studio' : BACK_LABEL ?? undefined;
+
 const phoneMenuItems = (): MenuItem[] => [
   { id: 'gx-settings', type: 'button', label: 'Settings', icon: <GearIcon />, onSelect: openSettings },
-  ...(cameFromGmt
+  ...(BACK_LABEL
     ? [{
         id: 'gx-back-to-gmt',
         type: 'button',
-        label: 'Back to GMT',
-        title: 'Back to the GMT studio',
+        label: BACK_LABEL,
+        title: BACK_TITLE,
         // The set's `back` at the rows' 12 px glyph width, so the label lines up with the rows
         // around it (C22; the owner's pick, 2026-09-24 — ASK-7).
         icon: <Icon name="back" size={12} />,
@@ -885,7 +892,7 @@ export const GradientExplorerV2App: React.FC = () => {
             and a whole-title link made "Gradient Explorer" — the app you are in — a way out of
             it. The app's name is plain text. */}
         <div className="flex items-center gap-2 mr-auto min-w-0">
-          <a href={BACK_TO_GMT_HREF} onClick={onBackToGmtClick} className="flex items-center shrink-0 no-underline" title={cameFromGmt ? 'Back to GMT' : 'GMT'}>
+          <a href={BACK_HREF} onClick={onBackToGmtClick} className="flex items-center shrink-0 no-underline" title={BACK_LABEL ?? 'GMT'}>
             <GmtWordmark className={`w-auto shrink-0 opacity-80 ${phone ? 'h-3' : 'h-3.5'}`} />
           </a>
           <span className={`font-semibold text-fg truncate ${phone ? 'text-[13px]' : 'text-[15px]'}`}>Gradient Explorer</span>
@@ -899,9 +906,9 @@ export const GradientExplorerV2App: React.FC = () => {
             shown when this page was opened from the studio. Opened by GMT's Explorer button,
             it closes this tab to land back in the GMT tab, or restores GMT's stashed scene
             here when it cannot (owner, 2026-09-23; ./fromGmt). The wordmark link does the same. */}
-        {cameFromGmt && !phone && (
-          <a className={`${tb} flex items-center no-underline`} href={BACK_TO_GMT_HREF} onClick={onBackToGmtClick} title="Back to the GMT studio">
-            Back to GMT
+        {BACK_LABEL && !phone && (
+          <a className={`${tb} flex items-center no-underline`} href={BACK_HREF} onClick={onBackToGmtClick} title={BACK_TITLE}>
+            {BACK_LABEL}
           </a>
         )}
         {/* Help · Support · Feedback — installHelp's registered menu (v2/main.tsx), opened

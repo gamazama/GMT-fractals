@@ -21,6 +21,13 @@
  * treatment with the same zoom anchors, so the DD pair stays
  * coherent.
  *
+ * It is COMPUTED from the deeper key (the smaller zoom), not as written
+ * above: share = (zT − zDeep) / (zShallow − zDeep), pan = cDeep +
+ * (cShallow − cDeep) · share. Same line, but the share is one f64, and
+ * measured from the shallow key it has no digits left 16 decades down —
+ * the two DD words cannot help, the weak number is the share itself.
+ * Grep `fromK1`.
+ *
  * Easing — two layers:
  *   • Macro: zoom track's Bezier handles shape z(t); pan inherits via
  *     the formula's zoomAt() lookups.
@@ -38,6 +45,16 @@
  *     (caller falls back to standard interpolation).
  *   - Frame outside the pan track's first/last key: returns the clamp
  *     value (matches AnimationEngine's standard out-of-range behaviour).
+ *
+ * @invariant On ONE pan segment, however many decades its zoom spans, the
+ *   pan is right to 1e-12 of a view, or to the last two steps of the pair's
+ *   own low word where that is coarser (two f64 words whose low word is 1e-18
+ *   hold nothing finer than 1.9e-34) — proven by: npm run test:camera-pair
+ *   ("the pan is … of a view off (the bar there is …)"). Until 2026-10-11 the
+ *   share was measured from the shallow key and a 30-decade segment was 5 % of
+ *   a view off at zoom 1e-16 and the whole pan off from 1e-17 on; a segment
+ *   shorter than 13 decades moves in its last digits only.
+ * @see docs/adr/0136-keys-carry-app-data.md
  */
 
 import type { AnimationSequence, Keyframe } from '../../types';
@@ -294,19 +311,26 @@ function evaluateDDPairAxis(
     const z1 = zoomAt(zoomKeys, k1.frame, isLog);
     const zRatio = (z0 > 0 && z1 > 0) ? Math.abs(Math.log(z1) - Math.log(z0)) : Math.abs(z1 - z0);
 
-    // Path-progress in [0,1] — eased u for flat-zoom, linear-in-zoom otherwise.
-    let progress: number;
+    // The share of the way, in [0,1], and the key it is measured FROM: eased u from
+    // k0 for flat-zoom; linear-in-zoom from the DEEPER key (the smaller zoom) otherwise,
+    // so the share goes to zero where the view is smallest and keeps every digit there.
+    // Measured from the shallow key it is `1 - (something below 1e-16)` once the zoom is
+    // 16 decades down, and the pan has arrived long before the zoom has.
+    let share: number;
+    let fromK1 = false;
     if (zRatio < 1e-9) {
-        progress = u_eased;
+        share = u_eased;
     } else {
         const zT_virt = zoomKeys.length === 0 ? z0 : zoomAt(zoomKeys, fVirt, isLog);
-        progress = (zT_virt - z0) / (z1 - z0);
+        fromK1 = Math.abs(z1) < Math.abs(z0);
+        share = fromK1 ? (zT_virt - z1) / (z0 - z1) : (zT_virt - z0) / (z1 - z0);
     }
 
-    // DD lerp: result = DD0 + (DD1 - DD0) · progress
-    const [dh, dl] = ddSub(k1.value, lo1, k0.value, lo0);
-    const [sh, sl] = ddMulD(dh, dl, progress);
-    const [rh, rl] = ddAdd(k0.value, lo0, sh, sl);
+    // DD lerp from that key: result = near + (far - near) · share
+    const [nh, nl, fh, fl] = fromK1 ? [k1.value, lo1, k0.value, lo0] : [k0.value, lo0, k1.value, lo1];
+    const [dh, dl] = ddSub(fh, fl, nh, nl);
+    const [sh, sl] = ddMulD(dh, dl, share);
+    const [rh, rl] = ddAdd(nh, nl, sh, sl);
 
     const entry = { frame, sequence, hi: rh, lo: rl };
     ddCache.set(key, entry);

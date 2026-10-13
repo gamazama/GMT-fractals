@@ -2,7 +2,8 @@
 import { useAnimationStore } from '../store/animationStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { KeyStatus } from '../components/Icons';
-import { evaluateTrackValue, isRotationTrack } from '../utils/timelineUtils';
+import { evaluateTrackValue, isRotationTrack, differsOnTrack } from '../utils/timelineUtils';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 
 export const useTrackAnimation = (trackId: string | undefined, currentValue: number, label: string) => {
     // Narrow per-field subscriptions instead of destructuring useAnimationStore()
@@ -33,18 +34,19 @@ export const useTrackAnimation = (trackId: string | undefined, currentValue: num
         const track = sequence.tracks[trackId];
         const key = track.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
 
+        // Compared in the track's own space, against the curve as it plays: @see differsOnTrack.
         if (key) {
              // Exact key exists
-            if (Math.abs(key.value - currentValue) > 0.0001) return 'keyed-dirty';
+            if (differsOnTrack(trackId, key.value, currentValue, 0.0001)) return 'keyed-dirty';
             return 'keyed';
         } else {
             // No key at this exact frame. Check interpolation.
-            const interpolated = evaluateTrackValue(track.keyframes, currentFrame, isRotationTrack(trackId));
-            
+            const interpolated = evaluateTrackValue(track.keyframes, currentFrame, isRotationTrack(trackId), isLogTrack(trackId));
+
             // If the user's current value differs significantly from the timeline's interpolated value,
             // show as dirty (indicating a manual override or tweak).
-            if (Math.abs(interpolated - currentValue) > 0.001) return 'dirty';
-            
+            if (differsOnTrack(trackId, interpolated, currentValue, 0.001)) return 'dirty';
+
             return 'partial';
         }
     })();

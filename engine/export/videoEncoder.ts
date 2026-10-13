@@ -15,6 +15,34 @@
  *
  * Cancel via `enc.cancel()` — the muxer chain is dropped on the floor;
  * the consumer is responsible for releasing/closing any disk handle.
+ *
+ * PITFALLS (a `stream`, 2026-10-11)
+ *   - AN MP4 IS HELD IN MEMORY UNTIL `finish()` BY DEFAULT, WITH A
+ *     `stream` TOO: `fastStart: 'in-memory'` puts the index (`moov`) at
+ *     the front of the file, so the muxer keeps every encoded frame
+ *     until the end and the stream gets its first byte then. A caller
+ *     whose file must not be held asks for `mp4FastStart: false`
+ *     (opt-in, below). WebM is written as it goes either way.
+ *   - WITH A `stream`, BYTES LEAVE IN CHUNKS OF 16 MiB (mediabunny's
+ *     `chunked` target): a file smaller than that arrives whole at
+ *     `finish()`, whatever the layout.
+ *   - `start` LOCKS THE `stream` (mediabunny takes its writer) and
+ *     `cancel()` does not release it: after a cancel the caller can
+ *     neither close nor abort that stream. A caller that has to throw a
+ *     half-written file away hands `start` a stream OF ITS OWN that
+ *     forwards to the file, and aborts the file itself: that is
+ *     `forwardToPickedFile` in engine/export/pickedFile.ts, which both
+ *     callers that write into a picked file use (the deep zoomer's runner
+ *     and fluid-toy's). Both ask for `mp4FastStart: false` with a picked
+ *     file and for a keyframe a second.
+ *
+ * @assumption The three pitfalls above, `mp4FastStart: false`,
+ *   `keyFrameEvery` and the codec strings (`codecString`) were measured
+ *   in two apps on 2026-10-11, Chrome on the real GPU (debug/scratch/r6b/,
+ *   git-ignored: video-render.mts drives an app that streams into a
+ *   picked file, fluid-formats.mts drives fluid-toy's dialog through each
+ *   of its four formats, before and after). NO STANDING GUARD reaches
+ *   this file: no smoke opens a render dialog and starts a render.
  */
 
 import * as Mediabunny from 'mediabunny';
@@ -28,6 +56,25 @@ export interface MainThreadEncoderConfig {
      *  CBR undershoot on smooth-gradient content (matches WorkerExporter). */
     bitrate:     number;
     formatIndex: number;
+    /** MP4 only; where the file's index (the `moov` box) goes. OPT-IN:
+     *  absent is 'in-memory', what every caller got before this existed.
+     *  - 'in-memory': at the front ("fast start", what a web player
+     *    wants). Every encoded frame is held in memory until `finish()`,
+     *    also when a `stream` was handed in.
+     *  - false: the frames go to the target as they are encoded and the
+     *    index is written last, so only the open 16 MiB chunk is held.
+     *    For a long render into a `stream`; the stream must take writes
+     *    at a position (a File System Access stream does). The file plays
+     *    wherever a local file plays; over HTTP a player has to fetch its
+     *    end first. */
+    mp4FastStart?: 'in-memory' | false;
+    /** OPT-IN: force a keyframe every this many frames. Absent (or 0):
+     *  only frame 0 is forced and the codec decides the rest - which in
+     *  Chrome is NONE (measured 2026-10-11: 300 frames of H.264 and of
+     *  VP9, one keyframe each), so a player seeking into the file decodes
+     *  from its start. A caller whose video will be scrubbed or cut asks
+     *  for one a second or so (`fps`). */
+    keyFrameEvery?: number;
 }
 
 /** Browser-capability gate. Returns `false` (with reason) if WebCodecs
@@ -86,6 +133,7 @@ export class MainThreadEncoder {
     private muxerChain: Promise<void>                     = Promise.resolve();
     private firstChunkOffsetMicros: number | null         = null;
     private fps                                           = 30;
+    private keyFrameEvery                                 = 0;
     private formatDef: typeof VIDEO_FORMATS[number] | null = null;
     private encoderError: Error | null                    = null;
 
@@ -101,6 +149,7 @@ export class MainThreadEncoder {
         }
         this.formatDef             = formatDef;
         this.fps                   = cfg.fps;
+        this.keyFrameEvery         = Math.max(0, Math.round(cfg.keyFrameEvery ?? 0));
         this.firstChunkOffsetMicros = null;
         this.muxerChain            = Promise.resolve();
         this.encoderError          = null;
@@ -111,7 +160,7 @@ export class MainThreadEncoder {
 
         const format: Mediabunny.OutputFormat = formatDef.container === 'webm'
             ? new Mediabunny.WebMOutputFormat()
-            : new Mediabunny.Mp4OutputFormat({ fastStart: 'in-memory' });
+            : new Mediabunny.Mp4OutputFormat({ fastStart: cfg.mp4FastStart ?? 'in-memory' });
 
         this.output = new Mediabunny.Output({ format, target });
         this.packetSource = new Mediabunny.EncodedVideoPacketSource(formatDef.codec as Mediabunny.VideoCodec);
@@ -139,17 +188,24 @@ export class MainThreadEncoder {
         });
     }
 
-    /** Encode one frame. Frame 0 is forced to a keyframe so the muxer's
-     *  PTS-offset normalization (see `handleEncodedChunk`) works on
-     *  Firefox's leading-latency reorder. */
-    encodeCanvas(canvas: HTMLCanvasElement | OffscreenCanvas, frameIndex: number): void {
+    /** Frames handed to `encodeCanvas` that the encoder has not taken up
+     *  yet (WebCodecs' `encodeQueueSize`; 0 when not started). Each one
+     *  holds its picture: a caller that makes frames faster than the
+     *  codec encodes them waits for this to fall before the next. */
+    get queueSize(): number { return this.encoder?.encodeQueueSize ?? 0; }
+
+    /** Encode one frame: a canvas, or any other picture a `VideoFrame`
+     *  can be made of (an `ImageBitmap`, say). Frame 0 is forced to a
+     *  keyframe so the muxer's PTS-offset normalization (see
+     *  `handleEncodedChunk`) works on Firefox's leading-latency reorder. */
+    encodeCanvas(canvas: CanvasImageSource, frameIndex: number): void {
         if (!this.encoder) throw new Error('MainThreadEncoder: not started');
         if (this.encoderError) throw this.encoderError;
-        const frame = new VideoFrame(canvas as CanvasImageSource, {
+        const frame = new VideoFrame(canvas, {
             timestamp: frameIndex * (1e6 / this.fps),
             duration:  1e6 / this.fps,
         });
-        this.encoder.encode(frame, { keyFrame: frameIndex === 0 });
+        this.encoder.encode(frame, { keyFrame: frameIndex === 0 || (this.keyFrameEvery > 0 && frameIndex % this.keyFrameEvery === 0) });
         frame.close();
     }
 

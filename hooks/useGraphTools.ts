@@ -5,6 +5,15 @@ import { calculateConstrainedSmoothing } from '../utils/ConstrainedSmoothing';
 import { simplifyTrack } from '../utils/CurveFitting';
 import { Keyframe, AnimationSequence } from '../types';
 import type { GraphDataSource } from '../utils/GraphDataSource';
+import { isPayloadTrack } from '../engine/animation/payloadTrackRegistry';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
+
+// Payload tracks are out of every tool in this file: Smooth and the Euler filter move
+// values, Bake and Simplify make keys up, and such a track allows neither. The store
+// refuses those writes anyway; leaving the track out here keeps the tool from selecting
+// keys that never arrived. @see engine/animation/payloadTrackRegistry.ts
+const editable = (tid: string) => !isPayloadTrack(tid);
+const editableKey = (id: string) => !!id && editable(id.split('::')[0]);
 
 interface GraphToolsProps {
     sequence: AnimationSequence;
@@ -62,17 +71,17 @@ export const useGraphTools = (
             selectedKeyframeIds.forEach(id => {
                 if(id) tracks.add(id.split('::')[0]);
             });
-            return Array.from(tracks);
+            return Array.from(tracks).filter(editable);
         }
-        if (selectedTrackIds.length > 0) return selectedTrackIds;
+        if (selectedTrackIds.length > 0) return selectedTrackIds.filter(editable);
         return [];
     }, [selectedKeyframeIds, selectedTrackIds]);
 
     const getTargetKeys = useCallback(() => {
-        if (selectedKeyframeIds.length > 0) return selectedKeyframeIds;
+        if (selectedKeyframeIds.length > 0) return selectedKeyframeIds.filter(editableKey);
         if (selectedTrackIds.length > 0) {
             const keys: string[] = [];
-            selectedTrackIds.forEach(tid => {
+            selectedTrackIds.filter(editable).forEach(tid => {
                 const track = sequence.tracks[tid];
                 if (track) track.keyframes.forEach(k => keys.push(`${tid}::${k.id}`));
             });
@@ -292,7 +301,7 @@ export const useGraphTools = (
     };
 
     const handleSimplifyDown = (e: React.PointerEvent) => {
-        let targets = selectedKeyframeIds;
+        let targets = selectedKeyframeIds.filter(editableKey);
         if (targets.length < 2) targets = getTargetKeys();
         if (targets.length < 2) return;
         beginDragTool(e, handleSimplifyMove, handleSimplifyUp);
@@ -333,10 +342,10 @@ export const useGraphTools = (
         let bestTrackId: string | null = null;
         let bestVal = 0;
 
-        trackIds.forEach(tid => {
+        trackIds.filter(editable).forEach(tid => {
             const track = sequence.tracks[tid];
             if (!track || track.keyframes.length === 0) return;
-            const val = evaluateTrackValue(track.keyframes, frame, isRotationTrack(tid));
+            const val = evaluateTrackValue(track.keyframes, frame, isRotationTrack(tid), isLogTrack(tid));
             const py = v2p(val, tid);
             const dist = Math.abs(my - py);
 

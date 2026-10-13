@@ -1,5 +1,6 @@
 
-import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, pixelToValue, getGridStep, getTimeGridSteps, THEME } from './GraphUtils';
+import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, pixelToValue, getGridStep, getTimeGridSteps, toGraphY, graphHandleY, formatGraphY, THEME } from './GraphUtils';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 import { getThemeColor, onThemeChange } from '../engine/store/colorSchemeStore';
 import { AnimationSequence } from '../types';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
@@ -133,20 +134,22 @@ export const drawGraph = (props: GraphRenderProps) => {
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + LEFT_GUTTER_WIDTH;
     const canvasPixelToFrame = (px: number) => pixelToFrame(px - LEFT_GUTTER_WIDTH, view);
     
+    // A track's own space: an exponential track is drawn at its exponent. @see toGraphY
     const getLocalY = (val: number, tid: string) => {
-        if (!normalized) return val;
+        const y = toGraphY(val, isLogTrack(tid));
+        if (!normalized) return y;
         const r = trackRanges[tid];
         if (!r) return 0.5;
-        return (val - r.min) / r.span; 
+        return (y - r.min) / r.span;
     };
 
-    const v2p = (val: number, tid: string) => {
-        if (normalized) {
-            const norm = getLocalY(val, tid);
-            return valueToPixel(norm, view);
-        }
-        return valueToPixel(val, view);
-    };
+    const v2p = (val: number, tid: string) => valueToPixel(getLocalY(val, tid), view);
+
+    // THE GUTTER READS IN THE UNITS OF THE TRACKS IN FOCUS - the highlighted ones when any is
+    // drawn, else every drawn track. All exponential: the value at each line (1e-10). Otherwise
+    // the plain number line, on which an exponential track sits at its exponent.
+    const focus = trackIds.filter((tid) => highlightedTracks.has(tid));
+    const axisLog = trackIds.length > 0 && (focus.length > 0 ? focus : trackIds).every(isLogTrack);
 
     ctx.fillStyle = THEME.backgroundColor;
     ctx.fillRect(0, 0, width, height);
@@ -194,13 +197,13 @@ export const drawGraph = (props: GraphRenderProps) => {
             ctx.moveTo(LEFT_GUTTER_WIDTH, y);
             ctx.lineTo(width, y);
             ctx.stroke();
-            
+
             if (y > graphTop + 10 && y < height - 10) {
-                 ctx.fillText(v.toString(), LEFT_GUTTER_WIDTH - 4, y + 3);
+                 ctx.fillText(formatGraphY(v, axisLog), LEFT_GUTTER_WIDTH - 4, y + 3);
             }
         }
     }
-    
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(LEFT_GUTTER_WIDTH, graphTop, width - LEFT_GUTTER_WIDTH, height - graphTop);
@@ -304,9 +307,10 @@ export const drawGraph = (props: GraphRenderProps) => {
                 ctx.strokeStyle = THEME.handleLineColor;
                 ctx.lineWidth = 1;
                 const range = normalized ? trackRanges[tid] : null;
+                const isLog = isLogTrack(tid);
                 if (k.rightTangent) {
                     const hxVal = k.frame + k.rightTangent.x;
-                    const hyVal = normalized && range ? getLocalY(k.value + k.rightTangent.y, tid) : k.value + k.rightTangent.y;
+                    const hyVal = graphHandleY(k.value, k.rightTangent.y, isLog, range);
                     const hx = frameToCanvasPixel(hxVal);
                     const hy = valueToPixel(hyVal, view);
                     ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(hx, hy); ctx.stroke();
@@ -314,7 +318,7 @@ export const drawGraph = (props: GraphRenderProps) => {
                 }
                 if (k.leftTangent) {
                     const hxVal = k.frame + k.leftTangent.x;
-                    const hyVal = normalized && range ? getLocalY(k.value + k.leftTangent.y, tid) : k.value + k.leftTangent.y;
+                    const hyVal = graphHandleY(k.value, k.leftTangent.y, isLog, range);
                     const hx = frameToCanvasPixel(hxVal);
                     const hy = valueToPixel(hyVal, view);
                     ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(hx, hy); ctx.stroke();
@@ -402,7 +406,7 @@ export const drawGraph = (props: GraphRenderProps) => {
             ctx.stroke();
             
             if (y > graphTop + 10 && y < height - 10) {
-                 ctx.fillText(v.toString(), LEFT_GUTTER_WIDTH - 4, y + 3);
+                 ctx.fillText(formatGraphY(v, axisLog), LEFT_GUTTER_WIDTH - 4, y + 3);
             }
         }
     }

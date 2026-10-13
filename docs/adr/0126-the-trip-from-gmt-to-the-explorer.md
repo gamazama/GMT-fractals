@@ -1,5 +1,21 @@
 # ADR-0126: The trip from GMT to the Gradient Explorer carries a gradient there and nothing back
 
+> **Update 2026-10-09 (a second host app; renamed symbols; decision unchanged):** the trip can start
+> in Deep Zoom as well as in GMT. The apps that can are `EXPLORER_HOSTS` in
+> `palette/core/explorerHandoff.ts`; `openGradientExplorer` takes `from` (GMT when left out) and the
+> Explorer's URL carries `?from=<id>`, which decides the link's words ("Back to GMT", "Back to Deep
+> Zoom") and the page it falls back to. Renamed for that: in `gradient-explorer/v2/shareUrl.ts`
+> `cameFromGmtFor` / `cameFromGmt` are `cameFromFor` / `cameFrom` (which host, or none; `FROM_GMT` is
+> gone); in `v2/fromGmt.ts` `openedByGmtButton` is `openedByHost`, `BACK_TO_GMT_HREF` is `BACK_HREF`
+> (a host's page plus `RETURN_QUERY`), `FROM_GMT_SOURCE` is `FROM_HOST_SOURCE`. The one-flat-colour
+> rule is `isFlatGradient` in the hand-off module and both hosts call it (it was inline in
+> `gradientAt`). What still holds for every host: a gradient goes there, nothing comes back, and the
+> Explorer's tab closes itself while the host's tab answers. What only GMT has: the stashed scene -
+> when a Deep Zoom tab is gone the Explorer goes to `deep-zoom.html`, which opens as new. Deep Zoom's
+> end is `deep-zoom/explorerTrip.ts`. Guards: `debug/test-gx-share.mts` [5] and
+> `debug/test-scene-stash.mts` [4], both moved onto the new form and falsified again that day; the
+> Deep Zoom trip was tried once with real clicks and a real popup and has no smoke.
+
 > **Update 2026-09-24 (first run on a trip; decision unchanged):** a page opened by GMT's Explorer
 > button neither shows the first-run brightness dialogue nor applies a preset, and does not mark
 > `gmt.ge.themeSeeded` (`decideFirstRun({ fromGmt })` → quiet; `marksSeeded` false), so the Explorer looks

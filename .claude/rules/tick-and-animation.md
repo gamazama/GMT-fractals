@@ -13,16 +13,17 @@ Read first: JSDoc at the top of `engine/TickRegistry.ts` and `engine/AnimationEn
 
 `engine/plugins/RenderLoop.tsx` (`@engine/render-loop`) is the *only* file under
 `engine/**` that calls `runTicks` — it is the default RAF driver. It is mounted by
-`App.tsx` (the demo entry, `demo.html` → `index.tsx` → `App.tsx`) and `fluid-toy/`
-(the first Gradient Explorer shell was a third host until the entry-point swap of
-2026-09-16; the v2 shell mounts none). **app-gmt does NOT mount it**: its canonical driver is
+`App.tsx` (the demo entry, `demo.html` → `index.tsx` → `App.tsx`) and `fluid-toy/`.
+**app-gmt does NOT mount it**: its canonical driver is
 `engine-gmt/renderer/GmtRendererTickDriver.tsx`, which runs the tick phases *and*
 dispatches the worker frame. Mounting both is the ADR-0003 double-run bug.
 
 Decisions: ADR-0001 (tick phases as numeric constants), ADR-0002 (delta in
 seconds), ADR-0003 (single-driver double-run guard), ADR-0004 (TickRegistry
 singleton scope), ADR-0015 (log-value-space + camera-pair linear-in-zoom),
-ADR-0016 (deterministic playback). Modulation dispatch off the ANIMATE tick:
+ADR-0016 (deterministic playback), ADR-0136 (keys can carry app data; a path that
+spans decades is measured from its deeper key; an exponential track is edited
+through its log; the timeline's length is in the undo). Modulation dispatch off the ANIMATE tick:
 ADR-0107 (live-modulation transport), ADR-0109 (one modulation dispatcher).
 Timeline audio: ADR-0027 (never seek during steady-state play —
 `engine/animation/audioClipSync.ts`), ADR-0028 (the raw audio `File` is cached
@@ -33,7 +34,6 @@ top-of-file JSDoc is the contract.
 ## Invariants
 
 - **`runTicks` takes SECONDS, not milliseconds.** `runTicks(deltaSec)` per ADR-0002.
-  The pre-extraction narrative doc claiming `runTicks(deltaMs)` is wrong.
 - **The render loop is app-owned.** The engine provides `TickRegistry` phases; the
   app (or the `@engine/render-loop` core plugin) calls `runTicks(dt)` each frame.
   Don't bypass it with an ad-hoc `useFrame`.
@@ -62,4 +62,10 @@ npm run smoke:anim-orbit
 npm run smoke:anim-vec2
 npm run smoke:track-binding
 npm run smoke:binder-registry
+npm run test:key-payload     # node-only: a key's payload survives every edit; a payload track
+                             # locks values and refuses made-up keys (ADR-0136)
+npm run test:zoom-path       # node-only: engine/animation/zoomPath.ts, measured from the deeper key
+npm run test:camera-pair     # node-only: the pair's pan against exact integers on a 30-decade leg
+npm run test:log-curves      # node-only: re-tangent, fit and Pencil tolerance on an exponential
+                             # track; a plain track unchanged to the bit; the length in the undo
 ```

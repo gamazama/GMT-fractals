@@ -147,4 +147,4 @@ PNG snapshots embed GMF in iTXt metadata — drag a screenshot back into GMT to 
 - [engine-gmt/](../engine-gmt/) — GMT plugin layer (start here for rendering / formula work)
 - [docs/DOCS_INDEX.md](../docs/DOCS_INDEX.md) — full docs table of contents
 - [docs/history/engine/01_Architecture.md](../docs/history/engine/01_Architecture.md) — three-tier model
-- [HANDOFF.md](../HANDOFF.md) — session progress log, deferred work, known issues
+- [HANDOFF.md](../HANDOFF.md) — how to resume

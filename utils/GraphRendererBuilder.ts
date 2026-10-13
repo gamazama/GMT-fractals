@@ -2,9 +2,9 @@
  * Per-track polyline builder for the GraphEditor's back-canvas cache.
  *
  * Extracted from drawGraph's per-track loop in GraphRenderer.ts. Renders ONE
- * track's curve into an off-screen canvas: the polyline (Linear/Step/Bezier),
- * the log-track per-pixel sampling, and the post-behavior tail
- * (Hold/Continue/Loop/PingPong/OffsetLoop).
+ * track's curve into an off-screen canvas: the polyline (Linear/Step/Bezier)
+ * and the post-behavior tail (Hold/Continue/Loop/PingPong/OffsetLoop), both in
+ * the track's own space (an exponential track at its exponent: `toGraphY`).
  *
  * What it does NOT render — these stay in the per-render foreground pass so
  * the cache key stays narrow and the back-cache lifetime is dominated by
@@ -27,7 +27,7 @@
  * Coordinate system inside the cache canvas:
  *
  *   x = (frame - panX) * scaleX     (i.e. uses the supplied view's panX)
- *   y = valueToPixel(value, view)   (same as the main canvas)
+ *   y = valueToPixel(graph Y of the value, view)   (same as the main canvas)
  *
  * The cache canvas is sized to the main canvas (canvasWidth × canvasHeight).
  * Composition into the main canvas is a 1:1 drawImage at offset (0, 0)
@@ -51,6 +51,8 @@ import {
     frameToPixel,
     pixelToFrame,
     valueToPixel,
+    toGraphY,
+    tangentGraphY,
     THEME,
 } from './GraphUtils';
 import { evaluateTrackValue, calculateSoftFalloff } from './timelineUtils';
@@ -112,6 +114,8 @@ const drawPostBehaviorTail = (
     /** The caller's gutter — the tail is clipped to it, so it must be the same number the
      *  caller drew the curve with. Passed rather than read from the module (2026-09-12). */
     LEFT_GUTTER_WIDTH: number,
+    /** An exponential track: a looped tail is sampled from the curve as it plays. */
+    isLog: boolean,
 ) => {
     const behavior = track.postBehavior || 'Hold';
     const startPx = frameToPx(lastKey.frame);
@@ -160,7 +164,7 @@ const drawPostBehaviorTail = (
 
                 if (behavior === 'Loop' || behavior === 'OffsetLoop') {
                     const localFrame = firstKey.frame + localFrameOffset;
-                    val = evaluateTrackValue(track.keyframes, localFrame, isRotation);
+                    val = evaluateTrackValue(track.keyframes, localFrame, isRotation, isLog);
                     if (behavior === 'OffsetLoop') {
                         const diff = lastKey.value - firstKey.value;
                         val += diff * cycleCount;
@@ -169,10 +173,10 @@ const drawPostBehaviorTail = (
                     const isReversed = cycleCount % 2 === 1;
                     if (isReversed) {
                         const reversedFrame = lastKey.frame - localFrameOffset;
-                        val = evaluateTrackValue(track.keyframes, reversedFrame, isRotation);
+                        val = evaluateTrackValue(track.keyframes, reversedFrame, isRotation, isLog);
                     } else {
                         const localFrame = firstKey.frame + localFrameOffset;
-                        val = evaluateTrackValue(track.keyframes, localFrame, isRotation);
+                        val = evaluateTrackValue(track.keyframes, localFrame, isRotation, isLog);
                     }
                 }
                 ctx.lineTo(px, v2p(val));
@@ -199,16 +203,18 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + LEFT_GUTTER_WIDTH;
     const canvasPixelToFrame = (px: number) => pixelToFrame(px - LEFT_GUTTER_WIDTH, view);
 
+    // Through the track's own space: an exponential track is drawn at its exponent, where a
+    // Linear segment IS a straight line and a Bezier one the cubic playback solves, so both go
+    // down the same two branches as a plain track's. @see toGraphY (utils/GraphUtils.ts)
+    const trackIsLog = isLogTrack(track.id);
     const getLocalY = (val: number) => {
-        if (!normalized) return val;
+        const y = toGraphY(val, trackIsLog);
+        if (!normalized) return y;
         if (!range) return 0.5;
-        return (val - range.min) / range.span;
+        return (y - range.min) / range.span;
     };
 
-    const v2p = (val: number) => {
-        if (normalized) return valueToPixel(getLocalY(val), view);
-        return valueToPixel(val, view);
-    };
+    const v2p = (val: number) => valueToPixel(getLocalY(val), view);
 
     const keys = track.keyframes;
     if (!keys || keys.length === 0) return canvas;
@@ -229,7 +235,7 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
     ctx.moveTo(Math.min(startX, LEFT_GUTTER_WIDTH), startY);
     ctx.lineTo(startX, startY);
 
-    const trackIsLog = isLogTrack(track.id);
+    const tanY = tangentGraphY(trackIsLog);
     for (let i = 0; i < keys.length - 1; i++) {
         const k1 = keys[i];
         const k2 = keys[i + 1];
@@ -241,22 +247,13 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
         if (k1.interpolation === 'Step') {
             ctx.lineTo(x2, y1);
             ctx.lineTo(x2, y2);
-        } else if (trackIsLog && k1.value > 0 && k2.value > 0) {
-            const sampleStepPx = 4;
-            const span = Math.max(1, Math.floor((x2 - x1) / sampleStepPx));
-            for (let s = 1; s <= span; s++) {
-                const tt = s / span;
-                const f = k1.frame + tt * (k2.frame - k1.frame);
-                const v = evaluateTrackValue([k1, k2], f, false, true);
-                ctx.lineTo(frameToCanvasPixel(f), v2p(v));
-            }
         } else if (k1.interpolation === 'Linear') {
             ctx.lineTo(x2, y2);
         } else {
             const h1x = k1.rightTangent ? k1.rightTangent.x : (k2.frame - k1.frame) * 0.33;
-            let h1y = k1.rightTangent ? k1.rightTangent.y : 0;
+            let h1y = (k1.rightTangent ? k1.rightTangent.y : 0) * tanY;
             const h2x = k2.leftTangent ? k2.leftTangent.x : -(k2.frame - k1.frame) * 0.33;
-            let h2y = k2.leftTangent ? k2.leftTangent.y : 0;
+            let h2y = (k2.leftTangent ? k2.leftTangent.y : 0) * tanY;
 
             if (normalized && range) {
                 h1y = h1y / range.span;
@@ -287,6 +284,7 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
         frameToCanvasPixel,
         canvasPixelToFrame,
         LEFT_GUTTER_WIDTH,
+        trackIsLog,
     );
 
     // Track-default-coloured diamonds for every key. Selection-aware overrides
@@ -372,12 +370,13 @@ export const buildSoftSelectionMask = (args: BuildSoftMaskArgs): CacheCanvas => 
     const selectedSet = new Set(selectedKeyframeIds);
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + LEFT_GUTTER_WIDTH;
     const v2p = (val: number, tid: string) => {
+        const y = toGraphY(val, isLogTrack(tid));
         if (normalized) {
             const range = trackRanges[tid];
             if (!range || !range.span) return valueToPixel(0.5, view);
-            return valueToPixel((val - range.min) / range.span, view);
+            return valueToPixel((y - range.min) / range.span, view);
         }
-        return valueToPixel(val, view);
+        return valueToPixel(y, view);
     };
 
     ctx.save();

@@ -8,6 +8,7 @@ import { AudioGroup } from './AudioStrip';
 import { SelectionTransformBar } from './SelectionTransformBar';
 import { useDopeSheetInteraction } from '../../hooks/useDopeSheetInteraction';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
+import { isPayloadTrack } from '../../engine/animation/payloadTrackRegistry';
 import { TIMELINE_RULER_HEIGHT, TIMELINE_GROUP_HEIGHT, TIMELINE_TRACK_HEIGHT } from '../../data/constants';
 import { getLiveValue } from '../../utils/timelineUtils';
 import { groupTracks, classifyTrackId } from '../../utils/groupTracks';
@@ -376,6 +377,7 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
     };
 
     const wrapAddKey = (tid: string, frame: number) => {
+        if (isPayloadTrack(tid)) return;       // its keys come from the app, with their payload
         snapshot(); 
         const val = getLiveValue(tid, false, frame, sequence);
         addKeyframe(tid, frame, val);

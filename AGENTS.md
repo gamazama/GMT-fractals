@@ -25,7 +25,7 @@ entry-point. It does not duplicate `CLAUDE.md` — it points at it.
 | Why a decision was made | [`docs/adr/`](docs/adr/) — append-only, numbered in sequence |
 | Cross-cutting policy spanning many files | [`docs/policy/`](docs/policy/) |
 | Full documentation tree | [`docs/DOCS_INDEX.md`](docs/DOCS_INDEX.md) |
-| Session-by-session progress log | [`HANDOFF.md`](HANDOFF.md) |
+| How to resume | [`HANDOFF.md`](HANDOFF.md) |
 | What to load, in what order, at what token cost | [`docs/policy/context-loading-protocol.md`](docs/policy/context-loading-protocol.md) |
 | Pre-extraction historical reference (attic — may be stale) | [`docs/history/`](docs/history/) |
 

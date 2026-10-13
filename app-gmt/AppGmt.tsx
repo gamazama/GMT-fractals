@@ -20,6 +20,7 @@ import React, { useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useEngineStore } from '../store/engineStore';
 import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
+import { FeatureOverlays } from '../engine/plugins/viewport/FeatureOverlays';
 import { TopBarHost } from '../engine/plugins/TopBar';
 import { HudHost } from '../engine/plugins/Hud';
 import { Dock } from '../components/layout/Dock';
@@ -27,7 +28,6 @@ import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
 import { panelLabel } from '../engine/PanelManifest';
 import { PanelRouter } from '../components/PanelRouter';
-import { z } from '../components/ui';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
@@ -59,8 +59,6 @@ import { GmtRendererCanvas, GmtRendererTickDriver, gmtRenderer, getProxy } from 
 import { BenchProfiler } from '../engine-gmt/utils/BenchProfiler';
 import { estimateCompileTime } from '../engine-gmt/features/engine/profiles';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
-import { featureRegistry } from '../engine/FeatureSystem';
-import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LoadingScreen } from './LoadingScreen';
 import { FormulaWorkshop } from '../engine-gmt/features/fragmentarium_import/FormulaWorkshop';
 import { useAppStartup } from '../hooks/useAppStartup';
@@ -73,42 +71,11 @@ import { RenderContextLostOverlay } from './RenderContextLostOverlay';
 import MobileControls from '../components/MobileControls';
 import { MobileMenuHost } from '../engine/plugins/Menu';
 
-// Renders DOM-type viewport overlays (LightGizmo, DrawingOverlay, WebcamOverlay,
-// …) with per-overlay store subscriptions. Each `<OverlayHost>` subscribes
-// only to its own feature slice, so unrelated parameter changes don't
-// re-render every overlay. Previously DomOverlays did one `useEngineStore()`
-// (full-state) at the parent and re-rendered every overlay on every store
-// mutation anywhere in the app.
-//
-// `actions` is read from `useEngineStore.getState()` at render time rather
-// than subscribed to: Zustand action functions have stable references
-// across setState calls, so consumers like `actions.setWebcam(...)` work
-// without forcing this component to re-render on every store change.
-const OverlayHost: React.FC<{ config: ReturnType<typeof featureRegistry.getViewportOverlays>[number] }> = ({ config }) => {
-    const Component = componentRegistry.get(config.componentId);
-    const sliceState = useEngineStore((s) => (s as any)[config.id]);
-    if (!Component || !sliceState) return null;
-    const actions = useEngineStore.getState();
-    return <Component featureId={config.id} sliceState={sliceState} actions={actions} />;
-};
-
-const DomOverlays: React.FC = () => {
-    const overlays = useMemo(
-        () => featureRegistry.getViewportOverlays().filter(o => o.type === 'dom'),
-        [],
-    );
-    return (
-        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: z('shellViewportOverlay') }}>
-            {overlays.map(config => <OverlayHost key={config.id} config={config} />)}
-        </div>
-    );
-};
-
 export const AppGmt: React.FC = () => {
     // Narrow per-field subscriptions instead of one full-store `useEngineStore()`.
     // The previous full subscription re-ran AppGmt's body on every store
     // mutation (tens of times per slider step, once per RAF during animation),
-    // which forced every child component (Dock, TopBar, DomOverlays, …) to
+    // which forced every child component (Dock, TopBar, FeatureOverlays, …) to
     // re-execute even when their own selectors had stable values. Profile-
     // verified hot path; see `docs/UI_PERF_HANDOFF.md`.
     //
@@ -363,12 +330,15 @@ export const AppGmt: React.FC = () => {
                         )}
 
                         {/* DOM viewport overlays — LightGizmo, DrawingOverlay, etc.
-                            Iterated from featureRegistry.getViewportOverlays().
+                            The engine's one host renders every feature's
+                            `viewportConfig` of type 'dom', each on its own slice
+                            (engine/plugins/viewport/FeatureOverlays.tsx).
                             Hidden in broadcast / clean-feed mode (editing gizmos
                             are chrome; the light/draw state they expose is already
                             committed to the worker, so hiding the handle is purely
-                            visual). */}
-                        {!isBroadcastMode && <BenchProfiler id="DomOverlays"><DomOverlays /></BenchProfiler>}
+                            visual). The profiler id keeps its old name so bench
+                            runs stay comparable. */}
+                        {!isBroadcastMode && <BenchProfiler id="DomOverlays"><FeatureOverlays /></BenchProfiler>}
 
                         {/* Region-selection overlay — mounted inside
                             viewportRef so useRegionSelection's mouse

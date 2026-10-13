@@ -139,6 +139,10 @@ export const applyPresetState = (
     presetFieldRegistry.applyAll(p, set, get as () => Record<string, unknown>);
 
     if (p.duration) useAnimationStore.getState().setDuration(p.duration);
+    // The frame rate the scene's frames were counted at. Set directly, like the duration:
+    // `setFps` is the user's action (an undo step, and in 'match' mode it moves the keys).
+    // A scene saved before the field existed has none and leaves the rate as it is.
+    if (typeof p.fps === 'number' && p.fps >= 1) useAnimationStore.setState({ fps: p.fps });
 
     FractalEvents.emit('reset_accum', undefined);
 };

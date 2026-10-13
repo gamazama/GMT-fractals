@@ -19,6 +19,7 @@
  * through same-origin `localStorage`. Grep `mountFavientsPanel(`:
  *   • app-gmt  — `mountFavientsPanel()`, no args ⇒ the default `gmt.favients.panel`.
  *   • fluid-toy — `{ storageKey: 'fluid-toy.favients.panel', paletteFilters: false }`.
+ *   • deep-zoom — `deep-zoom/setup.ts`, its own key, no picker filters, closed at first run.
  * The v2 Gradient Explorer does NOT call it (it mounts no Favients panel; it restores the
  * picker filters itself in `gradient-explorer/v2/main.tsx`). The first Explorer shell was the
  * third caller, with `gmt.gradientExplorer.favients.panel`, until the swap of 2026-09-16.
@@ -50,7 +51,7 @@ import {
   type FavientsLocation,
 } from './store/favientsPanelPersist';
 import { restorePaletteFilters, watchPaletteFilters } from './store/paletteFiltersPersist';
-import { writeExplorerIncoming, EXPLORER_TRIP_PARAM, type ExplorerIncoming } from './core/explorerHandoff';
+import { writeExplorerIncoming, EXPLORER_TRIP_PARAM, type ExplorerIncoming, type ExplorerHostId } from './core/explorerHandoff';
 
 /** The Favients shelf's panel-manifest entry. Spread into a host's `applyPanelManifest`
  *  list (the same shape `feedbackPanelEntry()` returns). */
@@ -114,7 +115,7 @@ export const mountFavientsPanel = (cfg: FavientsMountConfig = {}): void => {
  *  new tab. (fluid-toy has its own inline opener in `fluid-toy/registerFeatures.ts` and opens
  *  the page bare; the Explorer itself leaves the action unset.)
  *
- *  `?from=gmt` is how the Explorer knows to offer "Back to GMT" (grep `cameFromGmtFor` in
+ *  `?from=gmt` is how the Explorer knows to offer "Back to GMT" (grep `cameFromFor` in
  *  `gradient-explorer/v2/shareUrl.ts`; 2026-09-13). The literal is written here rather than
  *  imported, because `palette/` must never import an app. Only this opener appends it: the
  *  Explorer's link goes to `app-gmt.html`, which is the wrong place to send a fluid-toy user.
@@ -123,10 +124,15 @@ export const mountFavientsPanel = (cfg: FavientsMountConfig = {}): void => {
  *  `handoff` (2026-09-23, app-gmt/explorerTrip.ts): the gradient the Explorer should open on,
  *  written to the one-shot key just before the tab opens, and the trip id its "Back to GMT"
  *  pings to find this tab again (palette/core/explorerHandoff.ts). Both optional — with
- *  neither, this is the bare opener it always was. The URL stays a string literal starting
- *  `'gradient-explorer.html?from=gmt'`: `debug/test-gx-share.mts` [5] reads it as text. */
-export const openGradientExplorer = (handoff: { incoming?: ExplorerIncoming | null; trip?: string } = {}): void => {
+ *  neither, this is the bare opener it always was.
+ *
+ *  `from` (2026-10-09): the host app making the trip, a key of `EXPLORER_HOSTS`; GMT when left
+ *  out, so app-gmt's call is unchanged. Deep Zoom passes its own (`deep-zoom/explorerTrip.ts`) and
+ *  the Explorer's link reads "Back to Deep Zoom". The page and the default host stay string
+ *  literals on the two lines below: `debug/test-gx-share.mts` [5] reads them as text. */
+export const openGradientExplorer = (handoff: { incoming?: ExplorerIncoming | null; trip?: string; from?: ExplorerHostId } = {}): void => {
   if (handoff.incoming) writeExplorerIncoming(handoff.incoming);
   const trip = handoff.trip ? `&${EXPLORER_TRIP_PARAM}=${encodeURIComponent(handoff.trip)}` : '';
-  window.open('gradient-explorer.html?from=gmt' + trip, '_blank', 'noopener');
+  const from: ExplorerHostId = handoff.from ?? 'gmt';
+  window.open('gradient-explorer.html?from=' + from + trip, '_blank', 'noopener');
 };

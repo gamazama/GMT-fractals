@@ -42,6 +42,9 @@ export interface PencilTarget {
   color?: string;
   /** Douglas-Peucker tolerance (value units) for the fit. */
   eps: number;
+  /** An exponential track (`engine/animation/logTrackRegistry.ts`): the stroke is filled in,
+   *  fitted and healed in log space, and `eps` is in ln-units (`CurveFitting.strokeTolerance`). */
+  log?: boolean;
   /** Pixel-Y → channel value, using the FROZEN view passed in (host owns log/range). */
   toValue: (py: number, view: GraphViewTransform) => number;
 }
@@ -151,7 +154,9 @@ export const usePencilTool = ({
     if (hi <= lo) return null; // a dot, not a stroke
 
     // Rasterize the drawn span to consecutive integer frames (linear interp between
-    // stroke samples), then fit. Only the [lo,hi] span is touched.
+    // stroke samples), then fit. Only the [lo,hi] span is touched. On an exponential track
+    // the straight line between two stroke samples is the one the pen drew: straight in log.
+    const log = !!st.target.log;
     const spanVals: number[] = [];
     let j = 0;
     for (let f = lo; f <= hi; f++) {
@@ -159,14 +164,14 @@ export const usePencilTool = ({
       const a = pts[j];
       const b = pts[Math.min(pts.length - 1, j + 1)];
       const t = b.f > a.f ? (f - a.f) / (b.f - a.f) : 0;
-      spanVals.push(a.v + (b.v - a.v) * t);
+      spanVals.push(log && a.v > 0 && b.v > 0 ? a.v * Math.pow(b.v / a.v, t) : a.v + (b.v - a.v) * t);
     }
-    const spanKeys = fitSamplesToKeys(spanVals, lo, st.target.eps, `${st.target.trackId}-pen-${lo}-${hi}`);
+    const spanKeys = fitSamplesToKeys(spanVals, lo, st.target.eps, `${st.target.trackId}-pen-${lo}-${hi}`, log);
 
     // Keep existing keys OUTSIDE the drawn span, splice the drawn keys in, and heal the
     // seam - all three in `spliceSpan`, shared with the smoothing brush and the wave
     // filter. Null = the splice would leave a track with fewer than two keys.
-    return spliceSpan(base, lo, hi, spanKeys);
+    return spliceSpan(base, lo, hi, spanKeys, true, log);
   }, [maxFrame]);
 
   const onMove = useCallback((e: MouseEvent) => {

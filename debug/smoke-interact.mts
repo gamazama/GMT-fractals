@@ -105,11 +105,34 @@ async function main() {
         throw new Error(`save roundtrip lost position: got ${JSON.stringify(d.position)}, expected ${JSON.stringify(MUTATED.position)}`);
     }
 
+    // 5. The timeline's frame rate travels with the scene. `sequence` and `duration` are
+    //    counted in frames, so a scene that does not carry its rate changes length in
+    //    seconds on reload. Added 2026-10-11 with the `fps` preset field; falsified by
+    //    deleting the `p.fps = animStore.fps` line in store/engineStore.ts getPreset
+    //    ("save roundtrip lost the frame rate"). 24 because no default is 24.
+    const rate = await page.evaluate(() => {
+        const store = (window as any).__store, anim = (window as any).useAnimationStore;
+        anim.getState().setFps(24);
+        const saved = JSON.parse(JSON.stringify(store.getState().getPreset({ includeScene: true })));
+        anim.getState().setFps(60);
+        store.getState().loadPreset(saved);
+        const restored = anim.getState().fps;
+        // a scene saved before the field existed leaves the rate alone
+        const old = JSON.parse(JSON.stringify(saved));
+        delete old.fps;
+        anim.getState().setFps(60);
+        store.getState().loadPreset(old);
+        return { saved: saved.fps, restored, afterOldScene: anim.getState().fps };
+    });
+    if (rate.saved !== 24) throw new Error(`save roundtrip lost the frame rate: the preset holds fps ${JSON.stringify(rate.saved)}, expected 24`);
+    if (rate.restored !== 24) throw new Error(`loading the scene did not restore its frame rate: ${rate.restored}, expected 24`);
+    if (rate.afterOldScene !== 60) throw new Error(`a scene without a frame rate changed the timeline's: ${rate.afterOldScene}, expected it left at 60`);
+
     if (errors.length > 0) {
         throw new Error('page errors during smoke:\n  ' + errors.join('\n  '));
     }
 
-    console.log('\n✓ state slice exists, setters work, save roundtrip captures state (size, opacity, vec2 position, color)');
+    console.log('\n✓ state slice exists, setters work, save roundtrip captures state (size, opacity, vec2 position, color, frame rate)');
     await browser.close();
 }
 

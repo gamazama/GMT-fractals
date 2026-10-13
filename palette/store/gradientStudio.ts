@@ -133,6 +133,8 @@ export const writeTarget = (t: StudioTarget, config: GradientConfig | GradientSt
  * the setter's own emit does (grep `isGradientBuffer` in store/createFeatureSlice.ts) — and publish
  * it for the other surfaces that draw the param (`components/gradient/gradientParamPreview.ts`).
  * `null` re-sends the stored value and clears the published preview, i.e. ends a preview.
+ * A param with no `uniform` gets the publication alone: its host draws the preview itself from
+ * that (Deep Zoom: `deep-zoom/GradientSync.tsx`).
  */
 export const previewGradient = (t: StudioTarget, config: GradientConfig | null): void => {
   // every other surface that draws this param shows the preview too (the sidebar editor's bar, the

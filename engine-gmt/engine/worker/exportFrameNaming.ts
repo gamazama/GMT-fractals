@@ -18,7 +18,69 @@
  * Deliberately NOT used for the progress percentage or the video muxer's frame
  * timestamps: both of those genuinely want the 0-based pass index, and swapping
  * them would desync the container. Naming is the only consumer.
+ *
+ * THE FILES OF ONE FRAME (`exportFrameFiles`, 2026-10-11). Which files a frame
+ * makes, and under what names, is ONE rule with two readers:
+ *   - the worker, which writes them (`writeFrameFiles` in WorkerExporter.ts);
+ *   - the runner, which looks for them BEFORE a render, to ask whether frames
+ *     already in the folder are to be overwritten or continued from
+ *     (`lookForSequenceFrames` in
+ *     components/timeline/RenderPopup/exportRunner.ts).
+ * Until that day the names were spelt out inside the worker alone. A look that
+ * spelt them a second time would drift from the write the first time a pass or
+ * a format was added, and a "continued" render would then skip frames that are
+ * not there, or render again frames that are.
+ *   PNG   beauty                `<base>_<frame>.png`
+ *         beauty + alpha        the SAME name: one RGBA file (beauty's colour,
+ *                               the alpha pass in the alpha channel)
+ *         alpha alone           `<base>_alpha_<frame>.png`
+ *         depth                 `<base>_depth_<frame>.png`, always its own file
+ *   other (JPG)                 one file a pass, `<base>_<pass>_<frame>.jpg`
+ * `exportFrameState` is the other half of the look: a frame is THERE only when
+ * every one of its files is there and none is empty (a file is created first
+ * and gets its bytes when its stream closes, so a cut-off write leaves an
+ * empty one). A frame that is there in part is rendered again, all its passes.
+ *
+ * @invariant A frame's files are the ones the table above names, in that
+ *   order, numbered by the timeline frame; and a frame counts as there only
+ *   with all of them non-empty — proven by: npm run test:export-naming (the
+ *   "[7] ..." to "[10] ..." lines). Falsified 2026-10-11: see the test's
+ *   header.
+ * @assumption The worker and the runner both go through `exportFrameFiles`.
+ *   No test can see that (the worker imports THREE and mediabunny); it was
+ *   measured in app-gmt with real renders on 2026-10-11
+ *   (debug/scratch/gmt-export/gmt-sequence.mts, git-ignored): the files in the
+ *   folder after a render are exactly the names the look asks for.
+ *
+ * THE GRAIN OF ONE FRAME (`exportFrameSampleBase`, 2026-10-12). The shader's
+ * random numbers are seeded by a count of samples (`uFrameCount`). The worker
+ * used to count on from sample to sample through a session, so the grain of a
+ * frame depended on how many frames the session had made before it: a run
+ * that CONTINUED from frame K counted from 0 there, and every frame from K on
+ * came out with another grain than one run gives it (measured: 11.4 % of the
+ * pixels, 0.15 of a level on average). Now the count a frame's pass starts
+ * from is worked out from the frame's own place in the range - the very
+ * number an unbroken run had reached there. So a single run counts exactly as
+ * it always did, and a continued run counts as the single run would.
+ * THE PLACE IS THE FRAME'S INDEX IN THE RANGE, not its timeline number: a
+ * range that starts at frame 690 has always counted from 0, and still does.
+ * Two renders of the same frames under DIFFERENT ranges (another first frame,
+ * another step) therefore still differ in grain, as they always did.
+ *
+ * @assumption `exportFrameSampleBase` is the count an unbroken run had reached,
+ *   for one pass a frame and for several, and does not depend on which frames
+ *   were made before - `npm run test:export-naming` ("[11] ..." lines), green
+ *   and not broken on purpose. What it buys was measured in app-gmt on
+ *   2026-10-12 (debug/scratch/small-three/gmt-four.mts, git-ignored; 640 x 360,
+ *   16 samples, the power keyed): a run cancelled at frame 9 and continued is
+ *   the single run pixel for pixel, 24 frames of 24 (before the change, the
+ *   same script: 10 of 24, the 14 continued ones 11.4 % of their pixels off);
+ *   and a single run is what it was before the
+ *   change - 36 files (24 of one pass, 6 frames of two) with the same pixels,
+ *   hash for hash.
  */
+import type { ExportPass } from '../../../engine/codec/VideoExportTypes';
+
 export const exportFrameFileNumber = (
     /** 0-based position within this export run. */
     frameIndex: number,
@@ -40,3 +102,71 @@ export const exportFrameFileTag = (
     frameStep: number,
     pad = 5,
 ): string => String(exportFrameFileNumber(frameIndex, startFrame, frameStep)).padStart(pad, '0');
+
+/**
+ * The sample count a frame's pass STARTS from (see THE GRAIN OF ONE FRAME in
+ * the header): what a run that made every frame of the range, every pass of
+ * each, had counted when it reached this one. The worker counts on from here,
+ * one a sample.
+ */
+export const exportFrameSampleBase = (
+    /** 0-based position within the export range (NOT the timeline frame). */
+    frameIndex: number,
+    /** Which of the frame's passes this is, in the order they are rendered. */
+    passIndex: number,
+    /** How many passes a frame renders in this session (a video: 1). */
+    passCount: number,
+    /** Samples a pass (`VideoExportConfig.samples`). */
+    samples: number,
+): number => {
+    const whole = (n: number, least: number): number => Math.max(least, Math.floor(n) || 0);
+    return (whole(frameIndex, 0) * whole(passCount, 1) + whole(passIndex, 0)) * whole(samples, 0);
+};
+
+/** One file of a frame: its name, and the pass (or the two passes merged into
+ *  one RGBA picture) it holds. */
+export interface ExportFrameFile {
+    name: string;
+    from: ExportPass | 'beauty+alpha';
+}
+
+/**
+ * The files ONE frame of an image sequence makes, in the order they are
+ * written (see THE FILES OF ONE FRAME in the header). The one naming rule: the
+ * worker writes exactly these, the runner looks for exactly these.
+ */
+export const exportFrameFiles = (
+    /** What every file of the render starts with (`VideoExportConfig.imageSequenceBaseName`). */
+    base: string,
+    /** The frame's number as it stands in the name (`exportFrameFileTag`). */
+    frameTag: string,
+    /** The format's container (`VIDEO_FORMATS[i].container`): 'png', or a format with one file a pass. */
+    container: string,
+    /** The extension, without the dot. */
+    ext: string,
+    /** The passes rendered for the frame, in the order they are rendered. */
+    passes: readonly ExportPass[],
+): ExportFrameFile[] => {
+    if (container !== 'png') {
+        // JPG (and any future per-pass image format): it cannot carry alpha, so every pass is its own file.
+        return passes.map((pass) => ({ name: `${base}_${pass}_${frameTag}.${ext}`, from: pass }));
+    }
+    const files: ExportFrameFile[] = [];
+    const beauty = passes.includes('beauty'), alpha = passes.includes('alpha');
+    if (beauty && alpha) files.push({ name: `${base}_${frameTag}.${ext}`, from: 'beauty+alpha' });
+    else if (beauty) files.push({ name: `${base}_${frameTag}.${ext}`, from: 'beauty' });
+    else if (alpha) files.push({ name: `${base}_alpha_${frameTag}.${ext}`, from: 'alpha' });
+    if (passes.includes('depth')) files.push({ name: `${base}_depth_${frameTag}.${ext}`, from: 'depth' });
+    return files;
+};
+
+/**
+ * What of one frame is in the folder, from the size in bytes of each of its
+ * files (`-1`: there is no such file). 'whole': every file is there and holds
+ * something. 'part': something of the frame is there, but a file is missing or
+ * empty - it has to be rendered again. 'none': nothing of it is there.
+ */
+export const exportFrameState = (sizes: readonly number[]): 'whole' | 'part' | 'none' => {
+    if (sizes.length > 0 && sizes.every((size) => size > 0)) return 'whole';
+    return sizes.some((size) => size >= 0) ? 'part' : 'none';
+};

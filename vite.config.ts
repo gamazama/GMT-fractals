@@ -163,6 +163,9 @@ export default defineConfig({
         'gradient-explorer-next': path.resolve(__dirname, 'gradient-explorer-next.html'),
         'app-gmt': path.resolve(__dirname, 'app-gmt.html'),
         'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
+        // Deep Zoom, the gmt-shell (deep-zoom/). The prototype it replaces,
+        // deep-zoom-prototype.html, is dev-only and has no input here on purpose.
+        'deep-zoom': path.resolve(__dirname, 'deep-zoom.html'),
       },
       output: {
         // FORCED vendor chunks. Only for libraries that are (a) big, (b) genuinely shared

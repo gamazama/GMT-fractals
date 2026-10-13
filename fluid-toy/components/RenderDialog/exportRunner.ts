@@ -19,6 +19,56 @@
  * left where the run lands them — the user already chose to pause playback by
  * opening the dialog, and clobbering them on cancel would surprise more than
  * it would help.
+ *
+ * THE FILE (2026-10-11)
+ *   - INTO A PICKED FILE (the dialog's badge says DISK) the video is written
+ *     AS THE RUN GOES: the encoder is asked for `mp4FastStart: false`, so an
+ *     MP4's frames leave in chunks of 16 MiB and its index is written last.
+ *     Until that day the whole MP4 was held in memory until the last frame,
+ *     under a badge that said DISK. WebM was always written as it goes.
+ *   - WITHOUT A PICKED FILE (no picker in this browser, or it was refused: the
+ *     badge says RAM) nothing changed: the video is made in memory, an MP4's
+ *     index at the front, and saved as a download.
+ *   - A KEYFRAME A SECOND in both (`keyFrameEvery`: the rate the frames play
+ *     at). Left to itself the codec makes one for the whole video, which an
+ *     editor cannot scrub.
+ *   - HELD BACK FOR THE CODEC. After a frame is handed to the encoder the run
+ *     waits while more than `MAX_QUEUED` frames are still in the codec's queue
+ *     (`MainThreadEncoder.queueSize`; the deep zoomer's runner does the same).
+ *     Without it "written as it goes" was not true here whatever the layout:
+ *     this loop makes frames faster than the codec takes them, and they wait
+ *     as PICTURES (measured, 300 frames at 2560 x 1440: up to 297 in the
+ *     queue at once and 2 of 299 encoded when the last frame was made; in
+ *     another run 174 and 124), so little or nothing reached the file before
+ *     the run's end. Held back, the same render had at most 2 waiting, 296 of
+ *     299 encoded when the last frame was made, and 32 of its 36.9 MiB in
+ *     the file by then (three runs alike). It holds in RAM mode too, where it
+ *     is the pictures in the queue that are spared, not the file.
+ *   - DISCARD (or an error) REALLY THROWS THE FILE AWAY. The encoder is handed
+ *     a stream that forwards to the file (`forwardToPickedFile`,
+ *     engine/export/pickedFile.ts), and the file itself is aborted: a new file
+ *     is removed where the browser can, a file picked to be replaced keeps
+ *     what it held. Before, this runner handed over the file's own stream,
+ *     which the encoder locks: its `stream.close()` after a cancel threw, the
+ *     throw was swallowed, and the file stayed open for as long as the page.
+ *
+ * @assumption THE FILE above was measured in this app's own dialog on
+ *   2026-10-11, Chrome on the real GPU, the picker stood in for by a real File
+ *   System Access file that records every write
+ *   (debug/scratch/gmt-export/gmt-video.mts with APP=fluid-toy.html,
+ *   git-ignored): each of the four formats into a picked file and in memory,
+ *   75 frames each, read back (3 keyframes, at 0, 1 and 2 s; the index after
+ *   the media data in a picked file, before it in memory) and played to the
+ *   end by a <video>; a 2560 x 1440 H.264 of 300 frames (36.9 MiB) of which
+ *   32 MiB reach the file before its last frame, the first 16 after frame 112
+ *   or so (at 1920 x 1080 the same 300 frames make 20 to 26 MiB: one 16 MiB
+ *   chunk, full only as the run ends); Interrupt then Finish (a file of the
+ *   frames made, which plays); Discard into a new file (aborted, and removed)
+ *   and into one picked to be replaced (it keeps its bytes).
+ *   BROKEN ON PURPOSE once: the cancel path closing the stream as it used to
+ *   -> "the stream was ABORTED, not closed (aborted false, closed false)".
+ *   NO STANDING GUARD: `npm run smoke:fluid-toy` boots the app and opens no
+ *   render dialog.
  */
 
 import { useAnimationStore } from '../../../store/animationStore';
@@ -26,6 +76,8 @@ import { useEngineStore } from '../../../store/engineStore';
 import { animationEngine } from '../../../engine/AnimationEngine';
 import { applyModulationsAt } from '../../../engine/features/modulation/applyAt';
 import { MainThreadEncoder } from '../../../engine/export/videoEncoder';
+import { forwardToPickedFile } from '../../../engine/export/pickedFile';
+import type { PickedFile } from '../../../engine/export/pickedFile';
 import { VIDEO_FORMATS } from '../../../data/constants';
 import { getExportFileName } from '../../../utils/fileUtils';
 import type { RenderDialogRunner } from '../../../engine/plugins/RenderDialog';
@@ -39,6 +91,12 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  *  commit, sync<X>ToEngine pushes new params into the engine). Without this
  *  the convergence loop runs against the previous frame's params. */
 const yieldToReact = () => sleep(0);
+
+/** Frames the video encoder may have waiting before the run holds the next
+ *  one back (each holds its picture). The deep zoomer's runner uses the same
+ *  number (grep `MAX_QUEUED` in deep-zoom/routeRender.tsx). See HELD BACK in
+ *  the header. */
+const MAX_QUEUED = 2;
 
 const computeTotalFrames = (cfg: { startFrame: number; endFrame: number; frameStep: number }) =>
     Math.floor((cfg.endFrame - cfg.startFrame) / Math.max(1, cfg.frameStep)) + 1;
@@ -77,7 +135,9 @@ export const runVideoExport: RenderDialogRunner = async (deps) => {
 
     // Disk-mode file picker. Transient activation is preserved across awaits,
     // so this works even though `runVideoExport` is async.
-    let stream: WritableStream | null = null;
+    // The encoder is handed `picked.stream`, which forwards to the file, never
+    // the file's own stream (see THE FILE in the header).
+    let picked: PickedFile | null = null;
     if (isDiskMode) {
         try {
             // @ts-expect-error — File System Access API not in default lib targets
@@ -85,7 +145,7 @@ export const runVideoExport: RenderDialogRunner = async (deps) => {
                 suggestedName: outputFileName,
                 types: [{ description: formatDef.label, accept: { [formatDef.mime]: [`.${formatDef.ext}`] } }],
             });
-            stream = await handle.createWritable();
+            picked = forwardToPickedFile(handle, await handle.createWritable());
         } catch (err) {
             if (err instanceof DOMException && err.name === 'AbortError') return; // user cancelled
             const isSecurityError = err instanceof DOMException && err.name === 'SecurityError';
@@ -94,9 +154,10 @@ export const runVideoExport: RenderDialogRunner = async (deps) => {
                 return;
             }
             // Fall through to RAM mode silently — same behaviour as engine-gmt.
-            stream = null;
+            picked = null;
         }
     }
+    const stream: WritableStream | null = picked ? picked.stream : null;
 
     if (savedIsPlaying) animState.pause();
 
@@ -134,18 +195,24 @@ export const runVideoExport: RenderDialogRunner = async (deps) => {
     const encoder = new MainThreadEncoder();
 
     try {
+        // Output rate, not the timeline's — a stepped export renders every Nth
+        // frame, so encoding at the timeline rate would compress it into a
+        // time-lapse. Step is a cost reduction for previews, so the preview
+        // should run at the speed the animation actually plays.
+        // fluid-toy carries no audio, so unlike app-gmt there was no desync
+        // here — this keeps the two apps' definition of Step the same.
+        const outputFps = cfg.fps / Math.max(1, cfg.frameStep);
         await encoder.start({
             width:       safeWidth,
             height:      safeHeight,
-            // Output rate, not the timeline's — a stepped export renders every Nth
-            // frame, so encoding at the timeline rate would compress it into a
-            // time-lapse. Step is a cost reduction for previews, so the preview
-            // should run at the speed the animation actually plays.
-            // fluid-toy carries no audio, so unlike app-gmt there was no desync
-            // here — this keeps the two apps' definition of Step the same.
-            fps:         cfg.fps / Math.max(1, cfg.frameStep),
+            fps:         outputFps,
             bitrate:     cfg.bitrate,
             formatIndex: cfg.formatIndex,
+            // Into a picked file: as the run goes, an MP4's index last. In
+            // memory: the index at the front, as it always was.
+            mp4FastStart:  stream ? false : 'in-memory',
+            // A keyframe a second: the codec alone makes ONE for the whole video.
+            keyFrameEvery: Math.max(1, Math.round(outputFps)),
         }, stream);
 
         status.setStatusText(stream ? 'Rendering to disk…' : 'Rendering to RAM…');
@@ -189,6 +256,10 @@ export const runVideoExport: RenderDialogRunner = async (deps) => {
 
             // ─── Capture + encode ───
             encoder.encodeCanvas(canvas, i);
+            // Do not outrun the codec (HELD BACK in the header). The sim is
+            // force-paused and no frame is drawn while this waits, so the
+            // picture is the same either way. A Discard ends the wait.
+            while (encoder.queueSize > MAX_QUEUED && !flags.cancelledRef.current) await sleep(10);
 
             // Plugin expects 0..1; it formats as percent for display.
             status.setProgress((i + 1) / totalFrames);
@@ -202,7 +273,7 @@ export const runVideoExport: RenderDialogRunner = async (deps) => {
         if (flags.cancelledRef.current) {
             encoder.cancel();
             status.setStatusText('Cancelled.');
-            try { await stream?.close(); } catch { /* may already be closed */ }
+            await picked?.discard();   // the half-written file is aborted, not left open
         } else {
             status.setStatusText('Finalizing video…');
             const blob = await encoder.finish();
@@ -221,7 +292,7 @@ export const runVideoExport: RenderDialogRunner = async (deps) => {
         console.error('[fluid-toy/RenderDialog] Export failed', e);
         alert(`Export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
         encoder.cancel();
-        try { await stream?.close(); } catch { /* may already be closed */ }
+        await picked?.discard();       // no index was written: what is there cannot play
     } finally {
         // Restore engine + animation state so the live viewport behaves
         // exactly as it did before the user opened the dialog. setRenderSize
