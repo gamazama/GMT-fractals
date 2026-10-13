@@ -1,5 +1,46 @@
 # ADR-0139: Cook-Torrance is the Direct specular model; Blinn-Phong stays for the Fastest preset and for scenes authored under it
 
+> **Update 2026-10-13 (later the same day; the Fast tier's model changed, the rest of the decision
+> unchanged):** The Fastest preset no longer runs the legacy Blinn-Phong. It runs a third model,
+> `specularModel` 2, a Fresnel-weighted Blinn-Phong (grep `getLightingPBRFastFresnel` in
+> `engine-gmt/shaders/chunks/lighting/pbr.ts`; the tier is still grep `label: 'Fast'` in
+> `engine-gmt/types/viewport.ts`). The legacy Blinn-Phong (0) is now kept for one thing only: scenes
+> authored under it. Wherever this record says the Fastest preset uses Blinn-Phong — the title, and
+> item 1 of the Decision — read the Fresnel-weighted model. Owner's call, on these measurements
+> (default Mandelbulb, 1280×720, RTX 5070 Ti, ANGLE d3d11, GPU timer queries):
+>
+> - **The legacy model's speed advantage exists only while moving.** Under Fastest: 0.631 ms against
+>   Cook-Torrance's 0.692 (+9.7%). With the camera stopped and the frame accumulating the two are
+>   level (0.676 / 0.679). The "+9% on the default Mandelbulb while moving" in the Context above is
+>   that same gap at boot settings.
+> - **The highlight is not where the time goes.** A Fresnel-weighted Blinn-Phong written the obvious
+>   way cost the same 9% as Cook-Torrance. Bisected by editing the compiled shader's text one change at
+>   a time (`debug/scratch/spec-bisect.mts`): tinting the highlight by F0 and giving the lobe GGX's
+>   peak are free; weighting the diffuse by anything that depends on the albedo, before or inside the
+>   light loop, is the whole 8–10%; a scalar weight there is free; and the same albedo-dependent
+>   weight applied after the loop is free. One vec3 multiply per lit pixel cannot cost a tenth of the
+>   frame as arithmetic — it is how the program compiles, and the mechanism was not found.
+> - **So the model sums the lights with no surface colour in the loop and applies the albedo once, in
+>   the return.** That shape is load-bearing; the note on the function says so. The same
+>   rearrangement of Cook-Torrance itself did not recover the time, which is why this is a third
+>   model and not a faster Cook-Torrance.
+> - **What it measures:** moving, 0.626 ms under Fastest (legacy 0.631, Cook-Torrance 0.692) and
+>   0.861 at boot settings (0.859 / 0.924). Accumulating it is 1.5% (Fastest) to 3.6% (boot settings)
+>   slower than both. Cold compile +10 ms over the legacy model (not significant, paired n = 7)
+>   against Cook-Torrance's +57.
+> - **How close it sits to Cook-Torrance:** over the lit pixels of 14 scenes, exposure 0 to −8%
+>   (within 2% on 12; −8% on Cuboctahedron and on the owner's test scene), brightest tenth −4% to
+>   +3%. The legacy model on the same scenes: exposure −12% to +298%.
+>
+> What this does to the Consequences below. *"The Fastest preset changes the look of a converted
+> scene"* no longer holds: the converted default Mandelbulb under Fastest is 2% under Cook-Torrance,
+> not 37% over. *"Fastest's model does not outlive the scene"* still holds — picking another built-in
+> formula returns to Cook-Torrance — but it now costs the ~9% while moving and no change of look.
+> New: no quality preset selects the legacy model at all, and `npm run test:migrations` section [10]
+> asserts that. Limits of the evidence: one scene on one GPU (Apollonian's default scene was too
+> noisy to read in this harness), nothing measured on mobile, and `test:shader` was not run.
+
+
 - **Status:** Accepted
 - **Date:** 2026-10-13
 - **Relates to:** ADR-0079 (the Shader Compiler profile seam — the quality presets and tiers this

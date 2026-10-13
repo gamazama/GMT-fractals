@@ -118,16 +118,16 @@ export const SUBSYSTEM_LIGHTING: SubsystemDefinition = {
             estCompileMs: -2500,
         },
         {
-            // The Fastest preset's tier, and the only place Blinn-Phong is chosen for
-            // new work (ADR-0139). Its highlight skips the GGX terms: up to ~9% less
-            // GPU time per frame on a light scene (0.86 vs 0.92 ms at 1280x720 on
-            // the default Mandelbulb while moving), nothing on a heavy one. The
-            // price is the look — the unweighted highlight is several times
-            // stronger, so a scene lit for Cook-Torrance comes out brighter and
-            // whiter here.
+            // The Fastest preset's tier: a Fresnel-weighted Blinn-Phong (specularModel 2,
+            // ADR-0139). Cook-Torrance costs ~9% more of a light frame while moving
+            // (0.63 vs 0.69 ms at 1280x720 on the default Mandelbulb under Fastest);
+            // this model measures the same as the legacy Blinn-Phong there (and 1.5%
+            // over both once the camera stops and the frame accumulates). Its exposure
+            // was within 2% of Cook-Torrance's on 12 of 14 test scenes and 8% under on
+            // the other two, where the legacy model ran from 12% under to 4x over.
             label: 'Fast',
-            desc: 'Blinn-Phong highlights — the lightest lit shading, for live playback. Brighter and whiter than the full model.',
-            overrides: { lighting: { specularModel: 0.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: false, ptEnvNEE: false } },
+            desc: 'Fresnel-weighted Blinn-Phong highlights — close to the full model, a little cheaper while moving. For live playback.',
+            overrides: { lighting: { specularModel: 2.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: false, ptEnvNEE: false } },
         },
         {
             label: 'Path Traced',
@@ -263,16 +263,16 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
         label: 'Fastest',
         // Highest FPS that still has shadows (it's the VJ preset — shadows are
         // wanted). Uses Lite soft shadows (the measured-fastest shadow, ~2× Hard),
-        // no reflection march, no glow, Blinn-Phong highlights (the only preset on
+        // no reflection march, no glow, Fresnel-weighted Blinn-Phong highlights (the only preset on
         // them — see the Fast lighting tier). Keeps the path-tracer capability
         // (ptEnabled, free in Direct). Preview is the bare/instant one; this is
         // the fast-but-lit-with-shadows one. Compile time ≈ the others (that's
         // fine — the differentiation here is FPS, not compile).
-        description: 'Highest FPS — Lite soft shadows, Blinn-Phong highlights, no reflections / glow.',
+        description: 'Highest FPS — Lite soft shadows, fast highlights, no reflections / glow.',
         subsystems: {
             shadows: 1,              // Soft (Lite) — fastest shadow, ~2× faster than Hard
             reflections: 0,          // Off
-            lighting_quality: 1,     // Fast (Blinn-Phong + ptEnabled capability)
+            lighting_quality: 1,     // Fast (Fresnel-weighted Blinn-Phong + ptEnabled capability)
             atmosphere_quality: 0,   // Off
             pathtracer: 0,           // Balanced
         },

@@ -7,7 +7,7 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { LightParams, generateLightId } from '../../types';
 import { MAX_LIGHTS } from '../../../data/constants';
 import { getShadowsGLSL } from '../../shaders/chunks/lighting/shadows';
-import { getLightingPBRSimple, getLightingPBRFull } from '../../shaders/chunks/lighting/pbr';
+import { getLightingPBRSimple, getLightingPBRFull, getLightingPBRFastFresnel } from '../../shaders/chunks/lighting/pbr';
 import { LIGHTING_SHARED, LIGHTING_SHARED_CORE } from '../../shaders/chunks/lighting/shared';
 import { getPathTracerGLSL } from '../../shaders/chunks/pathtracer';
 
@@ -48,7 +48,7 @@ export interface LightingState {
      *  threshold. 1 = matched; old path-traced scenes are pinned to their pre-fix
      *  ratio by migration v8 (app-gmt/migrations.ts). */
     ptShadowTolerance: number;
-    specularModel: number; // 0=Blinn-Phong (Fastest preset, older scenes), 1=Cook-Torrance GGX (the default)
+    specularModel: number; // 0=legacy Blinn-Phong (older scenes), 1=Cook-Torrance GGX (the default), 2=Fresnel-weighted Blinn-Phong (Fastest preset)
     lights: LightParams[];
 }
 
@@ -212,17 +212,21 @@ export const LightingFeature: FeatureDefinition = {
         // path tracer's is, so Direct and Path Tracing agree on how much of the light a
         // surface mirrors. Blinn-Phong reflects the highlight at full strength — at the same
         // settings its specular is several times Cook-Torrance's and veils the surface colour
-        // in white. It stays for two things: the Fastest quality preset (it is up to ~9%
-        // cheaper per frame on a light scene) and scenes authored under it, which name it
-        // or are pinned to it by migration v10 (app-gmt/migrations.ts).
+        // in white. It stays for scenes authored under it, which name it or are pinned to it
+        // by migration v10 (app-gmt/migrations.ts).
+        // The Fastest quality preset runs a third model, a Fresnel-weighted Blinn-Phong:
+        // Cook-Torrance costs ~9% more of a light frame while moving, the legacy model's
+        // look is far from it, and this one has the legacy model's cost with
+        // Cook-Torrance's weighting (grep `getLightingPBRFastFresnel` in pbr.ts).
         specularModel: {
             type: 'float', default: 1.0, label: 'Specular Model', shortId: 'sm',
             group: 'engine_settings',
             options: [
-                { label: 'Blinn-Phong (Fast)', value: 0.0, estCompileMs: 0 },
-                { label: 'Cook-Torrance (Quality)', value: 1.0, estCompileMs: 70 }  // cold compile +53 / +86 ms on ~2.7 s, paired n=7, 2026-10-13
+                { label: 'Blinn-Phong (Legacy)', value: 0.0, estCompileMs: 0 },
+                { label: 'Cook-Torrance (Quality)', value: 1.0, estCompileMs: 70 },  // cold compile +53 / +86 ms on ~2.7 s, paired n=7, 2026-10-13
+                { label: 'Fresnel Blinn-Phong (Fast)', value: 2.0, estCompileMs: 0 }
             ],
-            description: 'How direct light makes highlights. Cook-Torrance weights them the way the path tracer does. Blinn-Phong is a little faster and much brighter: it is what the Fastest quality preset uses, and what scenes made before Cook-Torrance became the default keep.',
+            description: 'How direct light makes highlights. Cook-Torrance weights them the way the path tracer does. Fresnel Blinn-Phong is a close, slightly cheaper stand-in that the Fastest quality preset uses. Legacy Blinn-Phong is much brighter and is kept for scenes made before Cook-Torrance became the default.',
             onUpdate: 'compile',
             noAccumReset: true
         },
@@ -528,7 +532,9 @@ export const LightingFeature: FeatureDefinition = {
             const useCookTorrance = state?.specularModel === 1.0;
             builder.addIntegrator(useCookTorrance ? LIGHTING_SHARED : LIGHTING_SHARED_CORE);
             builder.setRenderMode('Direct');
-            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows) : getLightingPBRSimple(stochasticShadows));
+            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows)
+                : state?.specularModel === 2.0 ? getLightingPBRFastFresnel(stochasticShadows)
+                : getLightingPBRSimple(stochasticShadows));
             // Shading integrator (calculateShading) is deferred to buildFragment() via requestShading()
             // so that reflection code from ReflectionsFeature is available at generation time.
             builder.requestShading();

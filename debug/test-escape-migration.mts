@@ -329,7 +329,8 @@ console.log('\n[10] v10 — a preset that sets up its look but names no specular
   const sm = featureRegistry.get('lighting')!.params.specularModel as any;
   assert(sm?.default === 1.0, 'lighting.specularModel defaults to 1 (Cook-Torrance)');
   assert(Array.isArray(sm.options) && sm.options.some((o: any) => o.value === 0.0) && sm.options.some((o: any) => o.value === 1.0),
-    'both models stay selectable (0 Blinn-Phong, 1 Cook-Torrance)');
+    'the legacy model and Cook-Torrance stay selectable (0, 1)');
+  assert(sm.options.some((o: any) => o.value === 2.0), 'the Fresnel-weighted Blinn-Phong is a model (2)');
   const model = (p: any) => p?.features?.lighting?.specularModel;
 
   // The shapes that predate the choice. A full save from before the param existed:
@@ -381,12 +382,14 @@ console.log('\n[10] v10 — a preset that sets up its look but names no specular
   const naming = defs.filter(d => after(d) === 1).length;
   assert(naming >= 45, `the lit built-ins name Cook-Torrance (${naming} of ${defs.length})`);
 
-  // Blinn-Phong is otherwise reached only through the Fastest quality preset.
+  // No quality preset selects the legacy Blinn-Phong: Fastest runs the Fresnel-weighted one,
+  // which sits near Cook-Torrance, so a preset never changes a scene's exposure by much.
   const tierModel = (presetId: string) => {
     const preset = SCALABILITY_PRESETS.find(p => p.id === presetId)!;
     return SUBSYSTEM_LIGHTING.tiers[preset.subsystems.lighting_quality]?.overrides?.lighting?.specularModel;
   };
-  assert(tierModel('fastest') === 0.0, 'the Fastest preset selects Blinn-Phong');
+  assert(tierModel('fastest') === 2.0, 'the Fastest preset selects the Fresnel-weighted Blinn-Phong');
+  assert(SCALABILITY_PRESETS.every(p => tierModel(p.id) !== 0.0), 'no preset selects the legacy Blinn-Phong');
   const others = SCALABILITY_PRESETS.filter(p => p.id !== 'fastest' && p.id !== 'preview').map(p => p.id);
   assert(others.length >= 3 && others.every(id => tierModel(id) === 1.0), `every other lit preset selects Cook-Torrance (${others.join(', ')})`);
 }
