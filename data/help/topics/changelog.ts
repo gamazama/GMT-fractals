@@ -20,6 +20,12 @@ import { HelpSection } from '../../../types/help';
  * to edit in `app-gmt/HelpExtras.tsx`. Gradient Explorer v2 has its own version
  * and its own What's New topic.
  *
+ * BETWEEN RELEASES (owner, 2026-10-13): user-facing work adds its line to the
+ * `## Unreleased` block at the top as it lands, without a version bump. The block
+ * is reviewed at the push session, where it is trimmed and renamed to the
+ * version and date; if nothing is pending it is absent. It is live content, so
+ * a push that skips that review ships a heading that says "Unreleased".
+ *
  * VERSION BOUNDARIES are taken from package.json bump commits, not Reddit
  * announcement dates (the owner announces cumulatively, so a feature often ships
  * one version before it's posted). If you re-attribute, prefer the git ship date.
@@ -39,6 +45,19 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         title: 'Version History',
         content: `
 Every GMT release, newest first.
+
+## Unreleased
+> Not shipped yet. Entries collect here and are reviewed at release.
+
+- **Direct mode keeps its colours.** Highlights now follow the same model as the path tracer, so surfaces no longer wash out to white. Scenes you saved before load with the look they had.
+- **Built-in formulas relit to match.** Their default scenes keep their brightness; a few glossy ones read more matte.
+- **Fastest is faster.** The Fastest quality preset uses lighter highlights that look nearly the same, about 9% quicker while moving on the default Mandelbulb.
+- **Path-traced shadows fixed.** Surfaces were shadowing themselves; on a detailed scene over half the direct light was lost. Renders are brighter and cleaner. Scenes saved in Path Tracing load as they did: set Shadow Tolerance to 1 in the Shader Compiler panel for the fix.
+- **Sphere lights match between Direct and Path Tracing.** A Sphere light follows its own Falloff and Range in both, so switching mode no longer changes its brightness.
+- **Smooth frame rate with audio and LFOs on.** Modulation could drag a 60 fps scene down to 14 to 30 fps.
+- **Modulating bloom or colour grading no longer restarts the render.**
+
+---
 
 ## 0.9.8.5 — The new Gradient Explorer
 > September 26, 2026
