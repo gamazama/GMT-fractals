@@ -52,7 +52,7 @@ Every GMT release, newest first.
 - **Direct mode keeps its colours.** Highlights now follow the same model as the path tracer, so surfaces no longer wash out to white. Scenes you saved before load with the look they had.
 - **Built-in formulas relit to match.** Their default scenes keep their brightness; a few glossy ones read more matte.
 - **Fastest is faster.** The Fastest quality preset uses lighter highlights that look nearly the same, about 9% quicker while moving on the default Mandelbulb.
-- **Path-traced shadows fixed.** Surfaces were shadowing themselves; on a detailed scene over half the direct light was lost. Renders are brighter and cleaner. Scenes saved in Path Tracing load as they did: set Shadow Tolerance to 1 in the Shader Compiler panel for the fix.
+- **Path-traced shadows fixed.** Surfaces were shadowing themselves; on a detailed scene over half the direct light was lost. Renders are brighter and cleaner. Scenes saved in Path Tracing load as they did: for the fix, set Shadow Tolerance to 1 (Advanced mode, System ▸ Shader Compiler Panel).
 - **Sphere lights match between Direct and Path Tracing.** A Sphere light follows its own Falloff and Range in both, so switching mode no longer changes its brightness.
 - **Smooth frame rate with audio and LFOs on.** Modulation could drag a 60 fps scene down to 14 to 30 fps.
 - **Modulating bloom or colour grading no longer restarts the render.**
