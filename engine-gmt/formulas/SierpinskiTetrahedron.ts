@@ -112,7 +112,7 @@ export const SierpinskiTetrahedron: FractalDefinition = {
                 juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0,
                 hybridMode: false, hybridIter: 2, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1
             },
-            lighting: { shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.002 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.002 },
             quality: { detail: 1, fudgeFactor: 1, pixelThreshold: 0.5, maxSteps: 300, estimator: 1.0 }, // Linear (Unit 1.0) = (r-1)/dr — correct for IFS with scale 2, offset 1
             optics: { dofStrength: 0, dofFocus: 0.38 }
         },

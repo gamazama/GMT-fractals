@@ -71,7 +71,7 @@ export const Kleinian: FractalDefinition = {
                 glowIntensity: 0.035, glowSharpness: 52, glowColor: "#ffffff", glowMode: false,
                 aoIntensity: 0.29, aoSpread: 0.1, aoMode: false
             },
-            lighting: { shadows: true, shadowSoftness: 82.64, shadowIntensity: 1, shadowBias: 0.0014 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 82.64, shadowIntensity: 1, shadowBias: 0.0014 },
             quality: { detail: 1, fudgeFactor: 0.8, pixelThreshold: 0.9, maxSteps: 300, aaMode: "Auto", aaLevel: 1, distanceMetric: 1.0, estimator: 4.0 }, // Estimator 4 = Linear (2.0)
             geometry: { juliaMode: false, juliaX: 0.5, juliaY: 0.5, juliaZ: 0.5, hybridMode: false, hybridIter: 2, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1, hybridSkip: 1 },
             optics: { dofStrength: 0.0001, dofFocus: 0.577 }

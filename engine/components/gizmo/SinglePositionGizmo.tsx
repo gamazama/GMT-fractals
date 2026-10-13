@@ -4,6 +4,19 @@
 // Provides axes with arrow markers, constrained plane handles, and a center handle.
 // All positioning is done imperatively via the `update()` method for performance.
 //
+// @invariant `update()` touches the DOM only when a value actually changes. It
+//   runs every OVERLAY tick, and an unconditional `setAttribute` — even to the
+//   value already there — dirties the SVG, so the compositor repaints and
+//   presents every frame for a gizmo that has not moved. On the GMT viewport
+//   that was not merely wasted work: sixty presents a second from an overlay
+//   sitting on top of the worker's canvas kept the GPU process's main thread
+//   blocked in the swap-chain Present, and the fractal — whose WebGL commands
+//   are decoded on that same thread — fell from 60 to 14 fps the first time the
+//   window lost focus (measured 2026-10-04, `npm run bench:audio`).
+//   — proven by: npm run smoke:idle-damage ("a still scene produces no DOM
+//   writes from the light gizmo").
+// @see docs/adr/0131-nothing-on-the-page-repaints-every-frame.md
+//
 // Consumer pattern:
 //   1. Mount <SinglePositionGizmo ref={gizmoRef} ... /> in a DOM overlay layer.
 //   2. In a TICK_PHASE.OVERLAY tick, call gizmoRef.current.update(worldPos, camera, w, h).
@@ -61,32 +74,52 @@ export const SinglePositionGizmo = React.forwardRef<PositionGizmoHandle, SingleP
         const containerRef = useRef<HTMLDivElement>(null);
         const [hoverPart, setHoverPart] = useState<string | null>(null);
         const worldPosRef = useRef(new THREE.Vector3());
+        // Last value written per (node, attribute) — the write-on-change guard.
+        // Keyed by node so a React re-render that swaps a node starts clean.
+        const writtenRef = useRef(new WeakMap<Element, Record<string, string>>());
+        // Scratch axes, reused: `update()` runs every frame and must not allocate.
+        const axesRef = useRef([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
 
         const down = (e: React.PointerEvent, part: string) =>
             onDragStart(e, part, worldPosRef.current.clone());
 
         React.useImperativeHandle(ref, () => ({
             hide: () => {
-                if (containerRef.current) containerRef.current.style.display = 'none';
+                const el = containerRef.current;
+                if (el && el.style.display !== 'none') el.style.display = 'none';
             },
             update: (worldPos, camera, width, height, axisRotation) => {
                 const el = containerRef.current;
                 if (!el) return;
 
+                // Write-on-change. @see the file header @invariant.
+                const written = writtenRef.current;
+                const setAttr = (node: Element, name: string, value: string) => {
+                    let rec = written.get(node);
+                    if (!rec) { rec = {}; written.set(node, rec); }
+                    if (rec[name] === value) return;
+                    rec[name] = value;
+                    node.setAttribute(name, value);
+                };
+
                 worldPosRef.current.copy(worldPos);
                 camera.updateMatrixWorld();
 
                 const screenPos: ScreenPoint | null = projectWorldToScreen(worldPos, camera, width, height);
-                if (!screenPos) { el.style.display = 'none'; return; }
+                if (!screenPos) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
 
-                el.style.display = 'flex';
-                el.style.transform = `translate3d(${screenPos.x}px,${screenPos.y}px,0)`;
+                if (el.style.display !== 'flex') el.style.display = 'flex';
+                const transform = `translate3d(${screenPos.x}px,${screenPos.y}px,0)`;
+                // Compared against our own last write, not `el.style.transform`:
+                // the browser normalises the string, so reading it back never matches.
+                let elRec = written.get(el);
+                if (!elRec) { elRec = {}; written.set(el, elRec); }
+                if (elRec.transform !== transform) { elRec.transform = transform; el.style.transform = transform; }
 
                 const scale = worldPos.distanceTo(camera.position) * GIZMO_SCALE_FACTOR;
 
-                const ax = new THREE.Vector3(1, 0, 0);
-                const ay = new THREE.Vector3(0, 1, 0);
-                const az = new THREE.Vector3(0, 0, 1);
+                const [ax, ay, az] = axesRef.current;
+                ax.set(1, 0, 0); ay.set(0, 1, 0); az.set(0, 0, 1);
                 if (axisRotation) { ax.applyQuaternion(axisRotation); ay.applyQuaternion(axisRotation); az.applyQuaternion(axisRotation); }
 
                 const px = getScreenAxisTip(worldPos, ax, scale, camera, screenPos, width, height);
@@ -95,8 +128,8 @@ export const SinglePositionGizmo = React.forwardRef<PositionGizmoHandle, SingleP
 
                 const setLine = (cls: string, p: { x: number; y: number } | null) => {
                     el.querySelectorAll(`.${cls}`).forEach(l => {
-                        if (p) { l.setAttribute('x2', String(p.x)); l.setAttribute('y2', String(p.y)); l.setAttribute('visibility', 'visible'); }
-                        else   { l.setAttribute('visibility', 'hidden'); }
+                        if (p) { setAttr(l, 'x2', String(p.x)); setAttr(l, 'y2', String(p.y)); setAttr(l, 'visibility', 'visible'); }
+                        else   { setAttr(l, 'visibility', 'hidden'); }
                     });
                 };
                 setLine('axis-x-line', px);
@@ -109,10 +142,10 @@ export const SinglePositionGizmo = React.forwardRef<PositionGizmoHandle, SingleP
                     if (p1 && p2) {
                         const s = PLANE_SCALE;
                         const [x1, y1, x2, y2] = [p1.x * s, p1.y * s, p2.x * s, p2.y * s];
-                        el2.setAttribute('d', `M0,0 L${x1},${y1} L${x1 + x2},${y1 + y2} L${x2},${y2} Z`);
-                        el2.setAttribute('visibility', 'visible');
+                        setAttr(el2, 'd', `M0,0 L${x1},${y1} L${x1 + x2},${y1 + y2} L${x2},${y2} Z`);
+                        setAttr(el2, 'visibility', 'visible');
                     } else {
-                        el2.setAttribute('visibility', 'hidden');
+                        setAttr(el2, 'visibility', 'hidden');
                     }
                 };
                 setPlane('plane-xy', px, py);

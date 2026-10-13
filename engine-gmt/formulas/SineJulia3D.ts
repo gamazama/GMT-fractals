@@ -129,6 +129,7 @@ export const SineJulia3D: FractalDefinition = {
     defaultPreset: {
         formula: 'SineJulia3D',
         features: {
+            lighting: { specularModel: 1 },
             coreMath: {
                 iterations: 12,
                 paramA: 1.0,
@@ -171,7 +172,7 @@ export const SineJulia3D: FractalDefinition = {
                 position: { x: 0, y: 1, z: 0.3 },
                 rotation: { x: 0, y: 0, z: 0 },
                 color: '#fff2d9',
-                intensity: 1.2,
+                intensity: 1.33,
                 falloff: 0,
                 falloffType: 'Quadratic',
                 fixed: false,

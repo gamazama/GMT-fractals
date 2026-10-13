@@ -323,7 +323,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
 
                         {/* Persistent Mode Switch Hint */}
                         {tabSwitchCount < 2 && !isMobile && state.showHints && (
-                             <div className="mt-2 text-[10px] font-bold text-accent-300 animate-pulse bg-cyan-950/40 px-3 py-1 rounded border border-accent-500/30 shadow-lg">
+                             <div className="mt-2 text-[10px] font-bold text-accent-300 animate-pulse-live bg-cyan-950/40 px-3 py-1 rounded border border-accent-500/30 shadow-lg">
                                  Press <span className="text-fg border border-line/20 rounded px-1 bg-line/10 mx-0.5">Tab</span> for {state.cameraMode === 'Orbit' ? 'Fly' : 'Orbit'} navigation
                              </div>
                         )}

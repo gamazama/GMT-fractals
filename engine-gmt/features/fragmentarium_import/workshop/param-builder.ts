@@ -179,11 +179,16 @@ export function buildFractalParams(mappings: WorkshopParam[], formulaName: strin
     const uiParams: any[] = [];
     const defaultPreset: any = {
         formula: formulaName,
+        // Lit for Cook-Torrance and says so: a preset that bakes lights in without naming a
+        // specular model is taken for a Blinn-Phong-era one and pinned to it (migration v10).
+        // Intensities are the earlier 1 / 0.4 rig times 1.11, the factor that held default
+        // materials at the same exposure across the model change (ADR-0139).
         lights: [
-            { type: 'Directional', position: { x: 0.5, y: 0.8, z: 1.5 }, rotation: { x: -0.3, y: 0.2, z: 0 }, color: '#ffffff', intensity: 1, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true },
-            { type: 'Directional', position: { x: -0.8, y: -0.3, z: 1.0 }, rotation: { x: 0.1, y: -0.5, z: 0 }, color: '#b0c4ff', intensity: 0.4, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: false },
+            { type: 'Directional', position: { x: 0.5, y: 0.8, z: 1.5 }, rotation: { x: -0.3, y: 0.2, z: 0 }, color: '#ffffff', intensity: 1.11, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true },
+            { type: 'Directional', position: { x: -0.8, y: -0.3, z: 1.0 }, rotation: { x: 0.1, y: -0.5, z: 0 }, color: '#b0c4ff', intensity: 0.44, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: false },
         ],
         features: {
+            lighting: { specularModel: 1 },
             coreMath: { iterations: 15 },
             quality: { fudgeFactor: 0.75 },
             atmosphere: {

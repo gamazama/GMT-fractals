@@ -34,7 +34,15 @@ export function buildCoreLightMenuItems(
             label: 'Sphere (Area)',
             checked: light.type === 'Sphere',
             // Sphere area lights need finite extent (shader rejects radius<0.001).
-            action: () => onUpdate({ type: 'Sphere', radius: (light.radius && light.radius > 0.001) ? light.radius : 0.5 })
+            // The light keeps its Falloff and Range, so it is as bright as it
+            // was. `unifiedFalloff` is migration bookkeeping: a Sphere saved
+            // without it reads as a pre-2026-10-13 light and v9 would rewrite
+            // its falloff on the next load (see LightParams.unifiedFalloff).
+            action: () => onUpdate({
+                type: 'Sphere',
+                radius: (light.radius && light.radius > 0.001) ? light.radius : 0.5,
+                unifiedFalloff: true,
+            })
         },
         { label: 'Intensity Unit', isHeader: true },
         {

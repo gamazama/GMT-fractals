@@ -148,7 +148,7 @@ const PlayingBadge: React.FC = () => {
     );
     if (!isPlaying) return null;
     return (
-        <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-ok bg-ok/20 border border-ok/40 rounded animate-pulse">
+        <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-ok bg-ok/20 border border-ok/40 rounded animate-pulse-live">
             ● Playing
         </span>
     );

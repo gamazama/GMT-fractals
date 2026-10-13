@@ -111,7 +111,7 @@ export const Mandelbulb: FractalDefinition = {
                     { id: "zen", position: 1, color: "#88ccff", bias: 0.5, interpolation: "smooth" }
                 ]
             },
-            lighting: { shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.001 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.001 },
             quality: { detail: 1, fudgeFactor: 1, pixelThreshold: 0.2, maxSteps: 300, distanceMetric: 0.0, estimator: 0.0 },
             optics: { dofStrength: 0, dofFocus: 2 },
             colorGrading: { saturation: 1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 }
@@ -122,9 +122,9 @@ export const Mandelbulb: FractalDefinition = {
         targetDistance: 2.157,
         cameraMode: "Orbit",
         lights: [
-            { type: 'Point', position: { x: -0.7, y: 0.37, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 3, falloff: 0.22, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.6, y: -0.5, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0, y: -5, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0088ff", intensity: 0.25, falloff: 0, falloffType: "Quadratic", fixed: true, visible: true, castShadow: false }
+            { type: 'Point', position: { x: -0.7, y: 0.37, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 4.41, falloff: 0.22, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 0.6, y: -0.5, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 0.735, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 0, y: -5, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0088ff", intensity: 0.367, falloff: 0, falloffType: "Quadratic", fixed: true, visible: true, castShadow: false }
         ]
     }
 };

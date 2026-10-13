@@ -254,7 +254,7 @@ if (uParamD > 0.5) {
                 renderMode: 0,
                 ptBounces: 3,
                 ptGIStrength: 1,
-                specularModel: 0,
+                specularModel: 1,
                 shadowsCompile: true,
                 shadowAlgorithm: 0,
                 ptStochasticShadows: true,
@@ -268,9 +268,9 @@ if (uParamD > 0.5) {
                 shadowSteps: 128,
                 shadowBias: 0,
                 lights: [
-                    { type: "Point", position: { x: 3.3724, y: -0.0794, z: 0.9973 }, rotation: { x: -0.18, y: -0.04, z: 0 }, color: "#FFE6D1", intensity: 14.8996, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 5500, id: "l7", range: 8.7754 },
-                    { type: "Point", position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false, id: "l8" },
-                    { type: "Point", position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false, id: "l9" },
+                    { type: "Point", position: { x: 3.3724, y: -0.0794, z: 0.9973 }, rotation: { x: -0.18, y: -0.04, z: 0 }, color: "#FFE6D1", intensity: 19.5, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 5500, id: "l7", range: 8.7754 },
+                    { type: "Point", position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.655, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false, id: "l8" },
+                    { type: "Point", position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.655, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false, id: "l9" },
                 ],
             },
             quality: {
@@ -299,9 +299,9 @@ if (uParamD > 0.5) {
         targetDistance: 2.4689,
         cameraMode: "Orbit",
         lights: [
-            { type: "Directional", position: { x: 0.4, y: 1.1, z: 2.5 }, rotation: { x: -0.18, y: -0.04, z: 0 }, color: "#FFE6D1", intensity: 0.5, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 5500 },
-            { type: "Point", position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: "Point", position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: "Directional", position: { x: 0.4, y: 1.1, z: 2.5 }, rotation: { x: -0.18, y: -0.04, z: 0 }, color: "#FFE6D1", intensity: 0.655, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 5500 },
+            { type: "Point", position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.655, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: "Point", position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.655, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
         ]
     }
 };

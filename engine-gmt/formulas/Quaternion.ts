@@ -139,7 +139,7 @@ export const Quaternion: FractalDefinition = {
                 juliaMode: true, juliaX: 0.65, juliaY: -0.2, juliaZ: -1.2,
                 hybridMode: false, hybridIter: 2, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1
             },
-            lighting: { shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.002 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.002 },
             quality: { detail: 1, fudgeFactor: 0.8, pixelThreshold: 0.5, maxSteps: 300, aaMode: "Always", aaLevel: 1 },
             optics: { dofStrength: 0, dofFocus: 10 }
         },

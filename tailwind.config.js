@@ -31,6 +31,30 @@ export default {
   ],
   theme: {
     extend: {
+      // ─── `animate-pulse-live` — the pulse for anything that stays on screen ──
+      // Same keyframes as `animate-pulse`, stepped: the opacity changes about
+      // three times a second instead of on every frame.
+      //
+      // WHY IT EXISTS. A smooth infinite CSS animation makes the browser
+      // composite and present the whole window on every vsync for as long as it
+      // runs — measured 2026-10-04 with `npm run bench:audio`: one pulsing 6 px
+      // dot = 60 presents/s, stepped = 3. On Windows those presents are made on
+      // the GPU process's main thread, the same thread that decodes the render
+      // worker's WebGL commands, and after a focus change each one blocks ~15 ms
+      // waiting for vsync. The fractal then gets what is left: a 6 ms frame was
+      // delivered at 14 fps instead of 60. The dot that did it was the
+      // "this slider is modulated" indicator — so the slowdown appeared exactly
+      // when audio modulation was switched on.
+      //
+      // RULE: an indicator that can be visible while the viewport is rendering
+      // (modulated / playing / recording / pending / rendering) uses
+      // `animate-pulse-live`. Plain `animate-pulse` is for transient loaders that
+      // are gone within seconds. `npm run smoke:idle-damage` fails on a smooth
+      // infinite animation left running in app-gmt.
+      // @see docs/adr/0131-nothing-on-the-page-repaints-every-frame.md
+      animation: {
+        'pulse-live': 'pulse 2s steps(4, jump-none) infinite',
+      },
       // ─── Semantic color tokens (runtime color-scheme system) ───────────
       // Each token resolves to a CSS variable holding space-separated RGB
       // channels (e.g. `--accent-400: 34 211 238`). The live values are generated

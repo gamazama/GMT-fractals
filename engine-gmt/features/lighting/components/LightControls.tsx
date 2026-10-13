@@ -131,9 +131,14 @@ export const LightOrb = ({ index, color, active, type, rotation, onClick, onDrag
                     )}
                 </div>
                 
-                {/* LAYER 4: Ping Animation (Point Light) */}
+                {/* LAYER 4: Ping Animation (Point Light) — three pings, then still.
+                    An INFINITE animation here kept the whole page compositing at
+                    60 Hz for as long as a point light existed, converged scene or
+                    not; on the GMT viewport that alone was enough to starve the
+                    render worker (see the @invariant on SinglePositionGizmo). It
+                    replays whenever the orb remounts or the light changes type. */}
                 {active && type !== 'Directional' && (
-                    <div className="absolute inset-0 rounded-full border border-line/50 animate-ping opacity-20 pointer-events-none" />
+                    <div className="absolute inset-0 rounded-full border border-line/50 animate-ping [animation-iteration-count:3] opacity-20 pointer-events-none" />
                 )}
             </div>
             
@@ -472,10 +477,12 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                         </div>
                     )}
 
-                    {/* Sphere area lights need much higher intensity to show up — sphere
-                        sampling spreads emission over 4πr², so small lights pay 1/r² in
-                        contribution. Bump EV ceiling to 20 (≈1M×) and raw ceiling to 10000
-                        with log mapping; Point/Directional lights keep the original ranges. */}
+                    {/* Sphere lights get EV ceiling 20 (≈1M×) and raw ceiling 10000 with
+                        log mapping. That dates from when the path tracer faded them with
+                        distance² on top of their own falloff; migration v9
+                        (app-gmt/migrations.ts) now writes that fade into Range + Power, and
+                        a converted light can sit anywhere up to these ceilings — which the
+                        migration reads. Point/Directional lights keep the original ranges. */}
                     {light.intensityUnit === 'ev' ? (
                         <Slider
                             label="Power (EV)"

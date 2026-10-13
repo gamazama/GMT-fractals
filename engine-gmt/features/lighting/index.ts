@@ -7,7 +7,7 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { LightParams, generateLightId } from '../../types';
 import { MAX_LIGHTS } from '../../../data/constants';
 import { getShadowsGLSL } from '../../shaders/chunks/lighting/shadows';
-import { getLightingPBRSimple, getLightingPBRFull } from '../../shaders/chunks/lighting/pbr';
+import { getLightingPBRSimple, getLightingPBRFull, getLightingPBRFastFresnel } from '../../shaders/chunks/lighting/pbr';
 import { LIGHTING_SHARED, LIGHTING_SHARED_CORE } from '../../shaders/chunks/lighting/shared';
 import { getPathTracerGLSL } from '../../shaders/chunks/pathtracer';
 
@@ -44,7 +44,11 @@ export interface LightingState {
     /** Sobol(2)+Cranley-Patterson rotation for the bounce direction seed. */
     ptSobolBounce: boolean;
     ptMaxLuminance: number;
-    specularModel: number; // 0=Blinn-Phong (fast), 1=Cook-Torrance GGX (quality)
+    /** Path-traced shadow-ray threshold as a multiple of the surface's own hit
+     *  threshold. 1 = matched; old path-traced scenes are pinned to their pre-fix
+     *  ratio by migration v8 (app-gmt/migrations.ts). */
+    ptShadowTolerance: number;
+    specularModel: number; // 0=legacy Blinn-Phong (older scenes), 1=Cook-Torrance GGX (the default), 2=Fresnel-weighted Blinn-Phong (Fastest preset)
     lights: LightParams[];
 }
 
@@ -96,10 +100,14 @@ export const getLightFromSlice = (slice: LightingState | undefined, i: number): 
     return normalizeLight(slice.lights[i]);
 };
 
+// The rig a scene gets when it brings no lights of its own. Intensities are the
+// pre-2026-10-13 rig (1.5 / 0.5 / 0.25) times 1.11: with Cook-Torrance as the default
+// specular model the same rig on default materials read 11-14% darker, measured on the
+// seven lightless Box Fold default scenes (ADR-0139).
 const DEFAULT_LIGHTS: LightParams[] = [
-    { id: generateLightId(), type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#fff4e6', intensity: 1.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 5500 },
-    { id: generateLightId(), type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#FFD6AA', intensity: 0.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 3500 },
-    { id: generateLightId(), type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#E0EEFF', intensity: 0.25, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 7500 }
+    { id: generateLightId(), type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#fff4e6', intensity: 1.67, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 5500 },
+    { id: generateLightId(), type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#FFD6AA', intensity: 0.56, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 3500 },
+    { id: generateLightId(), type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#E0EEFF', intensity: 0.28, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true, radius: 0.0, softness: 0.0, useTemperature: true, temperature: 7500 }
 ];
 
 export const LightingFeature: FeatureDefinition = {
@@ -200,14 +208,25 @@ export const LightingFeature: FeatureDefinition = {
         },
 
         // --- SPECULAR MODEL (Engine Panel) ---
+        // Cook-Torrance is the model (ADR-0139): its highlight is weighted by Fresnel, as the
+        // path tracer's is, so Direct and Path Tracing agree on how much of the light a
+        // surface mirrors. Blinn-Phong reflects the highlight at full strength — at the same
+        // settings its specular is several times Cook-Torrance's and veils the surface colour
+        // in white. It stays for scenes authored under it, which name it or are pinned to it
+        // by migration v10 (app-gmt/migrations.ts).
+        // The Fastest quality preset runs a third model, a Fresnel-weighted Blinn-Phong:
+        // Cook-Torrance costs ~9% more of a light frame while moving, the legacy model's
+        // look is far from it, and this one has the legacy model's cost with
+        // Cook-Torrance's weighting (grep `getLightingPBRFastFresnel` in pbr.ts).
         specularModel: {
-            type: 'float', default: 0.0, label: 'Specular Model', shortId: 'sm',
+            type: 'float', default: 1.0, label: 'Specular Model', shortId: 'sm',
             group: 'engine_settings',
             options: [
-                { label: 'Blinn-Phong (Fast)', value: 0.0, estCompileMs: 0 },
-                { label: 'Cook-Torrance (Quality)', value: 1.0, estCompileMs: 30 }  // L6: measured ~free (+6/29ms; §2.6); was 400
+                { label: 'Blinn-Phong (Legacy)', value: 0.0, estCompileMs: 0 },
+                { label: 'Cook-Torrance (Quality)', value: 1.0, estCompileMs: 70 },  // cold compile +53 / +86 ms on ~2.7 s, paired n=7, 2026-10-13
+                { label: 'Fresnel Blinn-Phong (Fast)', value: 2.0, estCompileMs: 0 }
             ],
-            description: 'BRDF model for direct lighting. Cook-Torrance is physically accurate, with negligible compile cost.',
+            description: 'How direct light makes highlights. Cook-Torrance weights them the way the path tracer does. Fresnel Blinn-Phong is a close, slightly cheaper stand-in that the Fastest quality preset uses. Legacy Blinn-Phong is much brighter and is kept for scenes made before Cook-Torrance became the default.',
             onUpdate: 'compile',
             noAccumReset: true
         },
@@ -308,6 +327,21 @@ export const LightingFeature: FeatureDefinition = {
             min: 0.5, max: 200.0, step: 0.5, scale: 'log',
             group: 'engine_settings', parentId: 'ptEnabled',
             description: 'Clamps per-sample luminance to suppress bright firefly spikes. Lower = cleaner but slightly biased. Raise to effectively disable.'
+        },
+        ptShadowTolerance: {
+            // 1 = the shadow ray tests at the threshold the surface was resolved
+            // at (trace.ts finalEps). Until 2026-10-13 the path tracer left
+            // uPixelThreshold out of that threshold (pathtracer.ts, grep
+            // visualLimitNEE), so its shadow rays ran 1/pixelThreshold times
+            // coarser and self-shadowed on the surface they left. Scenes saved
+            // path traced before the fix were lit against that false shadow, so
+            // migration v8 (app-gmt/migrations.ts) loads them with the old ratio
+            // here. The range is exactly 1/pixelThreshold over that param's own
+            // range (0.1–2), so every legacy value fits unclamped.
+            type: 'float', default: 1.0, label: 'Shadow Tolerance', shortId: 'pst', uniform: 'uPTShadowTolerance',
+            min: 0.5, max: 10.0, step: 0.01, scale: 'log',
+            group: 'engine_settings', parentId: 'ptEnabled',
+            description: 'How close a shadow ray may pass to a surface before it counts as blocked, in multiples of the surface hit threshold. 1 = matched. Higher adds self-shadow on fine detail. Older path-traced scenes load with the value that keeps their look.'
         },
         // --- RUNTIME CONTROL ---
         shadows: {
@@ -498,7 +532,9 @@ export const LightingFeature: FeatureDefinition = {
             const useCookTorrance = state?.specularModel === 1.0;
             builder.addIntegrator(useCookTorrance ? LIGHTING_SHARED : LIGHTING_SHARED_CORE);
             builder.setRenderMode('Direct');
-            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows) : getLightingPBRSimple(stochasticShadows));
+            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows)
+                : state?.specularModel === 2.0 ? getLightingPBRFastFresnel(stochasticShadows)
+                : getLightingPBRSimple(stochasticShadows));
             // Shading integrator (calculateShading) is deferred to buildFragment() via requestShading()
             // so that reflection code from ReflectionsFeature is available at generation time.
             builder.requestShading();

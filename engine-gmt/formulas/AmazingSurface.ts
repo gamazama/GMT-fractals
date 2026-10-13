@@ -229,6 +229,7 @@ export const AmazingSurface: FractalDefinition = {
                 paramF: 1.4
             },
             lighting: {
+                specularModel: 1,
                 shadows: true,
                 shadowSoftness: 12,
                 shadowIntensity: 1,

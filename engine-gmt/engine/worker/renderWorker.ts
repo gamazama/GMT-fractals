@@ -19,8 +19,9 @@ import { handleHistogramReadback } from './WorkerHistogram';
 import { WorkerDepthReadback } from './WorkerDepthReadback';
 import { BloomPass } from '../BloomPass';
 import { createFullscreenPass, type FullscreenPass } from '../utils/FullscreenQuad';
-import { handleRenderTick as runRenderTick } from './handleRenderTick';
+import { handleRenderTick as runRenderTick, gateRetryDelayMs } from './handleRenderTick';
 import { getAdaptiveResizeCount } from '../managers/UniformManager';
+import { framePerf } from './framePerf';
 
 let engine: FractalEngine | null = null;
 let renderer: THREE.WebGLRenderer | null = null;
@@ -335,20 +336,45 @@ _tickChannel.port1.onmessage = () => {
     } finally {
         _rendering = false;
     }
-    // Skipped → poll again shortly until the GPU frees up (the fence usually
-    // signals within one GPU frame). 4ms avoids a busy-spin; an incoming
-    // RENDER_TICK also re-triggers the channel, so this is just the backstop.
+    // Skipped → poll again until the GPU frees up. The delay comes from how
+    // long recent frames took (see gateRetryDelayMs): one sleep to just short
+    // of the expected finish, then 1 ms polls. It was a flat 4 ms, which cost a
+    // GPU-bound scene up to 4 ms of idle GPU per frame. An incoming RENDER_TICK
+    // also re-triggers the channel, so this timer is the backstop between ticks.
+    //
+    // The timer is set from a MESSAGE task (the channel), not from a timer
+    // task, so its nesting level stays 0 and the browser's 4 ms clamp on
+    // nested timers does not apply.
     if (!rendered && _pendingTick && !_tickScheduled) {
         _tickScheduled = true;
         setTimeout(() => {
             _tickScheduled = false;
             _tickChannel.port2.postMessage(null);
-        }, 4);
+        }, gateRetryDelayMs());
     }
 };
 
+// ── Perf probe (opt-in, see framePerf.ts) ───────────────────────────────────
+// One PERF_STATS per second while enabled. A timer rather than a per-frame
+// check so an idle (converged, nothing dispatched) worker still reports — a
+// window with zero frames is itself a reading.
+let _perfTimer: ReturnType<typeof setInterval> | null = null;
+function setPerfProbe(enabled: boolean) {
+    framePerf.setEnabled(enabled);
+    if (_perfTimer) { clearInterval(_perfTimer); _perfTimer = null; }
+    if (!enabled) return;
+    _perfTimer = setInterval(() => {
+        const res = engine?.mainUniforms?.uResolution?.value;
+        postMsg({
+            type: 'PERF_STATS',
+            stats: framePerf.take(res?.x ?? 0, res?.y ?? 0, engine?.pipeline?.accumulationCount ?? 0),
+        });
+    }, 1000);
+}
+
 self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
     const msg = e.data;
+    const _perfT0 = framePerf.on ? performance.now() : 0;
 
     try {
         // ── Bucket render lock ──────────────────────────────────────
@@ -528,6 +554,10 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
 
             case 'SET_SAMPLE_CAP':
                 engine?.setPreviewSampleCap(msg.n);
+                break;
+
+            case 'PERF_PROBE':
+                setPerfProbe(msg.enabled);
                 break;
 
             case 'PAUSE':
@@ -934,5 +964,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
             ? `${err.message}\n${err.stack ?? ''}`
             : String(err);
         postMsg({ type: 'ERROR', message });
+    } finally {
+        if (_perfT0) framePerf.noteMessage(msg.type, performance.now() - _perfT0);
     }
 };

@@ -30,6 +30,7 @@ import {
     buildRenderInteractionState,
     deriveInteracting,
     deriveIsSceneAnimating,
+    hasLiveModulationSource,
 } from '../engine-gmt/renderer/renderInteractionState';
 import { createInteractionSlice } from '../store/slices/createInteractionSlice';
 
@@ -84,6 +85,46 @@ test('read-path: Object.assign mirrors FractalEngine.setRenderState', () => {
     check(engineState.interacting === true, 'setRenderState path lands interacting=true (not silently false)');
     check(engineState.isSceneAnimating === true, 'setRenderState path lands isSceneAnimating=true');
     check(engineState.sessionHoldActive === true, 'setRenderState path lands sessionHoldActive=true');
+});
+
+// ── (1b) Which modulation counts as "the scene is animating" ────────────────
+// `hasLiveModulationSource` with no filter = anything enabled. With the
+// `invalidates` filter the tick driver passes, only targets that change the
+// TRACED image count — a scene modulating nothing but bloom is not animating.
+test('modulation source: unfiltered form counts every enabled source', () => {
+    check(hasLiveModulationSource({}) === false, 'empty state → false');
+    check(hasLiveModulationSource({ lfosEnabled: true, animations: [{ enabled: true, target: 'a.b' }] }) === true, 'enabled LFO → true');
+    check(hasLiveModulationSource({ lfosEnabled: true, animations: [{ enabled: false, target: 'a.b' }] }) === false, 'a disabled LFO entry does not count');
+    check(hasLiveModulationSource({ lfosEnabled: false, animations: [{ enabled: true, target: 'a.b' }] }) === false, 'LFO master switch off → false');
+    check(hasLiveModulationSource({ audio: { isEnabled: true }, modulation: { rules: [{ enabled: true, source: 'audio', target: 'a.b' }] } }) === true, 'enabled audio rule → true');
+    check(hasLiveModulationSource({ audio: { isEnabled: false }, modulation: { rules: [{ enabled: true, source: 'audio', target: 'a.b' }] } }) === false, 'audio master switch off → false');
+    check(hasLiveModulationSource({ audio: { isEnabled: true }, modulation: { rules: [{ enabled: false, source: 'audio', target: 'a.b' }] } }) === false, 'a disabled audio rule does not count');
+});
+
+test('modulation source: the filter drops display-pass targets', () => {
+    const display = new Set(['post.bloom']);
+    const inv = (t: string) => !display.has(t);
+    check(hasLiveModulationSource({ lfosEnabled: true, animations: [{ enabled: true, target: 'post.bloom' }] }, inv) === false,
+        'an LFO on a display-pass target is not scene animation');
+    check(hasLiveModulationSource({ lfosEnabled: true, animations: [{ enabled: true, target: 'post.bloom' }, { enabled: true, target: 'core.paramA' }] }, inv) === true,
+        'one scene target among display targets → animating');
+    check(hasLiveModulationSource({ audio: { isEnabled: true }, modulation: { rules: [{ enabled: true, source: 'audio', target: 'post.bloom' }] } }, inv) === false,
+        'an audio rule on a display-pass target is not scene animation');
+    check(hasLiveModulationSource({ audio: { isEnabled: true }, modulation: { rules: [{ enabled: true, source: 'audio', target: 'core.paramA' }] } }, inv) === true,
+        'an audio rule on a scene param is');
+    // The LFO's own target is display-only, but a rule fed by it drives a scene param.
+    check(hasLiveModulationSource({
+        lfosEnabled: true, animations: [{ enabled: true, target: 'post.bloom' }],
+        modulation: { rules: [{ enabled: true, source: 'lfo-1', target: 'core.paramA' }] },
+    }, inv) === true, "an LFO-sourced rule on a scene param still animates when its LFO's own target is display-only");
+    // ...and an LFO-sourced rule cannot animate anything while no LFO is running.
+    check(hasLiveModulationSource({
+        lfosEnabled: true, animations: [{ enabled: false, target: 'core.paramA' }],
+        modulation: { rules: [{ enabled: true, source: 'lfo-1', target: 'core.paramA' }] },
+    }, inv) === false, 'an LFO-sourced rule with no running LFO does not animate');
+    // A source with no target string is counted, not dropped (conservative).
+    check(hasLiveModulationSource({ lfosEnabled: true, animations: [{ enabled: true }] }, inv) === true,
+        'an entry with no target is counted (conservative)');
 });
 
 // ── (2) Sibling-app inertness: no producer ⇒ no reactive write, watchdog no-op ─

@@ -78,7 +78,7 @@ export const MakinBrot: FractalDefinition = {
                 rim: 0.09, rimExponent: 2, emission: 0.016, emissionColor: "#ffffff", emissionMode: 0
             },
             geometry: { juliaMode: false, juliaX: -0.99, juliaY: 0.54, juliaZ: -0.72, hybridMode: false, hybridIter: 2, hybridScale: 2.13, hybridMinR: 0.72, hybridFixedR: 1, hybridFoldLimit: 0.97 },
-            lighting: { shadows: true, shadowSoftness: 78, shadowIntensity: 1, shadowBias: 0 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 78, shadowIntensity: 1, shadowBias: 0 },
             quality: { detail: 6.3, fudgeFactor: 0.7, pixelThreshold: 0.1, maxSteps: 300, aaMode: "Auto", aaLevel: 1 },
             optics: { dofStrength: 0, dofFocus: 1.368 }
         },

@@ -100,10 +100,29 @@ vec3 cosineSampleHemisphere(vec3 n, vec2 seedVec) {
 ${getVNDFSamplerGLSL('sampleGGXVNDF')}
 
 #ifdef PT_AREA_LIGHTS
+// A sphere light's distance law is the light's own Falloff / Range — the same
+// one a Point light has, applied the same way Direct mode applies it (pbr.ts
+// shades a Sphere as a Point at its centre). The sphere contributes SHAPE only:
+// a penumbra from its real extent, and a highlight on glossy surfaces.
+// @see docs/adr/0138-sphere-lights-follow-the-lights-falloff.md
+//
+// The radius it presents to a receiver distC from its centre is capped at a 30°
+// half-angle: closer than two radii, the receiver sees a sphere of radius
+// distC/2. Without the cap a surface INSIDE the light's radius (routine in a
+// close-up: a new Sphere light defaults to radius 0.5) is lit only from the
+// sphere's far inner wall, which its own surroundings occlude — measured 0.004
+// against a Point light's 0.046. NEE, the bounce-ray hit test and the env-NEE
+// blocker all take the radius from here, so both MIS halves describe one light.
+float sphereLightApparentRadius(int i, float distC) {
+    return min(uLightRadius[i], 0.5 * distC);
+}
+
 // Closest-hit test against type-2 sphere area lights for the path tracer's
 // geometric integration of the light surface. Distinct from
 // intersectLightSphere() in shared.ts, which renders the visible emitter
 // (chord-thickness shading, halo softness) and is gated on type-0 only.
+// ro is the receiver the ray left, which is what makes the apparent radius
+// above well defined here.
 float intersectAreaLight(vec3 ro, vec3 rd, float tMax, out int outIdx) {
     float tBest = tMax;
     outIdx = -1;
@@ -113,7 +132,8 @@ float intersectAreaLight(vec3 ro, vec3 rd, float tMax, out int outIdx) {
         if (uLightIntensity[i] < 0.01) continue;
         if (uLightRadius[i] < 0.001) continue;
 
-        vec2 hit = intersectSphere(ro - uLightPos[i], rd, uLightRadius[i]);
+        vec3 fromLight = ro - uLightPos[i];
+        vec2 hit = intersectSphere(fromLight, rd, sphereLightApparentRadius(i, length(fromLight)));
         if (hit.x > hit.y) continue;                       // miss sentinel
         float t = hit.x > 1.0e-4 ? hit.x : hit.y;          // pick exit if origin inside
         if (t < 1.0e-4 || t >= tBest) continue;
@@ -122,20 +142,14 @@ float intersectAreaLight(vec3 ro, vec3 rd, float tMax, out int outIdx) {
     return outIdx >= 0 ? tBest : -1.0;
 }
 
-// Solid-angle PDF for uniform-area sampling on a sphere light, conditioned
-// on receiver point. sphereOutNormal is the outward unit normal at the
-// sampled surface point. activeCount is exposed as an explicit arg because
-// MIS weights are extremely sensitive to forgetting the light-selection
-// divisor — the failure mode is a uniform brightness bias on glossy surfaces.
-//
-// pdf_area  = 1 / (4 * PI * r^2)
-// pdf_omega = pdf_area * dist^2 / |cos(theta_light)|
-float pdfSphereLightDir(vec3 lDir, vec3 sphereOutNormal, float dist,
-                        float radius, int activeCount) {
-    float cosThetaLight = max(1.0e-5, abs(dot(-lDir, sphereOutNormal)));
-    float pdfArea = 1.0 / (4.0 * PI * radius * radius);
-    float pdfDir  = pdfArea * dist * dist / cosThetaLight;
-    return pdfDir / float(max(1, activeCount));
+// 1 - cos(half-angle) of the cone a sphere light subtends from distC away; TAU
+// times it is the solid angle. radius is the APPARENT radius, so
+// radius <= distC/2 always holds and the receiver is never inside. Written
+// x / (1 + sqrt(1 - x)), not 1 - sqrt(1 - x): the direct form cancels to 0 in
+// float32 for a small or distant light, and the pdf divides by the solid angle.
+float sphereLightConeExtent(float distC, float radius) {
+    float s2 = (radius * radius) / max(distC * distC, 1.0e-20);
+    return s2 / (1.0 + sqrt(1.0 - s2));
 }
 #endif
 
@@ -547,7 +561,6 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
     vec4 result = result_init;
     bool hit = true;
     int maxBounces = uPTBounces;
-    float pixelSizeScale = uPixelSizeBase / uInternalScale;
 
     // Carried across bounce iterations so the next iter's !hit branch can
     // inspect what the previous iter's trace saw. Unconditional declaration
@@ -583,28 +596,32 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
 #ifdef PT_AREA_LIGHTS
             // BSDF-side direct light hit: bounce ray landed on a sphere light.
             // MIS combines this with NEE's contribution at the previous bounce.
-            // pdfSphereLightDir divides by activeCount internally; pdfBSDF does
-            // not (the BSDF doesn't pick which light). Active-count from the
+            // pdf_light carries the light-selection divisor; pdfBSDF does not
+            // (the BSDF doesn't pick which light). Active-count from the
             // PREVIOUS bounce isn't tracked, so we read the current count —
             // exact when the light set is stable across bounces.
             if (lightHit >= 0) {
-                vec3 lightPt    = currentRo + currentRd * d;
-                vec3 lightN     = normalize(lightPt - uLightPos[lightHit]);
                 int  pdfSelBsdf;
                 #ifdef PT_NEE_ALL_LIGHTS
                     pdfSelBsdf = 1;
                 #else
                     pdfSelBsdf = activeCount;
                 #endif
-                float pdf_light = pdfSphereLightDir(currentRd, lightN, d,
-                                                    uLightRadius[lightHit], pdfSelBsdf);
+                // Mirror of the NEE site below (read its comment first):
+                // pdf_light and the radiance must be the pair NEE used, or the
+                // two MIS halves stop summing to one. currentRo is the surface
+                // the bounce left — the receiver.
+                float distC = length(uLightPos[lightHit] - currentRo);
+                float solidAngle = max(1.0e-12, TAU * sphereLightConeExtent(distC, sphereLightApparentRadius(lightHit, distC)));
+                float pdf_light = 1.0 / (solidAngle * float(pdfSelBsdf));
+                float attHit = 1.0;
+                if ((uLightFalloff[lightHit] + uLightFalloffType[lightHit]) > 0.001) {
+                    attHit = 1.0 / (1.0 + uLightFalloff[lightHit] * distC * distC + uLightFalloffType[lightHit] * distC);
+                }
+                vec3 emission = uLightColor[lightHit] * uLightIntensity[lightHit] * (attHit / solidAngle);
                 float pdf_bsdf  = pdfBSDF(n_prev, viewDir_prev, currentRd,
                                           roughness_prev, probSpec_prev);
                 float w_bsdf = misPower2(pdf_bsdf, pdf_light);
-
-                // Sphere light is power-normalized — see NEE site below for rationale.
-                float lr = uLightRadius[lightHit];
-                vec3 emission = uLightColor[lightHit] * uLightIntensity[lightHit] / (4.0 * PI * lr * lr);
                 radiance += clampByLuminance(w_bsdf * emission * throughput);
                 break;
             }
@@ -707,8 +724,20 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         float cameraDist = length(p_ray);
         float distFromFractalOrigin = length(p_fractal);
         float floatLimitNEE = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);
-        float orthoPixelFootprintNEE = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * cameraDist;
-        float visualLimitNEE = orthoPixelFootprintNEE * (1.0 / uDetail);
+        // The threshold the primary march resolved this surface at (trace.ts
+        // finalEps; pbr.ts surfEps is its Direct twin). uPixelThreshold is part
+        // of it: without that factor the shadow ray's hit threshold is
+        // 1/uPixelThreshold times coarser than the surface it leaves, and it
+        // self-shadows on that surface's own resolved detail.
+        // uPTShadowTolerance (default 1) is the ratio to that threshold. It
+        // scales the whole epsilon — shadow and env-visibility thresholds and
+        // the shadow / env / bounce origin offsets — because that is what the
+        // pre-fix ratio covered: scenes saved path traced before 2026-10-13
+        // load with 1/uPixelThreshold here and render as they were — exactly
+        // so at DPR 1 (app-gmt/migrations.ts v8).
+        bool orthoNEE = uCamType > 0.5 && uCamType < 1.5;
+        float epsPerDistNEE = uPixelSizeBase * (uPixelThreshold / (uDetail / uInternalScale)) * uPTShadowTolerance;
+        float visualLimitNEE = orthoNEE ? epsPerDistNEE : epsPerDistNEE * cameraDist;
         float biasEps = max(floatLimitNEE, visualLimitNEE);
 
         // Zoom-aware shadow-march precision (@see shadows.ts + docs/adr/0093):
@@ -716,7 +745,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         // footprint growth per world unit of camera distance, projected per-ray
         // via dot(shadowDir, viewDirNEE). d/dt |p + rd·t| at t=0 IS that dot,
         // so this stays correct for bounce rays too.
-        float epsRateNEE = (uCamType > 0.5 && uCamType < 1.5) ? 0.0 : pixelSizeScale / uDetail;
+        float epsRateNEE = orthoNEE ? 0.0 : epsPerDistNEE;
         vec3 viewDirNEE = p_ray / max(cameraDist, 1.0e-12);
 
         if (activeCount > 0) {
@@ -748,25 +777,30 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 vec3 lVec;
                 float distToLight;
                 #ifdef PT_AREA_LIGHTS
-                // Sphere area light NEE: sample a point uniformly on the sphere
-                // surface (Marsaglia 1972), shoot toward it. pdfSphereDir is the
-                // resulting per-direction PDF in solid-angle measure, already
-                // divided by light-selection probability. Used to weight the
-                // contribution and as the MIS pdf_light estimator.
+                // Sphere area light NEE: sample a direction uniformly inside the
+                // cone the sphere subtends and aim the shadow ray at the point
+                // where it meets the sphere. pdfSphereDir is the per-direction
+                // PDF in solid-angle measure, already divided by light-selection
+                // probability — the MIS pdf_light estimator.
+                //
+                // The radiance that makes the unoccluded total equal the light's
+                // power under its own Falloff / Range is power·att / solidAngle,
+                // and it cancels against 1/pdf. So the contribution below IS the
+                // Point-light term, aimed at a point on the sphere: one distance
+                // law for both light types and both render modes.
+                //
+                // Until 2026-10-13 this sampled the sphere's SURFACE and divided
+                // the power by its area. Only the area cancelled against that pdf;
+                // its d²/|cos| did not, so a built-in inverse-square was applied
+                // on top of the light's own falloff — in the path tracer only.
+                // @see docs/adr/0138-sphere-lights-follow-the-lights-falloff.md
                 bool isSphere = uLightType[lightIdx] > 1.5 && uLightType[lightIdx] < 2.5;
-                vec3 sphereOutNormal = vec3(0.0);
                 float pdfSphereDir = 0.0;
+                float sphereCenterDist = 0.0;
                 if (isSphere) {
                     // Fresh blue-noise dims, decorrelated from light-pick (.r),
                     // shadow jitter (.gb), bounce-type (.a), env-NEE (.rg+offset).
                     vec4 areaNoise = getBlueNoise4(gl_FragCoord.xy + bounceOffset + vec2(13.7, 19.3));
-                    float z = 1.0 - 2.0 * areaNoise.x;
-                    float r2 = sqrt(max(0.0, 1.0 - z * z));
-                    float phi = TAU * areaNoise.y;
-                    sphereOutNormal = vec3(r2 * cos(phi), r2 * sin(phi), z);
-                    vec3 surfacePt = uLightPos[lightIdx] + uLightRadius[lightIdx] * sphereOutNormal;
-                    lVec = surfacePt - p_ray;
-                    distToLight = length(lVec);
                     // When PT_NEE_ALL_LIGHTS, every light is evaluated so there's
                     // no selection-probability divisor — pass 1.
                     int pdfSel;
@@ -775,9 +809,26 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                     #else
                         pdfSel = activeCount;
                     #endif
-                    pdfSphereDir = pdfSphereLightDir(lVec / max(1.0e-5, distToLight),
-                                                    sphereOutNormal, distToLight,
-                                                    uLightRadius[lightIdx], pdfSel);
+                    vec3 toCenter = uLightPos[lightIdx] - p_ray;
+                    sphereCenterDist = max(1.0e-5, length(toCenter));
+                    float lr = sphereLightApparentRadius(lightIdx, sphereCenterDist);
+                    float coneExtent = sphereLightConeExtent(sphereCenterDist, lr);
+                    // 1 - cos(theta), uniform in [0, coneExtent] = uniform in solid angle.
+                    // sin² from the product form: stable where 1 - cos² is not.
+                    float oneMinusCos = areaNoise.x * coneExtent;
+                    float cosT = 1.0 - oneMinusCos;
+                    float sin2T = oneMinusCos * (2.0 - oneMinusCos);
+                    float sinT = sqrt(max(0.0, sin2T));
+                    float phi = TAU * areaNoise.y;
+                    vec3 coneAxis = toCenter / sphereCenterDist;
+                    vec3 coneT, coneB;
+                    buildTangentBasis(coneAxis, coneT, coneB);
+                    vec3 coneDir = coneT * (cos(phi) * sinT) + coneB * (sin(phi) * sinT) + coneAxis * cosT;
+                    // Where that direction meets the near side of the sphere.
+                    float halfChord = sqrt(max(0.0, lr * lr - sphereCenterDist * sphereCenterDist * sin2T));
+                    distToLight = max(1.0e-5, sphereCenterDist * cosT - halfChord);
+                    lVec = coneDir * distToLight;
+                    pdfSphereDir = 1.0 / (max(1.0e-12, TAU * coneExtent) * float(pdfSel));
                 } else
                 #endif
                 if (isDirectional) {
@@ -802,11 +853,17 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                     float hdotv = max(0.0, dot(h, viewDir));
                     float ndoth = max(0.0, dot(n, h));
 
-                    // Branchless attenuation (see pbr.ts LOOP_OPEN)
+                    // Branchless attenuation (see pbr.ts LOOP_OPEN). A sphere falls
+                    // off from its CENTRE, as it does in Direct mode, not from
+                    // whichever surface point this sample landed on.
+                    float attDist = distToLight;
+                    #ifdef PT_AREA_LIGHTS
+                    if (isSphere) attDist = sphereCenterDist;
+                    #endif
                     float att = 1.0;
                     if (!isDirectional && (uLightFalloff[lightIdx] + uLightFalloffType[lightIdx]) > 0.001) {
-                        float d2_att = distToLight * distToLight;
-                        att = 1.0 / (1.0 + uLightFalloff[lightIdx] * d2_att + uLightFalloffType[lightIdx] * distToLight);
+                        float d2_att = attDist * attDist;
+                        att = 1.0 / (1.0 + uLightFalloff[lightIdx] * d2_att + uLightFalloffType[lightIdx] * attDist);
                     }
 
                     vec3 F_nee = fresnelSchlick(hdotv, F0);
@@ -824,39 +881,19 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                     vec3 kS_nee = F_nee;
                     vec3 kD_nee = (vec3(1.0) - kS_nee) * (1.0 - uReflection);
 
-                    // Compensation factor = 1 / true_PDF.
-                    //   Delta lights: PDF = 1/activeCount (one of N picked uniformly), so
-                    //                 compensation = activeCount.
-                    //                 PT_NEE_ALL_LIGHTS evaluates every light so PDF = 1.
-                    //   Sphere area:  PDF = pdfSphereDir (already includes selection divisor),
-                    //                 compensation = 1/pdfSphereDir.
+                    // Compensation factor = 1 / light-selection PDF: one of N picked
+                    // uniformly → activeCount; PT_NEE_ALL_LIGHTS evaluates every
+                    // light → 1. Sphere lights take the same factor: their
+                    // radiance / pdfSphereDir has already cancelled to the
+                    // Point-light term (see the NEE comment above).
                     float pdf;
-                    #ifdef PT_AREA_LIGHTS
-                    if (isSphere) {
-                        pdf = 1.0 / max(1.0e-10, pdfSphereDir);
-                    } else
+                    #ifdef PT_NEE_ALL_LIGHTS
+                        pdf = 1.0;
+                    #else
+                        pdf = float(activeCount);
                     #endif
-                    {
-                        #ifdef PT_NEE_ALL_LIGHTS
-                            pdf = 1.0;
-                        #else
-                            pdf = float(activeCount);
-                        #endif
-                    }
 
-                    // Sphere lights: treat uLightIntensity as TOTAL EMITTED POWER rather
-                    // than per-area radiance. Divide by emitter area (4πr²) so brightness
-                    // is invariant to radius — radius controls shadow softness only. The
-                    // 4πr² cancels with the same factor that appears in 1/pdfSphereDir,
-                    // making sphere-light contributions match a point-light-with-falloff
-                    // at the same intensity. Standard convention in physical area lights.
                     vec3 lightFlux = uLightColor[lightIdx] * uLightIntensity[lightIdx];
-                    #ifdef PT_AREA_LIGHTS
-                    if (isSphere) {
-                        float r = uLightRadius[lightIdx];
-                        lightFlux *= 1.0 / (4.0 * PI * r * r);
-                    }
-                    #endif
                     vec3 directContrib = (kD_nee * albedo * uDiffuse / PI + spec) * lightFlux * ndotl * shadow * att * ao * pdf;
 
                     // For delta lights (point/directional), pdf_light is a delta

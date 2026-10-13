@@ -26,7 +26,8 @@ import { registerFeatures } from '../engine-gmt/features/index';
 registerFeatures();
 
 const { useEngineStore } = await import('../store/engineStore');
-const { classifyModulationTarget, listModulatableTargets, LIGHT_PROPS } =
+const { classifyModulationTarget, listModulatableTargets, LIGHT_PROPS,
+        routingInvalidatesAccumulation, targetInvalidatesAccumulation } =
   await import('../engine/features/modulation/targetRouting');
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -289,6 +290,103 @@ console.log('[8] vector widgets that are keyframeable are also modulation-aware'
       `the Vector*Input scan did not shrink (expected >= ${SCAN_FLOOR})`,
       { scanned, floor: SCAN_FLOOR, discoveredFiles: found });
   }
+}
+
+// ── Which targets restart accumulation ──────────────────────────────────────
+// A display-pass param (declared `noAccumReset`) can be modulated without
+// re-tracing the fractal; everything else cannot. The live tick and the tick
+// driver both ask `routingInvalidatesAccumulation`, so this pins the answer for
+// one target of each kind and the SHAPE of the exempt set.
+{
+  console.log('\n[9] which modulated targets restart accumulation');
+  const inv = (t: string) => targetInvalidatesAccumulation(t, storeState);
+
+  assert(inv('postEffects.bloomIntensity') === false,
+    'bloom intensity does not invalidate accumulation (display pass, declared noAccumReset)');
+  assert(inv('coreMath.paramA') === true, 'a formula param does');
+  assert(inv('camera.unified.x') === true, 'a camera target does');
+  assert(inv('optics.camFov') === true, 'a render-state target (FOV) does');
+  assert(inv('geometry.preRotX') === true, 'a geometry rotation does');
+  assert(inv('lighting.light0_intensity') === true,
+    'a light does — it goes through engine-mods, whatever its param config says');
+  assert(inv('nope.nothing') === true, 'an unresolved target answers conservatively');
+
+  // The exempt set is exactly: uniform sink, scalar or vec-axis branch, noAccumReset.
+  const exempt = rows.filter(r => !routingInvalidatesAccumulation(r.routing));
+  const misfiled = exempt.filter(r => !(r.routing.sink === 'uniform' && r.routing.noAccumReset
+    && (r.routing.branch === 'scalar' || r.routing.branch === 'vecAxis')));
+  assert(misfiled.length === 0, 'every exempt target is a noAccumReset uniform scalar / vec axis',
+    misfiled.map(r => r.target));
+  const leaked = rows.filter(r => r.routing.sink !== 'uniform' && !routingInvalidatesAccumulation(r.routing));
+  assert(leaked.length === 0, 'no engine-mods / render-state / display-only target is exempt', leaked.map(r => r.target));
+  // The sink/branch half of the rule, on SYNTHETIC routings. The catalogue
+  // cannot prove it: today no offered engine-mods / render-state / display-only
+  // target happens to be declared `noAccumReset`, so "exempt anything flagged
+  // noAccumReset" passes every assertion above (measured 2026-10-04 — that
+  // break exited 0 before these four lines existed).
+  const synth = (sink: string, branch: string) => routingInvalidatesAccumulation(
+    { branch, sink, noAccumReset: true, ddfsResolved: true, base: 0, curve: rows[0].routing.curve } as never);
+  assert(synth('engine-mods', 'lighting') === true, 'a noAccumReset flag does not exempt an engine-mods target');
+  assert(synth('render-state', 'scalar') === true, 'nor a render-state target');
+  assert(synth('display-only', 'scalar') === true, 'nor a display-only target (a uniformless app may key its own accumulation on the reset)');
+  assert(synth('uniform', 'coloring') === true, 'nor a composite branch — only scalar and vec-axis uniforms');
+  assert(synth('uniform', 'scalar') === false && synth('uniform', 'vecAxis') === false, 'a noAccumReset uniform scalar / vec axis is exempt');
+
+  // Not vacuous: there ARE exempt targets, and they are a minority.
+  assert(exempt.length > 0 && exempt.length < rows.length / 2,
+    `some targets are exempt, most are not (${exempt.length} of ${rows.length})`);
+  console.log(`  (${exempt.length} of ${rows.length} offered targets are display-pass)`);
+  if (VERBOSE) console.log('  exempt:', exempt.map(r => r.target).join(', '));
+}
+
+// ── The tick honours it ─────────────────────────────────────────────────────
+// The classifier above is only half: the live tick has to act on it. Before
+// 2026-10-04 it emitted one blanket RESET_ACCUM for ANY offset that moved, so
+// an LFO on bloom re-traced the fractal every frame. Count the events the tick
+// actually emits.
+{
+  console.log('\n[10] the tick restarts accumulation only for targets that need it');
+  const { FractalEvents, FRACTAL_EVENTS } = await import('../engine/FractalEvents');
+  const { tick } = await import('../engine/animation/AnimationSystem');
+  let resets = 0;
+  const uniforms: { key: string; noAccumReset?: boolean }[] = [];
+  const offReset = FractalEvents.on(FRACTAL_EVENTS.RESET_ACCUM, () => { resets++; });
+  const offUniform = FractalEvents.on(FRACTAL_EVENTS.UNIFORM, (p: { key: string; noAccumReset?: boolean }) => { uniforms.push(p); });
+  const lfo = (target: string, baseValue: number) => ({
+    id: 'cov-' + target, enabled: true, target, shape: 'Sawtooth', period: 4, amplitude: 0.5, baseValue, phase: 0.3, smoothing: 0,
+  });
+  const run = (animations: unknown[]) => {
+    useEngineStore.setState({ lfosEnabled: true, animations } as never);
+    resets = 0; uniforms.length = 0;
+    tick(1 / 60);
+  };
+
+  // Drain whatever the earlier blocks left active, so the first measured tick is clean.
+  useEngineStore.setState({ animations: [] } as never); tick(1 / 60); tick(1 / 60);
+
+  run([lfo('postEffects.bloomIntensity', 0.5)]);
+  const bloom = uniforms.find(u => u.key === 'uBloomIntensity');
+  assert(!!bloom, 'an LFO on bloom intensity writes uBloomIntensity', uniforms.map(u => u.key));
+  assert(bloom?.noAccumReset === true, '...flagged noAccumReset', bloom);
+  assert(resets === 0, 'and the tick does NOT restart accumulation for it', { resets });
+
+  run([lfo('coreMath.paramA', 8)]);
+  assert(resets >= 1, 'an LFO on a formula param DOES restart accumulation', { resets });
+
+  run([lfo('postEffects.bloomIntensity', 0.5), lfo('coreMath.paramA', 8)]);
+  resets = 0; tick(1 / 60);
+  // (second tick: both targets already present; whether the offset moved enough
+  //  depends on the oscillator clock, so only the removal below is asserted.)
+
+  run([lfo('postEffects.bloomIntensity', 0.5)]);
+  assert(resets >= 1, 'removing the formula-param LFO restarts accumulation once (its offset vanished)', { resets });
+  resets = 0; tick(1 / 60); tick(1 / 60);
+  assert(resets === 0, 'after which bloom alone keeps running without a restart', { resets });
+
+  run([]);
+  assert(resets === 0, 'and removing the bloom LFO does not restart it either', { resets });
+  tick(1 / 60);
+  offReset(); offUniform();
 }
 
 console.log(failures === 0 ? '\n✓ all assertions passed' : `\n✗ ${failures} assertion(s) failed`);

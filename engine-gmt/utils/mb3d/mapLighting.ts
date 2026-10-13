@@ -65,9 +65,11 @@ const FORWARD = new THREE.Vector3(0, 0, -1);
 /**
  * Empirical intensity factor: MB3D's `Lamp` is scaled by a width-dependent term
  * (`1000·Lamp/Width` poslight, `300·Lamp/Width` global — unit-incompatible with GMT),
- * so we drop that and renormalise the raw amplitude. GMT's DEFAULT_LIGHTS key runs 1.5;
- * MB3D amps cluster ~0.4–1.5, so ~1.0 keeps a single key roughly GMT-bright while letting
- * the scene's relative amps through. Calibrated against Torii / ABoxScale2 / Hyperben2.
+ * so we drop that and renormalise the raw amplitude. GMT's DEFAULT_LIGHTS key ran 1.5 when
+ * this was tuned; MB3D amps cluster ~0.4–1.5, so ~1.0 keeps a single key roughly GMT-bright
+ * while letting the scene's relative amps through. Calibrated against Torii / ABoxScale2 /
+ * Hyperben2, under Blinn-Phong — which is why emitFusedHybrid names that model for an import
+ * that carries lights.
  */
 const K_LIGHT = 1.1;
 

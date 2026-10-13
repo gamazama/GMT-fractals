@@ -6,6 +6,7 @@
  */
 
 import type { ShaderConfig } from '../ShaderFactory';
+import type { WorkerPerfStats } from './framePerf';
 import type { EngineRenderState } from '../FractalEngine';
 import type { VideoExportConfig } from '../../../engine/codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
@@ -71,6 +72,9 @@ export type MainToWorkerMessage =
     | { type: 'OFFSET_SET'; offset: SerializedOffset; noAccumReset?: boolean }
     | { type: 'OFFSET_SHIFT'; x: number; y: number; z: number }
     | { type: 'SET_SAMPLE_CAP'; n: number }
+    /** Opt-in frame-cost probe. While enabled the worker posts one
+     *  `PERF_STATS` per second. @see ./framePerf.ts */
+    | { type: 'PERF_PROBE'; enabled: boolean }
     | { type: 'PAUSE'; paused: boolean }
     | { type: 'SET_DIRTY' }
     | { type: 'MARK_INTERACTION' }
@@ -135,6 +139,7 @@ export type WorkerToMainMessage =
     | { type: 'FOCUS_RESULT'; id: string; distance: number }
     | { type: 'HISTOGRAM_RESULT'; id: string; data: Float32Array }
     | { type: 'GPU_INFO'; info: string }
+    | { type: 'PERF_STATS'; stats: WorkerPerfStats }
     | { type: 'RENDER_INFO'; id: string; info: {
         calls: number; triangles: number; points: number; lines: number; frame: number;
         geometries: number; textures: number; programs: number;

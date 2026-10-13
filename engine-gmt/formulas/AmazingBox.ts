@@ -116,6 +116,7 @@ export const AmazingBox: FractalDefinition = {
                 layer3Strength: 0
             },
             lighting: {
+                specularModel: 1,
                 shadows: true,
                 shadowSoftness: 2000.0,
                 shadowIntensity: 1,
@@ -159,21 +160,21 @@ export const AmazingBox: FractalDefinition = {
             {
                 type: 'Point', position: { x: -0.774, y: 0.079, z: 3.089 }, rotation: { x: 0, y: 0, z: 0 },
                 color: "#FFFFFF",
-                intensity: 50,
+                intensity: 79,
                 falloff: 50,
                 falloffType: "Quadratic", fixed: false, visible: true, castShadow: true
             },
             {
                 type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 },
                 color: "#FFD6AA", useTemperature: true, temperature: 3500,
-                intensity: 0.5,
+                intensity: 0.79,
                 falloff: 0.5,
                 falloffType: "Quadratic", fixed: false, visible: false, castShadow: false
             },
             {
                 type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 },
                 color: "#E0EEFF", useTemperature: true, temperature: 7500,
-                intensity: 0.5,
+                intensity: 0.79,
                 falloff: 0.5,
                 falloffType: "Quadratic", fixed: false, visible: false, castShadow: false
             }

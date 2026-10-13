@@ -133,6 +133,7 @@ export const Julia3DZorich: FractalDefinition = {
     defaultPreset: {
         formula: 'Julia3DZorich',
         features: {
+            lighting: { specularModel: 1 },
             coreMath: {
                 iterations: 30,
                 paramA: 2,
@@ -159,7 +160,7 @@ export const Julia3DZorich: FractalDefinition = {
                 position: { x: 0.6, y: 1, z: 0.5 },
                 rotation: { x: 0, y: 0, z: 0 },
                 color: '#fff2d9',
-                intensity: 1.2,
+                intensity: 1.34,
                 falloff: 0,
                 falloffType: 'Quadratic',
                 fixed: false,

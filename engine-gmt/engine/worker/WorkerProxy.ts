@@ -15,6 +15,7 @@ import type { CameraState } from '../../types/common';
 import type { VideoExportConfig } from '../../../engine/codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, SerializedCamera, SerializedOffset } from './WorkerProtocol';
+import type { WorkerPerfStats } from './framePerf';
 import type { DerivedRotationSpec } from '../../types/fractal';
 import { injectMetadata } from '../../../utils/pngMetadata';
 import { showToast } from '../../../engine/store/toastStore';
@@ -110,6 +111,9 @@ export class WorkerProxy implements AccumulationController {
     private _pendingUniformsSnapshot: Map<string, (u: Record<string, any> | null) => void> = new Map();
     private _pendingRenderInfo: Map<string, (info: any | null) => void> = new Map();
     private _gpuInfo: string = '';
+    // Worker frame-cost probe (framePerf.ts). Empty until setPerfProbe(true).
+    private _perfStats: WorkerPerfStats | null = null;
+    private _perfHistory: WorkerPerfStats[] = [];
     // Cached half-float-alpha capability published by the worker on BOOTED.
     // Defaults to true; falls back to false only if the probe explicitly
     // reports failure. Exposed via checkHalfFloatAlphaSupport().
@@ -386,6 +390,11 @@ export class WorkerProxy implements AccumulationController {
                 break;
             case 'GPU_INFO':
                 this._gpuInfo = msg.info;
+                break;
+            case 'PERF_STATS':
+                this._perfStats = msg.stats;
+                this._perfHistory.push(msg.stats);
+                if (this._perfHistory.length > 120) this._perfHistory.shift();
                 break;
             case 'RENDER_INFO':
                 this._resolveRequest(msg.id, this._pendingRenderInfo, msg.info);
@@ -791,6 +800,27 @@ export class WorkerProxy implements AccumulationController {
     setPreviewSampleCap(n: number) {
         this.post({ type: 'SET_SAMPLE_CAP', n });
     }
+
+    /**
+     * Turn the worker's frame-cost probe on or off. While on, the worker posts
+     * one summary per second: GPU ms per frame (timer query), fence latency,
+     * achieved frame gap, tick CPU, gate skips and message traffic by type.
+     * Read the latest with {@link perfStats} or the last two minutes with
+     * {@link perfHistory}. Costs nothing while off.
+     *
+     * A worker RESTART (the recompile-by-restart path) starts a fresh worker
+     * with the probe off; re-arm it after one.
+     *
+     * @see ./framePerf.ts
+     */
+    setPerfProbe(enabled: boolean) {
+        if (!enabled) { this._perfStats = null; this._perfHistory = []; }
+        this.post({ type: 'PERF_PROBE', enabled });
+    }
+    /** Latest one-second summary from the worker probe, or null when off. */
+    get perfStats(): WorkerPerfStats | null { return this._perfStats; }
+    /** Up to the last 120 one-second summaries, oldest first. */
+    get perfHistory(): readonly WorkerPerfStats[] { return this._perfHistory; }
 
     resetAccumulation() {
         this.invalidateConvergedMirror();

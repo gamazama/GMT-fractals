@@ -118,6 +118,18 @@ export const SUBSYSTEM_LIGHTING: SubsystemDefinition = {
             estCompileMs: -2500,
         },
         {
+            // The Fastest preset's tier: a Fresnel-weighted Blinn-Phong (specularModel 2,
+            // ADR-0139). Cook-Torrance costs ~9% more of a light frame while moving
+            // (0.63 vs 0.69 ms at 1280x720 on the default Mandelbulb under Fastest);
+            // this model measures the same as the legacy Blinn-Phong there (and 1.5%
+            // over both once the camera stops and the frame accumulates). Its exposure
+            // was within 2% of Cook-Torrance's on 12 of 14 test scenes and 8% under on
+            // the other two, where the legacy model ran from 12% under to 4x over.
+            label: 'Fast',
+            desc: 'Fresnel-weighted Blinn-Phong highlights — close to the full model, a little cheaper while moving. For live playback.',
+            overrides: { lighting: { specularModel: 2.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: false, ptEnvNEE: false } },
+        },
+        {
             label: 'Path Traced',
             desc: 'Full PBR shading + path-tracer capability (free until you switch to PT render mode).',
             overrides: { lighting: { specularModel: 1.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: false, ptEnvNEE: false } },
@@ -251,15 +263,16 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
         label: 'Fastest',
         // Highest FPS that still has shadows (it's the VJ preset — shadows are
         // wanted). Uses Lite soft shadows (the measured-fastest shadow, ~2× Hard),
-        // no reflection march, no glow. Keeps full PBR lighting + the path-tracer
-        // capability (ptEnabled, free in Direct). Preview is the bare/instant one;
-        // this is the fast-but-lit-with-shadows one. Compile time ≈ the others
-        // (that's fine — the differentiation here is FPS, not compile).
-        description: 'Highest FPS — Lite soft shadows, no reflections / glow.',
+        // no reflection march, no glow, Fresnel-weighted Blinn-Phong highlights (the only preset on
+        // them — see the Fast lighting tier). Keeps the path-tracer capability
+        // (ptEnabled, free in Direct). Preview is the bare/instant one; this is
+        // the fast-but-lit-with-shadows one. Compile time ≈ the others (that's
+        // fine — the differentiation here is FPS, not compile).
+        description: 'Highest FPS — Lite soft shadows, fast highlights, no reflections / glow.',
         subsystems: {
             shadows: 1,              // Soft (Lite) — fastest shadow, ~2× faster than Hard
             reflections: 0,          // Off
-            lighting_quality: 1,     // Path Traced (PBR + ptEnabled capability)
+            lighting_quality: 1,     // Fast (Fresnel-weighted Blinn-Phong + ptEnabled capability)
             atmosphere_quality: 0,   // Off
             pathtracer: 0,           // Balanced
         },
@@ -271,7 +284,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
         subsystems: {
             shadows: 2,              // Soft
             reflections: 1,          // Env Map
-            lighting_quality: 1,     // Path Traced
+            lighting_quality: 2,     // Path Traced
             atmosphere_quality: 2,   // Color Glow
             pathtracer: 0,           // Balanced (PT: NEE + max shadows)
         },
@@ -283,7 +296,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
         subsystems: {
             shadows: 2,              // Soft
             reflections: 3,          // Full (raymarched + bounce shadows)
-            lighting_quality: 1,     // Path Traced
+            lighting_quality: 2,     // Path Traced
             atmosphere_quality: 2,   // Color Glow (volumetric is feature-panel opt-in only)
             pathtracer: 1,           // Full (PT: Env MIS+IS + area lights + NEE)
         },
@@ -296,7 +309,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
         subsystems: {
             shadows: 2,              // Soft
             reflections: 3,          // Full
-            lighting_quality: 2,     // PT + NEE
+            lighting_quality: 3,     // PT + NEE
             atmosphere_quality: 2,   // Color Glow (volumetric is feature-panel opt-in only)
             pathtracer: 1,           // Full
         },

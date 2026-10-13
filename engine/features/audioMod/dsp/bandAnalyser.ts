@@ -77,7 +77,6 @@ export class BandAnalyser {
     private frame!: SpectrumFrame;
     private kernel: Float32Array = new Float32Array(0);
     private tiltDb: Float32Array = new Float32Array(0);
-    private power: Float32Array = new Float32Array(0);
     /** Pre-smoothing raw levels, reused. */
     private raw: Float32Array = new Float32Array(0);
     /** Previous hop's smoothed levels — the SuperFlux reference. */
@@ -115,7 +114,6 @@ export class BandAnalyser {
             this.hasPrev = false;
 
             this.frame = new SpectrumFrame(cfg.fftSize);
-            this.power = new Float32Array(this.frame.binCount);
         }
 
         // Tilt is per-band but not geometry — recompute whenever it moves, and
@@ -137,19 +135,14 @@ export class BandAnalyser {
         const { dbFloor, dbCeiling, smoothingTauSec } = this.cfg;
         const n = this.bands.length;
 
-        this.frame.analyse(samples);
-        const db = this.frame.db;
-
-        // Per-bin linear power, computed ONCE — bands overlap, so converting
-        // inside the band loop would redo this for every band touching a bin.
-        const power = this.power;
-        let peakDb = -Infinity;
-        for (let i = 0; i < db.length; i++) {
-            const v = db[i];
-            power[i] = Number.isFinite(v) ? Math.pow(10, v * 0.1) : 0;
-            if (v > peakDb) peakDb = v;
-        }
-        this.peakLevel = dbToUnit(peakDb, dbFloor, dbCeiling);
+        // Per-bin linear power straight from the transform. It used to arrive
+        // as dB and be converted back here with a `pow` per bin; the band stage
+        // only ever wanted power, so the frame now hands it over directly.
+        // @see SpectrumFrame.analysePower
+        const peakPower = this.frame.analysePower(samples);
+        const power = this.frame.power;
+        // log10(0) is -Infinity, which `dbToUnit` maps to 0 — silence needs no branch.
+        this.peakLevel = dbToUnit(10 * Math.log10(peakPower), dbFloor, dbCeiling);
 
         const kernel = this.kernel;
         const tilt = this.tiltDb;
@@ -157,7 +150,7 @@ export class BandAnalyser {
         for (let k = 0; k < n; k++) {
             const b = this.bands[k];
             let acc = 0;
-            const end = Math.min(b.binHi, db.length);
+            const end = Math.min(b.binHi, power.length);
             for (let i = b.binLo, j = b.kernelOffset; i < end; i++, j++) {
                 acc += kernel[j] * power[i];
             }

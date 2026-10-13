@@ -189,5 +189,50 @@ console.log('\n[6] the caller\'s buffer is never mutated');
     'windowing goes into scratch, so a ring buffer can be passed directly');
 }
 
+// ── [7] the power output is the dB output on a linear scale ─────────────────
+// The audio thread reads `analysePower()` (no log/pow per bin); everything
+// calibrated against the dB window assumes the two are ONE scale. Compare them
+// bin by bin on a signal with energy everywhere and a wide dynamic range.
+console.log('[7] analysePower is the same spectrum as analyse, as linear power');
+{
+  const N = 2048;
+  const x = new Float32Array(N);
+  let b = 0, seed = 12345;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 * 2 - 1; };
+  for (let i = 0; i < N; i++) {
+    b = 0.97 * b + 0.03 * rnd();
+    x[i] = b * 3 + 0.4 * Math.sin((2 * Math.PI * 64 * i) / N) + 0.001 * Math.sin((2 * Math.PI * 700.5 * i) / N);
+  }
+  const viaDb = new SpectrumFrame(N);
+  const viaPower = new SpectrumFrame(N);
+  viaDb.analyse(x);
+  const peak = viaPower.analysePower(x);
+
+  // Relative error per bin, in dB terms: 10·log10(power) against db.
+  let worst = 0, worstBin = -1, finite = 0;
+  for (let k = 0; k < viaDb.binCount; k++) {
+    if (!Number.isFinite(viaDb.db[k])) continue;
+    finite++;
+    const err = Math.abs(10 * Math.log10(viaPower.power[k]) - viaDb.db[k]);
+    if (err > worst) { worst = err; worstBin = k; }
+  }
+  assert(finite > viaDb.binCount * 0.9, 'the comparison covers the spectrum (not vacuous)', { finite, bins: viaDb.binCount });
+  assert(worst < 1e-3, 'analysePower agrees with analyse on every bin (< 0.001 dB)', { worstDb: worst, worstBin });
+
+  let maxPower = 0;
+  for (let k = 0; k < viaPower.binCount; k++) maxPower = Math.max(maxPower, viaPower.power[k]);
+  // The array is float32, the return value a double: compare at float32.
+  assert(Math.fround(peak) === maxPower && peak > 0, 'the returned peak is the loudest bin', { peak, maxPower });
+
+  const silent = new SpectrumFrame(N);
+  const peak0 = silent.analysePower(new Float32Array(N));
+  assert(peak0 === 0 && silent.power.every(v => v === 0),
+    'and a silent frame is zero power, not NaN');
+
+  const copy = Float32Array.from(x);
+  viaPower.analysePower(x);
+  assert(x.every((v, i) => v === copy[i]), 'analysePower leaves the caller\'s buffer alone too');
+}
+
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);
 process.exit(failures === 0 ? 0 : 1);

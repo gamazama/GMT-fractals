@@ -212,7 +212,7 @@ export const Cuboctahedron: FractalDefinition = {
                 renderMode: 0,
                 ptBounces: 3,
                 ptGIStrength: 1,
-                specularModel: 0,
+                specularModel: 1,
                 shadowsCompile: true,
                 shadowAlgorithm: 0,
                 ptStochasticShadows: true,
@@ -226,9 +226,9 @@ export const Cuboctahedron: FractalDefinition = {
                 shadowSteps: 128,
                 shadowBias: 0,
                 lights: [
-                    { type: "Directional", position: { x: 0.4, y: 1.1, z: 2.5 }, rotation: { x: -0.8701, y: -0.1971, z: 0.0918 }, color: "#E8F0FF", intensity: 0.5, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 6500, id: "l13" },
-                    { type: "Point", position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false, id: "l14" },
-                    { type: "Point", position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false, id: "l15" },
+                    { type: "Directional", position: { x: 0.4, y: 1.1, z: 2.5 }, rotation: { x: -0.8701, y: -0.1971, z: 0.0918 }, color: "#E8F0FF", intensity: 1.17, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 6500, id: "l13" },
+                    { type: "Point", position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 1.17, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false, id: "l14" },
+                    { type: "Point", position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 1.17, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false, id: "l15" },
                 ],
             },
             quality: {
@@ -257,9 +257,9 @@ export const Cuboctahedron: FractalDefinition = {
         targetDistance: 2.1206,
         cameraMode: "Orbit",
         lights: [
-            { type: "Directional", position: { x: 0.4, y: 1.1, z: 2.5 }, rotation: { x: -0.18, y: -0.04, z: 0 }, color: "#E8F0FF", intensity: 0.5, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 6500 },
-            { type: "Point", position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: "Point", position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: "Directional", position: { x: 0.4, y: 1.1, z: 2.5 }, rotation: { x: -0.18, y: -0.04, z: 0 }, color: "#E8F0FF", intensity: 1.17, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 6500 },
+            { type: "Point", position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 1.17, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: "Point", position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 1.17, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
         ]
     }
 };

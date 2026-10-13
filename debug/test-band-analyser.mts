@@ -282,5 +282,31 @@ console.log('\n[9] envelope curves became time constants, tuned at 60fps');
     'the same elapsed time reaches the same level at 30 and 60fps', { at60, at30 });
 }
 
+// ── peakLevel — what the global AGC follows ─────────────────────────────────
+// It is the loudest BIN on the dB window, and nothing pinned it until the hop
+// stopped going through dB (2026-10-04): reading the peak POWER with the
+// amplitude formula (20·log10 instead of 10·log10) passed every assertion in
+// this file. Compare it against the dB spectrum computed independently.
+console.log('[peak] peakLevel is the loudest bin on the dB window');
+{
+  const { SpectrumFrame } = await import('../engine/features/audioMod/dsp/spectrumFrame');
+  const { dbToUnit } = await import('../engine/features/audioMod/bandMath');
+  const floor = -90, ceiling = -10;
+  for (const amp of [1, 0.1, 0.003]) {
+    const x = tone(1000, amp);
+    const ref = new SpectrumFrame(FFT);
+    ref.analyse(x);
+    let peakDb = -Infinity;
+    for (const v of ref.db) if (v > peakDb) peakDb = v;
+    const a = mk({ dbFloor: floor, dbCeiling: ceiling });
+    a.analyse(x, HOP);
+    assert(near(a.peakLevel, dbToUnit(peakDb, floor, ceiling), 1e-4),
+      `a ${amp} tone: peakLevel matches the loudest dB bin`, { got: a.peakLevel, want: dbToUnit(peakDb, floor, ceiling), peakDb });
+  }
+  const s = mk();
+  s.analyse(silence(), HOP);
+  assert(s.peakLevel === 0, 'silence: peakLevel is 0', s.peakLevel);
+}
+
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -215,9 +215,17 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 )}
 
                 {/* Live value indicator */}
+                {/* Live-modulation marker. NO CSS transition on purpose: the value
+                    arrives ~20 times a second, and a 75 ms transition retargeted
+                    every 50 ms never finishes — it is a continuous animation of
+                    `left`, so the page lays out, paints and presents on every
+                    frame for as long as anything is modulated. On a GPU-bound
+                    scene those presents starve the render worker (AmazingBox at
+                    1528x1024, 2026-10-04: an LFO held 25 fps without the
+                    transition and fell to 14 with it). The marker steps instead. */}
                 {showLiveIndicator && liveValue !== undefined && !disabled && hasBounds && (
                     <div
-                        className="absolute top-0 bottom-0 w-1.5 bg-secondary blur-[1px] transition-all duration-75 ease-out z-0"
+                        className="absolute top-0 bottom-0 w-1.5 bg-secondary blur-[1px] z-0"
                         style={{ left: `calc(${livePct}% - 0.75px)` }}
                     />
                 )}
@@ -328,7 +336,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                         style={{ width: `${valuePct}%` }}
                     />
                     {showLiveIndicator && liveValue !== undefined && !disabled && (
-                        <div className="absolute top-0 bottom-0 w-[3px] rounded-full bg-secondary transition-all duration-75 ease-out z-10" style={{ left: `calc(${livePct}% - 1.5px)` }} />
+                        <div className="absolute top-0 bottom-0 w-[3px] rounded-full bg-secondary z-10" style={{ left: `calc(${livePct}% - 1.5px)` }} />
                     )}
                     {defaultPct !== null && (
                         <div className="absolute top-0 bottom-0 w-px bg-fg/30 pointer-events-none z-10" style={{ left: `${defaultPct}%` }} />
@@ -359,7 +367,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 {label}
                 {labelSuffix}
                 {liveValue !== undefined && !disabled && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_4px_rgb(var(--secondary))]"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse-live shadow-[0_0_4px_rgb(var(--secondary))]"></span>
                 )}
             </label>
         );
@@ -427,7 +435,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                             {label}
                             {labelSuffix}
                             {liveValue !== undefined && !disabled && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_4px_rgb(var(--secondary))]"></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse-live shadow-[0_0_4px_rgb(var(--secondary))]"></span>
                             )}
                         </label>
                     </div>
@@ -489,7 +497,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
 
                         {/* Live value indicator */}
                         {showLiveIndicator && liveValue !== undefined && !disabled && (
-                            <div className="absolute top-0 bottom-0 w-1.5 bg-secondary blur-[1px] transition-all duration-75 ease-out z-0" style={{ left: `calc(${livePct}% - 0.75px)` }} />
+                            <div className="absolute top-0 bottom-0 w-1.5 bg-secondary blur-[1px] z-0" style={{ left: `calc(${livePct}% - 0.75px)` }} />
                         )}
                     </div>
 

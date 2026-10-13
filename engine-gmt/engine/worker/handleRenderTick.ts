@@ -21,34 +21,16 @@ import type { WorkerDepthReadback } from './WorkerDepthReadback';
 import type { WorkerExporter } from './WorkerExporter';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState } from './WorkerProtocol';
 import { bucketRenderer } from '../BucketRenderer';
+import { framePerf } from './framePerf';
 
 /** Shared no-modulation dict. Safe to alias: `engine.modulations` is read-only
  *  downstream (UniformManager indexes it; nothing writes through it). */
 const EMPTY_MODULATIONS: Record<string, number> = Object.freeze({});
 
-// ── DEBUG: per-frame timing instrumentation ──────────────────────────────────
-// Diagnoses fly-stutter. Question it answers: is the worker's OWN frame timing
-// flat or jittery?
-//   • gap + compute both low-variance → worker renders uniformly; the judder is
-//     a PRESENTATION beat against vsync → fix = pace to a fixed, refresh-aligned
-//     cadence.
-//   • compute variance high → the trace itself stalls (GPU command-queue
-//     back-pressure under ANGLE, or GC) → fix = bound frames-in-flight (fence-gate).
-//   • gap variance high but compute flat → the wait BETWEEN ticks varies
-//     (dispatch / present back-pressure).
-// Logs a rolling summary every WINDOW frames to the worker console (select the
-// renderWorker context in DevTools). Flip to false (or delete this block + its
-// three call sites) when done.
-const DEBUG_FRAME_TIMING = false;
-const _ft = {
-    window: 120,
-    n: 0,
-    lastEntry: 0,
-    gap: [] as number[],      // ms between successive render-tick entries (achieved cadence)
-    compute: [] as number[],  // ms inside engine.compute() (CPU submit only — GPU runs async)
-    total: [] as number[],    // ms entry → end of tick
-    gpu: [] as number[],      // ms GPU submit→complete (fence) — balloons under back-pressure
-};
+// Per-frame timing lives in `framePerf.ts` — a runtime, opt-in probe (the worker
+// half of `?perf` and of `npm run bench:audio`). It replaced a compile-time
+// `DEBUG_FRAME_TIMING` block here; the reading guide that block carried moved
+// with it.
 
 // ── FIX: bound frames-in-flight (fence-gate) ─────────────────────────────────
 // Root cause of the fly-stutter: the worker submits a full-frame raymarch on
@@ -61,12 +43,36 @@ const _ft = {
 // and the next frame won't start until it signals — so latency collapses to ~one
 // frame and the cadence evens out at the GPU's true sustainable rate. When the
 // GPU is still busy the tick is skipped and the scheduler retries with the LATEST
-// camera (coalesced), so we never render stale. The same fence doubles as the
-// DEBUG gpu-latency probe. Inactive during bucket/export (own pacing). Flip
+// camera (coalesced), so we never render stale. The same fence doubles as
+// framePerf's fence-latency reading. Inactive during bucket/export (own pacing). Flip
 // BOUND_FRAMES_IN_FLIGHT to false to A/B against the old render-ahead behaviour.
 const BOUND_FRAMES_IN_FLIGHT = true;
 let _inflightFence: WebGLSync | null = null;
 let _inflightT0 = 0;
+
+// ── Gate retry pacing ────────────────────────────────────────────────────────
+// While a tick is pending and the GPU is still busy, the scheduler in
+// renderWorker.ts re-polls the fence on a timer. That timer used to be a flat
+// 4 ms, which is the gate's whole granularity: a frame that finishes 0.1 ms
+// after a poll waits the other 3.9 ms for nothing. For a GPU-bound scene that
+// is pure lost throughput — measured 2026-10-04 at 1528x1024 on an RTX 2070:
+// MengerSponge 19.0 ms of GPU per frame, delivered every 22.1 ms.
+//
+// So the retry is now timed from what the last frames actually took: sleep
+// until just before the fence is due, then poll every millisecond. The first
+// sleep aims at 80 % of the smoothed latency, never the whole of it — a sleep
+// tuned to the full latency could never observe a frame getting FASTER (the
+// reading would be censored at the sleep), and adaptive resolution makes
+// frames faster all the time.
+const GATE_POLL_MS = 1;
+let _fenceEmaMs = 0;
+
+/** How long the scheduler should wait before re-polling the in-flight fence. */
+export function gateRetryDelayMs(): number {
+    if (!_inflightFence || !_inflightT0 || _fenceEmaMs <= 0) return GATE_POLL_MS;
+    const wait = _fenceEmaMs * 0.8 - (performance.now() - _inflightT0);
+    return wait > GATE_POLL_MS ? Math.min(wait, 16) : GATE_POLL_MS;
+}
 
 // Wall-clock of the last rendered frame, for frame-rate-independent smoothing.
 // The worker renders on its own (gated) cadence, decoupled from the main thread's
@@ -77,32 +83,6 @@ let _inflightT0 = 0;
 // keeping `userMoved` true → accumulation resets every frame → never settles, and
 // tiling can't engage (full frames the whole time). See VirtualSpace.updateSmoothing.
 let _lastRenderWallMs = 0;
-function _ftStat(a: number[]) {
-    const n = a.length;
-    if (!n) return { avg: 0, min: 0, max: 0, sd: 0 };
-    let sum = 0, min = Infinity, max = -Infinity;
-    for (const v of a) { sum += v; if (v < min) min = v; if (v > max) max = v; }
-    const avg = sum / n;
-    let vsum = 0;
-    for (const v of a) { const d = v - avg; vsum += d * d; }
-    return { avg, min, max, sd: Math.sqrt(vsum / n) };
-}
-function _ftRecord(entry: number, computeMs: number): void {
-    const now = performance.now();
-    if (_ft.lastEntry > 0) _ft.gap.push(entry - _ft.lastEntry);
-    _ft.lastEntry = entry;
-    _ft.compute.push(computeMs);
-    _ft.total.push(now - entry);
-    if (++_ft.n >= _ft.window) {
-        const g = _ftStat(_ft.gap), c = _ftStat(_ft.compute), t = _ftStat(_ft.total), gpu = _ftStat(_ft.gpu);
-        const f = (s: ReturnType<typeof _ftStat>) =>
-            `avg ${s.avg.toFixed(1)} sd ${s.sd.toFixed(1)} [${s.min.toFixed(1)}–${s.max.toFixed(1)}]`;
-        // eslint-disable-next-line no-console
-        console.log(`[frame-timing] n=${_ft.n}  gap: ${f(g)}  compute: ${f(c)}  gpu: ${f(gpu)} (×${_ft.gpu.length})  total: ${f(t)}`);
-        _ft.n = 0; _ft.gap.length = 0; _ft.compute.length = 0; _ft.total.length = 0; _ft.gpu.length = 0;
-    }
-}
-
 /** Live refs the tick reads on every frame. Each may be null until BOOT
  *  finishes wiring the engine; the tick early-outs before touching them. */
 export interface RenderTickRefs {
@@ -150,13 +130,15 @@ export const handleRenderTick = (
         return true;
     }
 
-    const _ftEntry = DEBUG_FRAME_TIMING ? performance.now() : 0;
+    const _perfOn = framePerf.on;
+    const _ftEntry = _perfOn ? performance.now() : 0;
+    if (_perfOn) framePerf.gpuPoll(renderer.getContext() as WebGL2RenderingContext);
 
     // ── Frames-in-flight gate (poll) ──
     // If the previous frame is still executing on the GPU, skip this tick rather
     // than piling another full frame onto the queue. Returning false tells the
     // scheduler to retry shortly with the latest (coalesced) camera. The same
-    // fence signal feeds the DEBUG gpu-latency stat. See block at top of file.
+    // fence signal feeds framePerf's fence-latency stat. See block at top of file.
     const _gateActive = BOUND_FRAMES_IN_FLIGHT
         && !bucketRenderer.getIsRunning() && !bucketRenderer.isHoldingFinalFrame();
     if (_inflightFence) {
@@ -176,8 +158,10 @@ export const handleRenderTick = (
         try {
             const _s = _gl.clientWaitSync(_inflightFence, _gl.SYNC_FLUSH_COMMANDS_BIT, 0);
             _done = _s === _gl.ALREADY_SIGNALED || _s === _gl.CONDITION_SATISFIED || _s === _gl.WAIT_FAILED;
-            if (DEBUG_FRAME_TIMING && _inflightT0 && _s !== _gl.WAIT_FAILED && _done) {
-                _ft.gpu.push(performance.now() - _inflightT0);
+            if (_inflightT0 && _s !== _gl.WAIT_FAILED && _done) {
+                const _lat = performance.now() - _inflightT0;
+                _fenceEmaMs = _fenceEmaMs > 0 ? _fenceEmaMs * 0.7 + _lat * 0.3 : _lat;
+                if (_perfOn) framePerf.noteFence(_lat);
             }
         } catch {
             _done = true; // invalid/dead sync — never block on it
@@ -186,6 +170,7 @@ export const handleRenderTick = (
             try { _gl.deleteSync(_inflightFence); } catch { /* already invalid */ }
             _inflightFence = null;
         } else {
+            if (_perfOn) framePerf.noteSkip();
             return false; // GPU still busy and we're gating — don't render-ahead
         }
     }
@@ -233,6 +218,7 @@ export const handleRenderTick = (
         : msg.delta;
     _lastRenderWallMs = _nowMs;
     engine.update(camera, realDelta, {}, false);
+    if (_perfOn) framePerf.notePhase('update', performance.now() - _nowMs);
 
     // ── Held final-frame path ──
     // After Refine View / Preview Region finishes, BucketRenderer retains its final
@@ -245,9 +231,19 @@ export const handleRenderTick = (
         return true;
     }
 
-    const _ftC0 = DEBUG_FRAME_TIMING ? performance.now() : 0;
+    if (_perfOn) framePerf.gpuBegin(renderer.getContext() as WebGL2RenderingContext);
+    const _accumBefore = _perfOn ? engine.pipeline.accumulationCount : 0;
+    const _ftC0 = _perfOn ? performance.now() : 0;
     engine.compute(renderer);
-    const _ftComputeMs = DEBUG_FRAME_TIMING ? performance.now() - _ftC0 : 0;
+    const _ftComputeMs = _perfOn ? performance.now() - _ftC0 : 0;
+    if (_perfOn) framePerf.gpuMark(renderer.getContext() as WebGL2RenderingContext);
+    const _ftD0 = _perfOn ? performance.now() : 0;
+    if (_perfOn) {
+        framePerf.notePhase('compute', _ftComputeMs);
+        const res = engine.mainUniforms.uResolution?.value;
+        framePerf.noteTrace(engine.traceRegionArea, engine.pipeline.isHolding, res ? res.x * res.y : 0,
+            engine.isTilingActive, !!engine.state.isSceneAnimating, _accumBefore, engine.pipeline.accumulationCount);
+    }
 
     // ── Blit first — submit display frame to the GPU before any readback work ──
     // Consistent frame timing: display render is always the first thing after
@@ -326,22 +322,28 @@ export const handleRenderTick = (
         // Flush GPU command queue — starts executing the display frame
         // immediately. Without this, the driver may batch commands and
         // execute them later, causing variable presentation timing.
+        if (_perfOn) framePerf.gpuEnd(gl as WebGL2RenderingContext);
         gl.flush();
-        // Arm the frames-in-flight fence (and the gpu-latency probe). Only when
-        // none is pending, so gate-off A/B still measures clean, non-overlapping
-        // frames rather than overwriting an unsignalled fence.
-        if ((BOUND_FRAMES_IN_FLIGHT || DEBUG_FRAME_TIMING) && !_inflightFence) {
+        // Arm the frames-in-flight fence (and framePerf's fence-latency reading).
+        // Only when none is pending, so gate-off A/B still measures clean,
+        // non-overlapping frames rather than overwriting an unsignalled fence.
+        if ((BOUND_FRAMES_IN_FLIGHT || _perfOn) && !_inflightFence) {
             const gl2 = gl as WebGL2RenderingContext;
             _inflightFence = gl2.fenceSync(gl2.SYNC_GPU_COMMANDS_COMPLETE, 0);
             _inflightT0 = performance.now();
         }
     }
+    // No display pass this frame (no output texture yet) — still close the query.
+    if (_perfOn) framePerf.gpuEnd(renderer.getContext() as WebGL2RenderingContext);
+    const _ftR0 = _perfOn ? performance.now() : 0;
+    if (_perfOn) framePerf.notePhase('display', _ftR0 - _ftD0);
 
     hooks.postMsg({ type: 'FRAME_READY', bitmap: null, state: hooks.getShadowState() });
 
     // Depth readback / focus pick — runs after blit so it doesn't affect display timing.
     depthReadback.tick(engine, renderer, tickCount, hooks.postMsg);
+    if (_perfOn) framePerf.notePhase('readback', performance.now() - _ftR0);
 
-    if (DEBUG_FRAME_TIMING) _ftRecord(_ftEntry, _ftComputeMs);
+    if (_perfOn) framePerf.noteFrame(_ftEntry, _ftComputeMs);
     return true;
 };

@@ -83,7 +83,7 @@ export const Mandelbar3D: FractalDefinition = {
                 emission: 2.59, emissionColor: "#ffffff", emissionMode: 0
             },
             geometry: { juliaMode: false, juliaX: 0.04, juliaY: -0.12, juliaZ: -0.24 },
-            lighting: { shadows: true, shadowSoftness: 78, shadowIntensity: 1, shadowBias: 0 },
+            lighting: { specularModel: 1, shadows: true, shadowSoftness: 78, shadowIntensity: 1, shadowBias: 0 },
             quality: { detail: 1.17, fudgeFactor: 0.7, pixelThreshold: 0.13, aaMode: "Auto", aaLevel: 1 }
         },
         cameraPos: { x: -0.9750951483888902, y: 0.4967096298390524, z: -1.878572142465631 },

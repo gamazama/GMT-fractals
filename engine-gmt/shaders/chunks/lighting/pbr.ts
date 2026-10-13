@@ -11,7 +11,9 @@
 // which emitted two separate marches (GetSoftShadow + GetHardShadow) and forced a
 // recompile on toggle to dodge the predication it feared.
 
-const getLoopOpen = (stochasticShadows: boolean) => `
+// extraInvariants: more per-pixel invariants for one variant, appended to the prelude.
+// Empty by default, so the other variants' source is unchanged by its existence.
+const getLoopOpen = (stochasticShadows: boolean, extraInvariants = '') => `
 vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughness, float metallic, float stochasticSeed, bool calcShadows) {
     vec3 Lo = vec3(0.0);
 
@@ -54,7 +56,7 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
     // Blinn-Phong specular normalisation: shininess + (shininess+2)/(8π)
     float bpShininess  = max(2.0, 2.0 / (roughnessSq + 0.001) - 2.0);
     float bpSpecNorm   = (bpShininess + 2.0) * (1.0 / (8.0 * PI));
-
+${extraInvariants}
     // COMPILER OPTIMIZATION: Prevent unrolling of light loop
     int lightCount = uLightCount;
 
@@ -198,6 +200,56 @@ ${getLoopOpen(stochasticShadows)}
 
         Lo += (kD * albedo * uDiffuse / PI + specular * uSpecular) * radiance * NdotL;
 ${LOOP_CLOSE}
+`;
+
+// Fresnel-weighted Blinn-Phong — the Fast lighting tier's model (specularModel 2).
+// Cook-Torrance's look at the legacy Blinn-Phong's cost: the highlight is tinted by
+// F0 (the Fresnel reflectance at normal incidence, as Cook-Torrance's is) and the
+// diffuse by 1 - F0, on a Blinn-Phong lobe whose exponent, 2/a² - 2, gives it GGX's
+// peak (the legacy model's 2/a - 2 is a far wider lobe).
+//
+// @assumption The light loop below must stay free of surface colour (albedo, F0): that is
+// what makes this model as cheap as the legacy one. Nothing goes red if it is broken — the
+// picture is identical either way and the cost is a frame time, measured by hand with
+// debug/scratch/spec-bisect.mts (git-ignored; the method is in the ADR's update block).
+//
+// THE SHAPE IS LOAD-BEARING. Measured 2026-10-13 on the default Mandelbulb (RTX 5070 Ti,
+// ANGLE d3d11, 1280x720, GPU timer queries), while moving:
+//   - the F0 tint and the exponent cost nothing over the legacy model;
+//   - weighting the diffuse by anything that depends on the albedo, before or inside
+//     the light loop, costs 8-10% of the FRAME — the whole gap between the legacy
+//     model and Cook-Torrance. A scalar weight there is free;
+//   - the same albedo-dependent weight applied AFTER the loop is free.
+// So the loop sums the lights with no surface colour in it and the albedo meets the two
+// sums once, in the return. Folding the weight back into the loop, or into diffuseTerm,
+// gives the same picture 8-10% slower. Nothing in the arithmetic explains a cost that
+// size (it is one vec3 multiply per lit pixel); it is how the program compiles. The same
+// rearrangement of Cook-Torrance itself did NOT recover the time.
+// What it costs: while the frame ACCUMULATES (camera still) this shape is 1.5-3.6% slower
+// than either other model, which are level there. Against Cook-Torrance, over the lit
+// pixels of 14 scenes: exposure 0 to -8% (within 2% on 12), brightest tenth -4% to +3%.
+// @see docs/adr/0139-cook-torrance-is-the-direct-specular-model.md
+export const getLightingPBRFastFresnel = (stochasticShadows: boolean) => `
+// ------------------------------------------------------------------
+// PBR HELPERS (Blinn-Phong, Fresnel-weighted)
+// ------------------------------------------------------------------
+${getLoopOpen(stochasticShadows, `
+    float fwShininess = max(0.01, 2.0 / (ggxA2 + 1.0e-4) - 2.0);
+    float fwSpecNorm  = (fwShininess + 2.0) * (1.0 / (8.0 * PI));
+    vec3  LoSpec      = vec3(0.0);
+`)}
+        vec3 h = normalize(l + v);
+        float NdotH = max(0.0, dot(n, h));
+        float spec = pow(NdotH, fwShininess) * fwSpecNorm;
+
+        // No surface colour in here — see the note on this function.
+        vec3 lit = radiance * NdotL;
+        Lo     += lit;
+        LoSpec += lit * spec;
+    }
+
+    return Lo * (diffuseTerm * (vec3(1.0) - F0)) + LoSpec * F0 * uSpecular;
+}
 `;
 
 // Backwards compat constants (stochastic enabled — full codepath)

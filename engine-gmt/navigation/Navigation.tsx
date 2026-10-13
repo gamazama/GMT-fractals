@@ -605,6 +605,14 @@ const Navigation: React.FC<NavigationProps> = ({
   //   discriminator still stands: keep GMT focused, Orbit mode, move the
   //   mouse off the canvas — if that alone restores 60, this pick matters.
   //
+  //   MEASURED 2026-10-04 (`npm run bench:audio`, the `audio-hover`
+  //   scenario): with the pointer wandering over the canvas the worker took
+  //   ~28 picks a second and still delivered 60 frames a second, audio rule
+  //   running. The drop itself was traced to the page presenting every
+  //   frame, not to this readback — see the `@bug PRODUCTION:` on
+  //   `connectSystemAudio`. What the picks do cost is worker CPU: about a
+  //   fifth of its message-handling time while the pointer moves.
+  //
   // Result is cached in WORLD space so it stays valid across gestures
   // even when sceneOffset shifts (treadmill absorb, mode switch, etc.).
   // Localization happens at gesture-start via snapshotHoverPivotLocal.

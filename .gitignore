@@ -33,6 +33,8 @@ debug/shader-validator-results.jsonl
 # The locked reference image (GMT_Mandelbulb_v1.png) is tracked explicitly.
 debug/bench-shader-2*.json
 debug/bench-shader-latest.json
+debug/bench-audio-latest.json
+debug/bench-audio-*.json
 debug/bench-shader-snapshot.json
 debug/bench-shader-baseline*.json
 debug/bench-shader-refs/Mandelbulb-*.png

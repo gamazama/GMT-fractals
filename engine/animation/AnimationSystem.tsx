@@ -66,7 +66,7 @@ const emitResetAccum = () => {
 import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { syncAudioClips } from './audioClipSync';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
-import { classifyModulationTarget } from '../features/modulation/targetRouting';
+import { classifyModulationTarget, routingInvalidatesAccumulation } from '../features/modulation/targetRouting';
 import { planModulationTarget, flushModulationComposites, newCompositeAccumulator } from '../features/modulation/applyTarget';
 import { AudioState } from '../features/audioMod';
 import { ModulationState } from '../features/modulation';
@@ -127,6 +127,9 @@ function flushRecordBuffer() {
 // keeps the historical publish-on-every-change behaviour, so fluid-toy and
 // the demo, whose sim reads the store map per frame, are unchanged.
 let _latestLiveModulations: Record<string, number> = {};
+/** Per-tick scratch: targets that may move without an accumulation reset.
+ *  Module-scope so the tick reuses one Set instead of allocating per frame. */
+const _resetExempt = new Set<string>();
 let _publishIntervalMs = 0;
 let _lastPublishMs = 0;
 /** This frame's resolved live-modulation map (base + offsets per target).
@@ -330,6 +333,10 @@ export const tick = (delta: number) => {
 
     // Track if anything visual actually changed to reset accumulation
     let hasVisualChange = false;
+    // Targets whose offset can move without restarting accumulation — display
+    // pass params (bloom, grading). @see routingInvalidatesAccumulation.
+    const resetExempt = _resetExempt;
+    resetExempt.clear();
     
     // BATCH: Collect keys to record here, update store ONCE at end of frame
     const keysToRecord: { trackId: string, value: number }[] = [];
@@ -347,6 +354,7 @@ export const tick = (delta: number) => {
         // per-target against zero.
 
         const routing = classifyModulationTarget(targetKey, storeState as unknown as Record<string, unknown>);
+        if (!routingInvalidatesAccumulation(routing)) resetExempt.add(targetKey);
 
         // The branch chain itself lives in `planModulationTarget` — the SAME
         // dispatcher the export path runs, so a render cannot silently disagree
@@ -434,12 +442,18 @@ export const tick = (delta: number) => {
     // offsets to last frame's: an offset appearing, vanishing, or moving past
     // epsilon counts as a real change; a moving LFO still resets (correct), a
     // static one no longer does.
+    //
+    // A target on the exempt list never counts: its uniform write already
+    // carries `noAccumReset`, and a blanket reset here would undo that — the
+    // fractal would be re-traced every frame to animate a display-pass number.
     const prevOff = prevOffsets.current;
     for (const k of currentTargets) {
+        if (resetExempt.has(k)) continue;
         if (Math.abs((combinedOffsets[k] ?? 0) - (prevOff[k] ?? 0)) > 0.0001) { hasVisualChange = true; break; }
     }
     if (!hasVisualChange) {
         for (const k in prevOff) {
+            if (resetExempt.has(k)) continue;
             if (!currentTargets.has(k) && Math.abs(prevOff[k]) > 0.0001) { hasVisualChange = true; break; }
         }
     }

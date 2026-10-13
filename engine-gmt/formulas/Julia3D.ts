@@ -181,6 +181,7 @@ void kk_invert(inout vec3 z, inout float dr, vec3 cen, float R2) {
     defaultPreset: {
         formula: 'Julia3D',
         features: {
+            lighting: { specularModel: 1 },
             coreMath: {
                 iterations: 16,
                 paramA: 1.7320508,
@@ -212,7 +213,7 @@ void kk_invert(inout vec3 z, inout float dr, vec3 cen, float R2) {
                 position: { x: 0.6, y: 1, z: 0.5 },
                 rotation: { x: 0, y: 0, z: 0 },
                 color: '#fff2d9',
-                intensity: 1.2,
+                intensity: 1.34,
                 falloff: 0,
                 falloffType: 'Quadratic',
                 fixed: false,

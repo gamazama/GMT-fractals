@@ -95,7 +95,7 @@ export const BoxBulb: FractalDefinition = {
                 rim: 0, rimExponent: 4, emission: 0.01, emissionColor: "#ffffff", emissionMode: 0
             },
             geometry: { juliaMode: false, juliaX: 0.19, juliaY: -0.93, juliaZ: -0.41, hybridMode: false, hybridIter: 2, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1 },
-            lighting: { shadows: true, shadowSoftness: 8, shadowIntensity: 0.98, shadowBias: 0.002 },
+            lighting: { specularModel: 0, shadows: true, shadowSoftness: 8, shadowIntensity: 0.98, shadowBias: 0.002 },
             quality: { detail: 2.4, fudgeFactor: 0.65, pixelThreshold: 0.9, maxSteps: 300, aaMode: "Auto", aaLevel: 1, estimator: 4.0 }, // Estimator 4 = Linear (2.0)
             optics: { dofStrength: 0, dofFocus: 1.368 }
         },

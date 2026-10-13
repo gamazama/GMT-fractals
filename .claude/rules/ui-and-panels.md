@@ -74,6 +74,24 @@ Its pipette is `window.EyeDropper` where that exists and a page-scoped pick
 hit-test deliberately does not trust `elementsFromPoint` alone: it honours `pointer-events`,
 and this app's most pickable canvases are `pointer-events-none`.
 
+## Nothing on screen may repaint every frame
+
+A smooth infinite CSS animation, or an overlay that rewrites its attributes on
+every tick, makes the browser present the whole window at 60 Hz for as long as it
+is visible. On app-gmt that is not a cosmetic cost: the presents run on the same
+GPU-process thread that decodes the render worker's WebGL, and a 6 ms fractal
+frame was measured at 14 fps instead of 60 with one pulsing 6 px dot on a slider
+as the cause (2026-10-04; ADR-0131, and the mechanism is written up on
+`animate-pulse-live` in `tailwind.config.js` and on `SinglePositionGizmo`).
+
+- A state indicator that can stay on screen (modulated, playing, recording,
+  pending, rendering) uses **`animate-pulse-live`** — the same pulse, stepped, ~3
+  presents a second. Plain `animate-pulse` is for loaders that are gone in seconds.
+- An imperative `update()` driven from a tick writes **on change**, never
+  unconditionally — `setAttribute` to the value already there still dirties SVG.
+- `animate-ping` / `animate-bounce` need an iteration count unless the element is
+  itself transient.
+
 ## A slider's number field is the precision control
 
 Every slider (`ScalarInput`) carries two drags: the track, and the number beside it. The
@@ -98,6 +116,7 @@ npm run smoke:interact    # DDFS state flow end-to-end (demo feature)
 npm run smoke:ge-pagepick # the picker's pipette with `EyeDropper` deleted, and with it present
 npm run test:number-drag-rate # the number-vs-track band (node, sub-second)
 npm run smoke:lazy-fallback   # a lazy panel whose chunk can't be fetched shows a notice, app keeps running
+npm run smoke:idle-damage     # no node written every frame, no smooth infinite animation — still and while modulating
 ```
 
 **Every lazily-imported surface goes through `lazyWithFallback`** (`components/ui/lazyWithFallback.tsx`),

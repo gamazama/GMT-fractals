@@ -224,7 +224,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             >
                 <div className="flex items-center gap-2">
                     {isModular && (
-                        <span className="flex w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shadow-[0_0_5px_#a855f7]" />
+                        <span className="flex w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse-live shadow-[0_0_5px_#a855f7]" />
                     )}
                     <span className={`font-bold ${isModular ? 'text-transparent bg-clip-text bg-gradient-to-r from-accent-300 to-purple-300' : ''}`}>
                         {displayLabel}

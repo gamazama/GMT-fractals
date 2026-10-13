@@ -121,6 +121,7 @@ export const Borromean: FractalDefinition = {
       }
     },
     "lighting": {
+      "specularModel": 1,
       "advancedLighting": true,
       "ptEnabled": true,
       "renderMode": 0,
@@ -148,7 +149,7 @@ export const Borromean: FractalDefinition = {
             "z": -2.4974118716462748
           },
           "color": "#ffffff",
-          "intensity": 2.8224,
+          "intensity": 4.23,
           "falloff": 0,
           "falloffType": "Quadratic",
           "fixed": false,
@@ -168,7 +169,7 @@ export const Borromean: FractalDefinition = {
             "z": 0
           },
           "color": "#ff8800",
-          "intensity": 0.5,
+          "intensity": 0.75,
           "falloff": 0,
           "falloffType": "Quadratic",
           "fixed": false,
@@ -188,7 +189,7 @@ export const Borromean: FractalDefinition = {
             "z": 0
           },
           "color": "#0088ff",
-          "intensity": 0.25,
+          "intensity": 0.375,
           "falloff": 0,
           "falloffType": "Quadratic",
           "fixed": true,

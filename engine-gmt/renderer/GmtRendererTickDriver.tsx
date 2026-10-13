@@ -38,6 +38,7 @@ import { viewport } from '../../engine/plugins/Viewport';
 import { reportAccumulationToStore } from '../../store/slices/installAccumulationBindings';
 import { buildRenderInteractionState, hasLiveModulationSource } from './renderInteractionState';
 import { modulationEngine } from '../../engine/features/modulation/ModulationEngine';
+import { targetInvalidatesAccumulation } from '../../engine/features/modulation/targetRouting';
 import { applyLiveMod } from '../../engine/typedSlices';
 import { getLiveModulationsNow } from '../../engine/animation/AnimationSystem';
 import { INTERACTION_SOURCES } from '../interaction/interactionSources';
@@ -455,7 +456,15 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             //           playback/LFO; audio was simply never added here.
             //           LFO-SOURCED rules need no term: they can only produce an
             //           offset when the LFO clause above is already true.
-            hasActiveModulation: hasLiveModulationSource(storeState),
+            //
+            // Filtered to targets that change the TRACED image. A scene whose
+            // only live targets are display-pass params (bloom, grading) is not
+            // animating in the sense this flag means: nothing needs re-tracing,
+            // so adaptive must not downscale it and accumulation must be left
+            // to converge under the moving post-process. The loop still ticks —
+            // every modulated UNIFORM emit re-arms the convergence-stop wake
+            // above. @see targetInvalidatesAccumulation.
+            hasActiveModulation: hasLiveModulationSource(storeState, (t) => targetInvalidatesAccumulation(t, storeState)),
         });
 
         const renderState = {

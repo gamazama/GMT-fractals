@@ -382,7 +382,7 @@ export const AppGmt: React.FC = () => {
                             />
                         )}
                         {isSelectingRegion && (
-                            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-accent-900/80 text-cyan-100 text-[10px] font-bold px-3 py-1 rounded-full border border-accent-500/50 shadow-lg animate-pulse pointer-events-none z-[60]">
+                            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-accent-900/80 text-cyan-100 text-[10px] font-bold px-3 py-1 rounded-full border border-accent-500/50 shadow-lg animate-pulse-live pointer-events-none z-[60]">
                                 Drag to select render region
                             </div>
                         )}
