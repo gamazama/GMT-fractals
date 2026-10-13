@@ -2861,7 +2861,17 @@ function makeHP(P) {
   const Pb = BigInt(P), SCALE = 1n << Pb;
   const mul = (a, b) => (a * b) >> Pb;
   const fdiv = (a, b) => (a << Pb) / b;
-  const isqrt = (n) => { if (n < 2n) return n < 0n ? 0n : n; let x = n, y = (x + 1n) >> 1n; while (y < x) { x = y; y = (x + n / x) >> 1n; } return x; };
+  /* Newton STARTS at a power of two just above the root (half of n's bit length), not at n. n is 2P bits here, and
+     from n the first P steps only halve their way down to the root's size: 262 steps a root at P = 256, against 7,
+     and that was over nine tenths of a reference orbit's build (measured 2026-10-13: at the three kept places of
+     deep-zoom/data/places.ts, 2.8 to 3.8 ms -> 0.3 ms in the page; a full 162 iterations, 20 ms -> 1.5 ms in
+     node 24). The answer is the same integer, floor(sqrt(n)).
+     @invariant the start is AT OR ABOVE the root, never below it: Newton only comes down, so from below the loop
+     does not run and the start itself is returned as the root - proven by: npm run check:deep-zoom-ray-probe
+     ("jet: the vector carried with the orbit equals the finite difference of the iterate along the ray") and
+     npm run check:deep-zoom-julia-orbit ("control, Mandelbrot mode, ..."). SEEN RED 2026-10-13 with the start two
+     bits short (`+ 1` -> `- 3`): 14 red and 32 red; restored byte for byte (sha-256). */
+  const isqrt = (n) => { if (n < 2n) return n < 0n ? 0n : n; let x = 1n << BigInt((n.toString(2).length + 1) >> 1), y = (x + n / x) >> 1n; while (y < x) { x = y; y = (x + n / x) >> 1n; } return x; };
   const fsqrt = (a) => isqrt(a << Pb);
   const SMALL = SCALE >> 90n;
   const fromNum = (x) => {
