@@ -121,7 +121,7 @@ export const AudioSpectrum: React.FC = () => {
         // servicing rAF, which is the tell that this loop is the cost).
         // This change helped but did not close it — the drop persists with
         // system-audio capture running (owner 2026-09-02); see the
-        // `@bug PRODUCTION:` on `connectSystemAudio` in AudioTransport.ts
+        // resolved note on `connectSystemAudio` in AudioTransport.ts
         // (cause found 2026-10-04: the page presenting every frame; this
         // canvas at 30 Hz was measured and is not enough to trigger it).
         //

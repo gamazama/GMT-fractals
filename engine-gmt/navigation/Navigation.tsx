@@ -605,8 +605,8 @@ const Navigation: React.FC<NavigationProps> = ({
   //   it appears when system-audio capture is running, which rides a
   //   screen-share surface (`getDisplayMedia` in AudioTransport.ts) and adds
   //   audio-process overhead. `b3e8b321` halved the audio panel's draw loop;
-  //   the drop persists (owner 2026-09-02) and is tracked as `@bug PRODUCTION:`
-  //   on `connectSystemAudio` in `engine/features/audioMod/AudioTransport.ts`.
+  //   the drop persisted (owner 2026-09-02); resolved 2026-10-04, ADR-0131: the
+  //   note on `connectSystemAudio` in `engine/features/audioMod/AudioTransport.ts`.
   //   The uncapped pick rate is at most a secondary cost. The cheap
   //   discriminator still stands: keep GMT focused, Orbit mode, move the
   //   mouse off the canvas — if that alone restores 60, this pick matters.
@@ -615,7 +615,7 @@ const Navigation: React.FC<NavigationProps> = ({
   //   scenario): with the pointer wandering over the canvas the worker took
   //   ~28 picks a second and still delivered 60 frames a second, audio rule
   //   running. The drop itself was traced to the page presenting every
-  //   frame, not to this readback — see the `@bug PRODUCTION:` on
+  //   frame, not to this readback — see the resolved note on
   //   `connectSystemAudio`. What the picks do cost is worker CPU: about a
   //   fifth of its message-handling time while the pointer moves.
   //

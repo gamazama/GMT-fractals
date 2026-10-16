@@ -45,7 +45,7 @@ export type { DecompiledOption, DecompiledDEMeta, DecompiledDefaults };
  * 0xff800000; the LSB-of-exponent sign trick bit20→bit31 becomes bit23→bit31). Verified
  * byte-exact against a float64 oracle over the input range (maxAbsErr 1.9e-7 = float32
  * rounding only; x=0/denormal/large edge cases + the fiddler "bend" all match).
- * `precision highp int` (shaders/chunks/uniforms.ts) guarantees the 32-bit bit ops.
+ * `precision highp int` (engine-gmt/shaders/chunks/uniforms.ts) guarantees the 32-bit bit ops.
  */
 const AMAZING_SURF_2 = `
   float f0, f1, f2, f3, f4, f5, f6, f7;

@@ -3,8 +3,8 @@
  * should be". One line per second in the console, mirrored in a corner readout,
  * kept in `window.__perfProbe.log` (last 120 s) with `copy()` for pasting.
  *
- * Built for the open 30-fps-while-focused report (`@bug PRODUCTION` on
- * `connectSystemAudio` in engine/features/audioMod/AudioTransport.ts). The
+ * Built for the 30-fps-while-focused report (resolved 2026-10-04, ADR-0131: the
+ * note on `connectSystemAudio` in engine/features/audioMod/AudioTransport.ts). The
  * worker renders only on RENDER_TICK from the main-thread frame loop, and the
  * hover pre-pick (Navigation.tsx) forces a GPU readback on the worker, so
  * "30 fps" can come from at least three different places. Each line splits

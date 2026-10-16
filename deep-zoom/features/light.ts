@@ -25,7 +25,7 @@
  *     shading        api.setLook({ mode })         mode = shadingToRenderer(index): 0 classic, 1 new
  *     lightType      api.setLight(m, falloff)      m = lightTypeToRenderer(index): 0, 1, 2. ALWAYS
  *     lampFalloff    api.setLight(m, falloff)        both arguments: see pitfalls
- *     lampShadows    api.setLook({ lampShadow })   0 = none (an experiment of 2026-10-13: grep THE
+ *     lampShadows    api.setLook({ lampShadow })   0 = none; default 1 since 2026-10-16 (grep THE
  *     lampOffset     api.setLook({ lampOffset })     LAMP'S SHADOWS in core.js); 1 = where it was
  *     keyElevation   api.setLook({ keyElev })      degrees
  *     keyTurn        api.setLook({ keyTurn })      degrees
@@ -214,10 +214,10 @@ export const DzLightFeature = {
         //    the lamp's, so at L5 they go where `lampFalloff` goes.
         lampShadows: {
             type: 'float',
-            default: 0, min: 0, max: 1, step: 0.05,
+            default: 1, min: 0, max: 1, step: 0.05,
             label: 'Lamp shadows',
             condition: NEW_SHADING_LAMP_LIT,
-            description: 'Strength of the shadows the lamp casts. The lamp stands beside the eye, so nearly everything that could shadow a point is in the picture. 0: none, as the lamp always was.',
+            description: 'Strength of the shadows the lamp casts. The lamp stands beside the eye, so nearly everything that could shadow a point is in the picture. 0: none, as the lamp was before 2026-10-16.',
         },
         lampOffset: {
             type: 'float',

@@ -35,9 +35,9 @@ export interface UniformDefinition {
     /** If true, creates the Three.js uniform backing but skips GLSL declaration.
      *  Use for uniforms that are only needed for specific formula variants (e.g. Modular).
      *
-     *  @enforcement `shaders/chunks/uniforms.ts` (and its engine-gmt
-     *    mirror) is the SOLE enforcement site — skips GLSL declaration
-     *    emit when true. `ShaderBuilder.buildUniformsBlock` and
+     *  @enforcement `engine-gmt/shaders/chunks/uniforms.ts` is the SOLE
+     *    enforcement site — skips GLSL declaration emit when true (a root
+     *    copy had no importer and was deleted 2026-10-16). `ShaderBuilder.buildUniformsBlock` and
      *    `createUniforms` ignore this flag. */
     backingOnly?: boolean;
 }

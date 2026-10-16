@@ -92,6 +92,7 @@ A SessionStart hook prints the checkout's live state; trust it over notes.
 - The default for a change is no new smoke, test or step: try it once and say what it showed. Write one only for a seam nothing cheaper sees (a real GPU, a panel opening, storage across a reload, the boot), on new ground, whose break nobody would notice at once.
 - A change is recorded once, in its commit message. An ADR only when a decision was made.
 - A flyable build goes to the owner first; his first minutes using it are the gate.
+- A question left for the owner goes in `plans/OWNER-CALLS.md`, one line; delete the line when he answers.
 - "Finish up" means stop, commit and report — no extra measurements or studies.
 
 ## Build & Run

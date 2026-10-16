@@ -22,42 +22,24 @@ breaks one of them, the change is too GMT-specific.
 | `demo/` | [`demo/README.md`](../../demo/README.md) — minimal three-file add-on contract |
 | `deep-zoom/` | JSDoc of `deep-zoom/host/DeepZoomHost.ts` (the one interface to the renderer), `deep-zoom/renderer/index.ts` (the module's options and pitfalls) and `deep-zoom/main.tsx` (boot order); the plan is `plans/deep-zoom-shell/`. `deep-zoom-prototype/` is the dev-only embedded-page prototype, removed when the shell matches it — never edit it to match. |
 
-`deep-zoom/`:
+`deep-zoom/`, read first (each file's JSDoc carries the contract; the plan is `plans/deep-zoom-shell/`):
 
-- The renderer is a module (`deep-zoom/renderer`) and ONLY files under `deep-zoom/host/` import
-  it. The store owns every look value and `useHostSync.ts` sends them. The camera is three
-  256-bit decimal STRINGS that never pass through `Number()`.
-- `deep-zoom/data/places.ts` holds the owner's kept places: cards in the app AND the hard cases
-  for any march-quality measurement.
-- It flies with GMT's navigation (ADR-0133) through `deep-zoom/flyCamera.ts` and
-  `DeepZoomNavigation.tsx`, which hand the host displacements and an orientation (yaw, pitch
-  and roll: Q and E roll) and never read a position. The fly keys (W A S D, Q E, Space, C,
-  Shift, Alt) are heard on the window and must not be registered as shortcuts.
-- A camera move is a ROUTE on the engine's timeline: one exponential payload track,
-  `camera.depth`, whose every key carries the exact view (`deep-zoom/route.ts`; its evaluator
-  runs after each scrub). The TRAIL (`deep-zoom/trail.ts`) is what the app remembers of a
-  flight, and a route is cut from it. While a route plays, a look (a Fly-mode drag, Q / E) is a
-  FREE LOOK on top of it, kept on three plain tracks when Record is on (grep `LOOK_TRACKS`); a
-  move still takes the camera. A route is rendered frame by frame through the engine's render
-  dialog (`deep-zoom/routeRender.tsx`): into a folder of PNG frames or a video file, one loop and
-  two sinks (`FrameSink`); frames already in the folder are a question the runner puts to the
-  dialog (`status.ask`: overwrite, continue, cancel). No smoke reaches a render's Start. A place
-  and a keyframe hold the camera (a place its formula too), never light or colour. The plan and
-  what each stage built: `plans/deep-zoom-shell/ROUTES.md`.
-- The Mandelbulb has ONE shader program, the ray march's, built from page open; `ready` is that
-  program and a build that fails is the boot failure (ADR-0137). The page's program, the skip
-  table (BLA), the true-gradient variant and the parity smoke are gone. The Mandelbox keeps its
-  own program and steps by Step size.
-- Two dev servers: the owner flies port 3420 (the last commit, a detached checkout kept there by
-  a post-commit hook); builders and every smoke use the working tree's server on 3410.
-- The speed follows rays (ADR-0134): `host.sense` marches seven CPU rays to the solid AS DRAWN
-  and the pace is `deep-zoom/flyPace.ts`. "Depth" everywhere is what is looked at
-  (`deep-zoom/depthNow.ts`). Tab is Orbit mode (`deep-zoom/orbitCamera.ts`; its clearance: grep
-  `DZ_ORBIT_CLEARANCE`). A flight or an orbit gesture is one undo step (`flightEnded` in
-  `deep-zoom/locations.ts`).
-- The gradient is the param `dzColour.gradient` and reaches the renderer as texels through ONE
-  component, `deep-zoom/GradientSync.tsx`. Read THE GRADIENT in `deep-zoom/features/colour.ts`
-  before adding a colour control: offset, bias and repeats are deliberately NOT params here.
+- `host/DeepZoomHost.ts`, `host/moduleHost.ts`: the one interface to the renderer. Only `host/`
+  imports `deep-zoom/renderer`; the camera is 256-bit decimal strings, never through `Number()`.
+- `data/places.ts`: the owner's kept places, cards in the app AND the hard cases for any
+  march-quality measurement.
+- `flyCamera.ts`, `DeepZoomNavigation.tsx`, `flyPace.ts`, `depthNow.ts`, `orbitCamera.ts`:
+  navigation by displacements and rays (ADR-0133, ADR-0134). The fly keys are heard on the
+  window, never registered as shortcuts; a flight is one undo step (grep `flightEnded`).
+- `route.ts`, `trail.ts`, `routeRender.tsx`: routes, the trail, free look, rendering (ADR-0136;
+  `ROUTES.md`). A place and a keyframe hold the camera, never light or colour. No smoke reaches
+  a render's Start.
+- `features/colour.ts` (THE GRADIENT), `GradientSync.tsx`: the gradient's one path to the
+  renderer; offset, bias and repeats are deliberately not params.
+- The Mandelbulb has one shader program, the ray march's, and a failed build is the boot failure
+  (ADR-0137); the Mandelbox keeps its own and steps by Step size.
+- Two dev servers: the owner flies port 3420 (the last commit, a detached checkout moved by a
+  post-commit hook); builders and every smoke use the working tree's server on 3410.
 
 Decisions for `gradient-explorer/`: ADR-0114 (the v2 shell), ADR-0115 (the shell on a phone),
 ADR-0119 (a save is drawn where it lands — grep `flashSetSave`), ADR-0125

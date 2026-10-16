@@ -126,7 +126,7 @@ export class ShaderBuilder {
      *   shaped field that survives. `comment` is dropped, and — the one that
      *   matters — so is `backingOnly`: this block ALWAYS emits the GLSL
      *   declaration. `backingOnly` is honoured only by the schema walker in
-     *   `shaders/chunks/uniforms.ts` (and its `engine-gmt/` mirror), which is
+     *   `engine-gmt/shaders/chunks/uniforms.ts`, which is
      *   the sole enforcement site; see the `@enforcement` note on
      *   `UniformDefinition.backingOnly` in `engine/UniformSchema.ts`. That
      *   asymmetry is the mechanism behind the `backingOnly` contract: the
