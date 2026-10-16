@@ -112,7 +112,7 @@ import type { DeepZoomHost, DzParams, DzView } from '../../deep-zoom/host/DeepZo
 import { startHostSync } from '../../deep-zoom/useHostSync';
 import { setReadings } from '../../deep-zoom/navigationState';
 import {
-    ROUTE_ITERATIONS_TRACK, ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, headingNow, installRoute, noteMove, noteTurn, retimeRoute, reverseRoute,
+    ROUTE_ITERATIONS_TRACK, ROUTE_PACE_TRACK, ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, headingNow, installRoute, noteMove, noteTurn, retimeRoute, reverseRoute,
     routeDrives, routeFromTrail, routeHandSet, routeKeys, routeSource, routeViewAt, setKeyframe, setRouteSmoothing, takeOwedPictures, useRoute,
 } from '../../deep-zoom/route';
 import type { RoutePayload } from '../../deep-zoom/route';
@@ -567,12 +567,16 @@ const turned = trailSamples().length;
 view = { ...view, yaw: 0.4, pitch: -0.2 };
 noteTurn();
 check(trailSamples().length === turned, 'route: a turn where the camera stands takes no sample');
+// A Pace track a smoothing pass left on the route this one replaces (2026-10-16, SMOOTHING.md stage S1).
+useAnimationStore.setState((s) => ({ sequence: { ...s.sequence, tracks: { ...s.sequence.tracks, [ROUTE_PACE_TRACK]: { id: ROUTE_PACE_TRACK, type: 'float', label: 'Pace',
+    keyframes: [{ id: 'p0', frame: 0, value: 1, interpolation: 'Linear' }, { id: 'p1', frame: 40, value: 2, interpolation: 'Linear' }] } } } }));
 const undoBefore = anim().undoStack.length;
 calls.length = 0;
 const made = routeFromTrail();
 let keys = routeKeys();
 check(made === keys.length && made > 8 && made < 80 && anim().undoStack.length === undoBefore + 1, '"Route to here" makes the route in one undo step'.replace(/^/, 'route: '),
     `${made} keyframes, ${anim().undoStack.length - undoBefore} steps`);
+check(!anim().sequence.tracks[ROUTE_PACE_TRACK], 'route: and the Pace track of the route it replaces goes in that step (a pass\'s timing was the old route\'s)');
 check(calls.length === 0 && cameraOnRoute() && anim().currentFrame === keys[keys.length - 1].frame && anim().durationFrames >= keys[keys.length - 1].frame,
     'route: no view is set by it: the camera stands on the last keyframe, the playhead is there, and the timeline holds the route', `${calls.length} setView, frame ${anim().currentFrame}`);
 check(routeSource()?.smoothing === ROUTE_SMOOTHING.initial && !routeHandSet(), 'route: it knows it came from the trail, at the smoothing first offered');
@@ -590,7 +594,7 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
     const stray = payloads.flatMap((p) => [...Object.keys(p).filter((key) => key !== 'view' && key !== 'heading'), ...Object.keys(p.view).filter((key) => !['cam', 'yaw', 'pitch', 'roll'].includes(key))]);
     const along1 = payloads[3].heading, flew = [0, 1, 2].map((j) => Number(BigInt(payloads[4].view.cam[j]) - BigInt(payloads[2].view.cam[j])));
     check(stray.length === 0 && payloads.every((p) => !!p.heading) && !!along1 && (along1[0] * flew[0] + along1[1] * flew[1] + along1[2] * flew[2]) / Math.hypot(...flew) > 0.8,
-        'exact: a keyframe holds the camera and the way it was travelling there, nothing else', `stray ${stray.join()}`);
+        'exact: a keyframe holds the camera and the way it was travelling there, nothing else (no K mark: a smoothing pass may miss it)', `stray ${stray.join()}`);
     check(countKeys().length === keys.length && countKeys().every((c, i) => c.frame === keys[i].frame && c.value === sampleOf[i]?.iters && c.interpolation === 'Linear'),
         'exact: and each has its iteration key, the count in force when it was flown', countKeys().map((c) => c.value).join());
 }

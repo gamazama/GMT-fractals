@@ -26,6 +26,11 @@
  * `rot`, `phase` OR `twist`: the engine eases such a track as an angle that wraps (grep
  * `isRotation` in engine/AnimationEngine.ts), and these run on past a whole turn.
  *
+ * `pace` is the PACE TRACK (`camera.pace`, `ROUTE_PACE_TRACK` in `deep-zoom/route.ts`): the path's clock
+ * is the depth track times it, x1 where it has no key. Written by the smoothing pass and read off the
+ * TRACK by route.ts; declared here for the same two reasons as the look's, and registered as a log
+ * track there.
+ *
  * The feature also declares the depth scale as its viewport overlay (`overlay-depth-scale`, a DOM
  * overlay), which is how the engine's `<FeatureOverlays />` comes to mount it. The component is
  * registered in registerFeatures.ts.
@@ -65,6 +70,12 @@ export const DzCameraFeature = {
             default: 0, min: -1000, max: 1000, step: 0.001,
             label: 'Look roll',
             description: 'Free look at the playhead: the view rolled about its own axis (radians), on top of the route.',
+        },
+        pace: {
+            type: 'float',
+            default: 1, min: 0.001, max: 1000, step: 0.001,
+            label: 'Pace',
+            description: 'The route\'s pace at the playhead: above 1 the camera goes faster than its depths alone would take it, below 1 slower. Written by the smoothing pass.',
         },
     },
 } satisfies FeatureDefinition;

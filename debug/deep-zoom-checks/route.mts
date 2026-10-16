@@ -15,7 +15,8 @@
  *   set      K with no keyframe, K again (after the last), K on an earlier keyframe (replaces),
  *            Key Cam between two (goes in), K on the last (still adds), one undo step a press
  *   leg      a new leg's frames from its length on screen at 0.5 decades a second; the two limits
- *   payload  the camera only; a JSON round trip gives the same route, to the digit
+ *   payload  the camera, its heading and the K mark only (K, Key Cam and a row's replace write the mark; a scene from
+ *            before it has none); a JSON round trip gives the same route, to the digit
  *   drive    each keyframe's stored view at its frame; one setView for a new view, none for the
  *            same one; the ends held; between two keyframes, between them; the renderer's own look
  *            values handed back; the sync's held values sent before the view; the iteration rule
@@ -48,9 +49,18 @@
  *            other way round with their ids, views and negated headings; the view, the depth curve, the count and the
  *            look at mirrored frames as they were; the playhead mirrored and the picture kept; reversed twice is the
  *            route to the digit; a look key past the route dropped, an iteration key past it kept
-
  *   engine   (2026-10-16, stage S1 of plans/deep-zoom-shell/SMOOTHING.md) the engine's key lookup, a binary search now,
  *            against the scan it replaced, on random tracks: the same values to the bit
+ *   pace     the Pace track: the path's clock is the depth track times it, to the digit; none or x1 changes nothing;
+ *            a typed leg, Even pace, a drag on the timeline, Reverse and Clear route take it along
+ *   smooth   the pass's rules on the pure functions (deep-zoom/routeSmooth.ts: the warp, a range, the clock, the look),
+ *            then the pass itself (`smoothRoute`) on a scene whose rays meet a cone narrowing to a passage near 1e-7 -
+ *            the fake host's `freeDistance` - (the rush evened, one undo step, positions to the digit, K keyframes and
+ *            the ends kept, aims within the miss, the look and other tracks carried, even, a range and its edges)
+ *   read     the reader: every third frame from the route's own view with its keyed count, 45 rays, no frame run, the
+ *            camera put back on its very view; the picture's speed against the rule worked out by hand
+ *   pin      the K mark set and taken by hand
+ *   close    legs under half a second listed; a merge drops the keyframe that moves the path least, never a K one
  *
  * FALSIFICATION RECORD, 2026-10-11, one break per run in deep-zoom/route.ts, the file put back
  * byte for byte after each. The break, then what went red:
@@ -144,9 +154,19 @@
  *     NOT FALSIFIED, green only: the one undo step, reversed twice, each step undone, the count and the look at mirrored
  *     frames, the playhead on a keyframe, the camera the user holds, the keys outside the span, and nothing while a route
  *     renders or with one keyframe.
- *   - engine (2026-10-16, stage S1 of SMOOTHING.md): engine/AnimationEngine.ts, the search taking the pair that STARTS on a
- *     key's frame (`>` for `>=`), the file put back byte for byte -> 1 red: "engine: the key lookup is a binary search ..."
- *     (360 of 28,534 values differ)
+ *   - engine, pace, smooth (2026-10-16, stage S1 of SMOOTHING.md; THREE breaks, the stage's allowance, each file put back
+ *     byte for byte, its checksum compared):
+ *     1. engine/AnimationEngine.ts, the search taking the pair that STARTS on a key's frame (`>` for `>=`)
+ *                                                                               -> 1 red: "engine: the key lookup is a binary
+ *        search ..." (360 of 28,534 values differ)
+ *     2. route.ts, `route()` building the path from the depth track alone       -> 3 red: "pace: the path's scale is the depth
+ *        track times the Pace track ..." (0 of 1,437 half frames), "smooth: a strength of the route's length or more is one
+ *        even pace ..." (x1.281), "smooth: a range (keyframes 4 to 6) ..." (the legs beside it)
+ *     3. routeSmooth.ts, a range's change not eased (`w` always 1 in `paceChange`) -> 2 red: "smooth: a range: nothing
+ *        outside it changes ...", "smooth: a range crosses its edges as the route did before it ..." (x1.05 / x0.95 against
+ *        x1.27 / x1.07)
+ *     NOT FALSIFIED, green only: every other "pace:", "smooth:", "read:", "pin:" and "close:" line, and the two new
+ *     "payload:" lines (the K mark).
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -163,13 +183,15 @@ import { startHostSync } from '../../deep-zoom/useHostSync';
 import * as THREE from 'three';
 import { toOrientation } from '../../deep-zoom/orbitCamera';
 import {
-    LOOK_FIT_TOLERANCE, LOOK_TRACKS, ROUTE_ITERATIONS_TRACK, ROUTE_MAX_LEG_SECONDS, ROUTE_MIN_LEG_SECONDS, ROUTE_SOLID_SAMPLES, ROUTE_TRACK, ROUTE_UNIT,
-    cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, headingNow, installRoute, legFrames, legInSolid, lookKeyed, lookTurned, noteMove, playLeg,
-    replaceKeyframe, returnToRoute, reverseRoute, routeDrives, routeKeys, routePaceAt, routeShownAt, routeViewAt, scrubRouteTo, setKeyframe, setLegSeconds, setRouteRendering,
-    stopRoutePlayback, useRoute,
+    LOOK_FIT_TOLERANCE, LOOK_TRACKS, ROUTE_ITERATIONS_TRACK, ROUTE_MAX_LEG_SECONDS, ROUTE_MIN_LEG_SECONDS, ROUTE_PACE_TRACK, ROUTE_SOLID_SAMPLES, ROUTE_TRACK, ROUTE_UNIT,
+    cameraOnRoute, clearLook, clearRoute, closeKeyframes, deleteKeyframe, deleteKeyframes, headingNow, installRoute, legFrames, legInSolid, lookKeyed, lookTurned,
+    mergeCloseKeyframes, noteMove, pinKeyframe, playLeg, replaceKeyframe, retimeRoute, returnToRoute, reverseRoute, routeDrives, routeKeys, routePaceAt,
+    routePictureSpeed, routeShownAt, routeViewAt, scrubRouteTo, setKeyframe, setLegSeconds, setRouteRendering, smoothRoute, stopRoutePlayback, unpinKeyframe, useRoute,
 } from '../../deep-zoom/route';
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
+import { carryLook, paceChange, paceSpan, speedMargin, warpRoute } from '../../deep-zoom/routeSmooth';
 import { AnimationMath } from '../../engine/math/AnimationMath';
+import { buildZoomPath, zoomPathPosition } from '../../engine/animation/zoomPath';
 import type { Keyframe, Track } from '../../types';
 
 let failed = 0;
@@ -196,7 +218,9 @@ const fromS = (cam: readonly string[]): V3 => [0, 1, 2].map((j) => Number(BigInt
 
 // ── the fake host ────────────────────────────────────────────────────────────────────────────────
 type Call = { name: 'setView'; view: DzView } | { name: 'setParams'; patch: DzParams } | { name: 'estimateAtPoint'; cam: string[]; iters: number | undefined }
-    | { name: 'setOrientation' };
+    | { name: 'setOrientation' } | { name: 'freeDistance'; cam: string; iters: number } | { name: 'step' };
+/** What the rays of the smoothing lines meet: given the camera (from S) and a ray, how far. Null: nothing anywhere. */
+let world: ((cam: V3, dir: V3) => number) | null = null;
 const calls: Call[] = [];
 const viewSetListeners = new Set<() => void>();
 let depthHere = 1;
@@ -232,6 +256,14 @@ const host = {
         return Math.hypot(off[0], off[1], off[2]) < ball.radius ? 0 : 1;
     },
     on: (type: string, fn: () => void) => { if (type === 'viewSet') viewSetListeners.add(fn); return () => { viewSetListeners.delete(fn); }; },
+    // One ray from the camera as it stands (the smoothing lines): what `world` says, the camera and its count noted.
+    freeDistance: (dir: [number, number, number]) => {
+        calls.push({ name: 'freeDistance', cam: view.cam.join(), iters: view.iters });
+        const t = world ? world(fromS(view.cam), dir) : Infinity;
+        return Number.isFinite(t) ? { t, kind: 'hit' as const } : { t: 8, kind: 'open' as const };
+    },
+    // A frame of the renderer: the reader must never run one.
+    step: (): void => { calls.push({ name: 'step' }); },
 } as unknown as DeepZoomHost;
 
 /** The hands fly the camera to `depth` on the line, looking as given: no `setView`, a move told to the route. */
@@ -337,9 +369,19 @@ check(ROUTE_MAX_LEG_SECONDS === 180 && legFrames(deep, { depth: 1e-20, view: { .
 
 // ── payload ──────────────────────────────────────────────────────────────────────────────────────
 const payloads = depthKeys().map((k) => k.payload as RoutePayload);
-const stray = payloads.flatMap((p) => [...Object.keys(p).filter((key) => key !== 'view' && key !== 'heading'), ...Object.keys(p.view).filter((key) => !['cam', 'yaw', 'pitch', 'roll'].includes(key))]);
+const stray = payloads.flatMap((p) => [...Object.keys(p).filter((key) => key !== 'view' && key !== 'heading' && key !== 'exact'), ...Object.keys(p.view).filter((key) => !['cam', 'yaw', 'pitch', 'roll'].includes(key))]);
 check(payloads.length === 3 && stray.length === 0 && payloads.every((p) => p.view.cam.every((c) => typeof c === 'string')),
-    'payload: a key holds the camera and its heading, nothing else, and the position as strings', `stray keys: ${stray.join()}`);
+    'payload: a key holds the camera, its heading and the K mark, nothing else, and the position as strings', `stray keys: ${stray.join()}`);
+check(payloads.every((p) => p.exact === true) && routeKeys().every((k) => k.exact === true),
+    'payload: K, Key Cam and a row\'s replace each mark the keyframe they write exact (the K mark: `exact: true`)', JSON.stringify(payloads.map((p) => p.exact)));
+{
+    const older = JSON.parse(JSON.stringify(anim().sequence));
+    for (const k of older.tracks[ROUTE_TRACK].keyframes) delete k.payload.exact;
+    const was = JSON.stringify(anim().sequence);
+    anim().setSequence(older);
+    check(routeKeys().length === 3 && routeKeys().every((k) => !('exact' in k)), 'payload: a scene saved before the mark has none: every keyframe of it may be missed');
+    anim().setSequence(JSON.parse(was));
+}
 const wanted = [0, 300, 450.5, 600, 900, 1200].map((f) => JSON.stringify(routeViewAt(f)));
 const saved = JSON.stringify(anim().sequence);
 anim().setSequence(JSON.parse(saved));
@@ -1083,6 +1125,378 @@ ball = null;
     check(differ === 0,
         `engine: the key lookup is a binary search: the same values to the bit as the scan from the start it replaced (${evaluated} frames on ${tracks.length + 1} tracks - exponential, plain, an angle; keys sharing a frame; on a key, between, outside, NaN; keys out of order scanned as before); a clock of 2,033 keys a quarter frame at a time: ${searchMs.toFixed(0)} ms, the scan ${scanMs.toFixed(0)} ms`,
         `${differ} differ: ${worst}`);
+}
+
+// ── pace (2026-10-16, stage S1 of plans/deep-zoom-shell/SMOOTHING.md) ────────────────────────────
+// The Pace track: the path's clock is the depth track times it. A straight dive of four keyframes set with K.
+const paceTrack = (keyframes: Keyframe[]): void => useAnimationStore.setState((s) => ({ sequence: { ...s.sequence, tracks: { ...s.sequence.tracks, [ROUTE_PACE_TRACK]: { id: ROUTE_PACE_TRACK, type: 'float' as const, label: 'Pace', keyframes } } } }));
+const paceKeys = (): Keyframe[] => anim().sequence.tracks[ROUTE_PACE_TRACK]?.keyframes ?? [];
+const plain = (id: string, frame: number, value: number): Keyframe => ({ id, frame, value, interpolation: 'Linear', autoTangent: false, brokenTangents: false });
+/** The camera's place at every half frame of `[from, to]`, as strings. */
+const places = (from: number, to: number): string[] => { const out: string[] = []; for (let f = from; f <= to; f += 0.5) out.push((routeViewAt(f) as { cam: string[] }).cam.join()); return out; };
+{
+    anim().deleteAllTracks();
+    useAnimationStore.setState({ undoStack: [], redoStack: [] });
+    anim().setDuration(300);
+    host.setView({ ...host.getView(), cam: at(1), yaw: -1.2, pitch: 0.3, roll: 0, iters: countFor(1) });
+    depthHere = 1;
+    setKeyframe();
+    for (const [depth, yaw] of [[1e-4, -1.15], [1e-9, -1.1], [1e-12, -1.05]]) { flyTo(depth, { yaw, pitch: 0.25 }); setKeyframe(); }
+    const ks = routeKeys(), was = places(0, 720);
+    check(ks.map((k) => k.frame).join() === '0,240,540,720' && isLogTrack(ROUTE_PACE_TRACK), `pace: (four keyframes at frames ${ks.map((k) => k.frame).join(', ')}; the Pace track is a log track)`);
+    paceTrack([]);
+    const empty = places(0, 720);
+    paceTrack([plain('one-a', 0, 1), plain('one-b', 333, 1), plain('one-c', 720, 1)]);
+    check(empty.every((p, i) => p === was[i]) && places(0, 720).every((p, i) => p === was[i]),
+        'pace: with no Pace track, an empty one, or one at x1 throughout, the camera at every half frame is where it was, to the digit');
+    // A pace of x3 in the middle of the first leg and of x0.5 in the last.
+    const keyed = [plain('p0', 0, 1), plain('p1', 120, 3), plain('p2', 240, 1), plain('p3', 241, 1), plain('p4', 540, 1), plain('p5', 630, 0.5), plain('p6', 720, 1)];
+    paceTrack(keyed);
+    const depth = anim().sequence.tracks[ROUTE_TRACK], pace = anim().sequence.tracks[ROUTE_PACE_TRACK];
+    const engine = buildZoomPath(ks.map((k) => ({ time: k.frame, scale: k.depth * animationEngine.evaluateTrack(pace, k.frame), position: [BigInt(k.view.cam[0]), BigInt(k.view.cam[1]), BigInt(k.view.cam[2])] as const, heading: k.heading })),
+        { unit: ROUTE_UNIT, scaleAt: (f) => animationEngine.evaluateTrack(depth, f) * animationEngine.evaluateTrack(pace, f) });
+    let same = 0, all = 0, moved = 0;
+    for (let f = 0.5; f < 720; f += 0.5) {
+        if (ks.some((k) => k.frame === f)) continue;
+        all++;
+        const p = zoomPathPosition(engine, f), got = (routeViewAt(f) as { cam: string[] }).cam;
+        if (got.every((c, j) => c === String(p[j]))) same++;
+        moved = Math.max(moved, Math.abs(Math.log(Math.hypot(...fromS(got)) / Math.hypot(...fromS(was[2 * f].split(','))))));
+    }
+    check(same === all && moved > 0.05, `pace: the path's scale is the depth track times the Pace track: at every half frame the camera is the engine's own path with that scale, to the digit (${all} half frames; a pace of x3 and of x0.5 moves the camera by up to ${(Math.exp(moved) - 1).toFixed(2)} of its distance)`,
+        `${same} of ${all} the same`);
+
+    // A typed leg, then Even pace: the pace keys go with the keyframes, in proportion and not rounded.
+    setLegSeconds(ks[2].id, 5);
+    const typed = paceKeys().map((k) => k.frame).join();
+    check(typed === '0,120,240,240.5,390,480,570', 'pace: a typed leg takes the pace keys with the keyframes: those of its leg in proportion (not rounded: a clock\'s keys would meet), those after it by its frames',
+        typed);
+    retimeRoute(false);
+    check(paceKeys().map((k) => k.frame).join() === keyed.map((k) => k.frame).join() && routeKeys().map((k) => k.frame).join() === '0,240,540,720',
+        'pace: and Even pace takes them back with the keyframes, to where they were', paceKeys().map((k) => k.frame).join());
+    anim().undo();
+    anim().undo();
+    // Reverse: the Pace track mirrored, the camera where it was at every mirrored frame.
+    const before = Array.from({ length: 1441 }, (_, i) => routeViewAt(i / 2) as { cam: string[] });
+    reverseRoute();
+    let worstAt = 0;
+    before.forEach((v, i) => {
+        const b = routeViewAt(720 - i / 2) as { cam: string[] }, gap = [0, 1, 2].map((j) => Number(BigInt(b.cam[j]) - BigInt(v.cam[j])) / ROUTE_UNIT);
+        worstAt = Math.max(worstAt, Math.hypot(gap[0], gap[1], gap[2]) / Math.hypot(...fromS(v.cam)));
+    });
+    check(paceKeys().map((k) => k.frame).join() === keyed.map((k) => 720 - k.frame).reverse().join() && worstAt < 1e-9,
+        `pace: Reverse mirrors the Pace track: at every mirrored half frame the camera is where it was, within ${worstAt.toExponential(1)} of its distance`, `pace at ${paceKeys().map((k) => k.frame)}; worst ${worstAt}`);
+    anim().undo();
+    // A keyframe dragged on the timeline (which takes its own step first): its two legs' pace keys go with it, in proportion; the others stay.
+    anim().snapshot();
+    anim().updateKeyframes([{ trackId: ROUTE_TRACK, keyId: ks[2].id, patch: { frame: 500 } }]);
+    const nine = (xs: number[]): string => xs.map((x) => (+x.toFixed(9)).toString()).join();
+    check(nine(paceKeys().map((k) => k.frame)) === nine([0, 120, 240, 240 + 260 / 300, 500, 500 + 90 * 220 / 180, 720]) && countKeys().some((c) => c.frame === 500),
+        'pace: a keyframe dragged on the timeline takes the pace keys of its two legs with it, in proportion, as its iteration key; the others stay', nine(paceKeys().map((k) => k.frame)));
+    anim().undo();
+    const steps = anim().undoStack.length;
+    clearRoute();
+    check(!anim().sequence.tracks[ROUTE_PACE_TRACK] && anim().undoStack.length === steps + 1, 'pace: Clear route takes the Pace track, in its one step');
+    anim().undo();
+    check(paceKeys().length === keyed.length && routeKeys().length === 4, 'pace: (undone, it is back)');
+}
+
+// ── the pass's rules on the pure functions (deep-zoom/routeSmooth.ts) ────────────────────────────
+// A route of five keyframes, its picture's speed made up: a rush in the middle, and a jitter.
+{
+    const fps = 30, was = [0, 50, 130, 160, 260], n = 260;
+    const speed = Float64Array.from({ length: n }, (_, i) => 0.5 * (1 + 2 * Math.exp(-(((i - 140) / 12) ** 2))) * (1 + 0.1 * Math.sin(i * 2.1)));
+    const whole = paceChange(speed, { fps, strength: 1, from: 0, to: n, easeFrom: false, easeTo: false });
+    const flat = paceChange(new Float64Array(n).fill(0.4), { fps, strength: 1, from: 0, to: n, easeFrom: false, easeTo: false });
+    const played = Array.from(speed, (s, i) => s / Math.exp(whole[i]));
+    const spreadOf = (xs: number[]): number => { const s = [...xs].sort((x, y) => x - y); return s[Math.floor(0.95 * s.length)] / s[Math.floor(0.05 * s.length)]; };
+    check(flat.every((g) => Math.abs(g) < 1e-12) && spreadOf(played) < spreadOf(Array.from(speed)) / 1.5,
+        `smooth: the warp: a picture moving at one speed is left alone; one that rushes is played slower there (the speed as played, p95 over p5: x${spreadOf(Array.from(speed)).toFixed(2)} -> x${spreadOf(played).toFixed(2)})`);
+    // (The jitter of a frame stays: the warp follows the speed smoothed over 0.05 s. Without it, one even pace.)
+    const steady = speed.map((_, i) => 0.5 * (1 + 2 * Math.exp(-(((i - 140) / 12) ** 2))));
+    const even = paceChange(steady, { fps, strength: 1000, from: 0, to: n, easeFrom: false, easeTo: false });
+    const evenPlayed = Array.from(steady, (s, i) => s / Math.exp(even[i]));
+    check(spreadOf(evenPlayed) < 1.02 && spreadOf(Array.from(steady)) > 2.5, `smooth: a strength of the selection's length or more is one even pace (the speed as played within x${spreadOf(evenPlayed).toFixed(4)}, p95 over p5, where it was x${spreadOf(Array.from(steady)).toFixed(2)})`);
+    // A range: frames 50 to 160 (keyframes 2 to 4), the speed known only as far as `speedMargin` beyond it.
+    const margin = speedMargin(fps, 1), known = speed.map((s, i) => (i >= 50 - margin && i < 160 + margin ? s : NaN));
+    const ranged = paceChange(known, { fps, strength: 1, from: 50, to: 160, easeFrom: true, easeTo: true });
+    const ease = Math.min(30, 110 / 4);
+    const outside = ranged.every((g, i) => (i < 50 || i >= 160 ? g === 0 : true)) && Object.is(Math.abs(ranged[50]), 0) && Object.is(Math.abs(ranged[159]), 0);
+    const middle = Array.from({ length: 160 - 50 }, (_, j) => 50 + j).filter((i) => i - 50 >= ease && 159 - i >= ease);
+    check(outside && middle.length > 0 && middle.every((i) => ranged[i] === whole[i]) && Math.abs(ranged[50 + Math.round(ease / 2)] / whole[50 + Math.round(ease / 2)] - 0.5) < 0.1,
+        `smooth: a range: nothing outside it changes, nothing at its edges; inside, the whole route's own change to the bit (its speed read only ${margin} frames beyond), eased in over the strength but no more than a quarter of it (${ease.toFixed(1)} frames)`);
+    // The warp of keyframes 2 to 4, and the clock that keeps the camera's share of each leg.
+    const warp = warpRoute(ranged, was, 1, 3), delta = warp.now[3] - was[3];
+    check(warp.now.every((f, i) => Number.isInteger(f) && (i === 0 || f > warp.now[i - 1])) && warp.now[0] === 0 && warp.now[1] === 50 && warp.now[4] === was[4] + delta
+        && was.every((f, i) => warp.fwd(f) === warp.now[i]) && [3.3, 70.25, 140, 200.5].every((f) => Math.abs(warp.back(warp.fwd(f)).f - f) < 1e-9) && warp.back(20).f === 20 && warp.back(240).f === 240 - delta,
+        `smooth: keyframes on whole frames, rising; before the range where they were, after it later by its change (${delta} frames); old and new frames map both ways`, warp.now.join());
+    const key = (id: string, frame: number, value: number): Keyframe => ({ id, frame, value, interpolation: 'Bezier', autoTangent: true, brokenTangents: false });
+    const withHandles = (keys: Keyframe[]): Track => {
+        keys.forEach((k, i) => { const { l, r } = AnimationMath.calculateTangents(k, keys[i - 1], keys[i + 1], 'Auto', true); k.leftTangent = l; k.rightTangent = r; });
+        return { id: ROUTE_TRACK, type: 'float', label: '', keyframes: keys } as Track;
+    };
+    const depths = [1, 1e-3, 1e-5, 1e-6, 1e-9];
+    const oldDepth = withHandles(depths.map((d, i) => key(`d${i}`, was[i], d))), newDepth = withHandles(depths.map((d, i) => key(`d${i}`, warp.now[i], d)));
+    const oldPace = { id: ROUTE_PACE_TRACK, type: 'float', label: '', keyframes: [plain('q0', 0, 1), plain('q1', 100, 2), plain('q2', 200, 0.7), plain('q3', 260, 1)] } as Track;
+    const clockOld = (f: number): number => animationEngine.evaluateTrack(oldDepth, f) * animationEngine.evaluateTrack(oldPace, f);
+    const span = paceSpan(warp, 0, 4, clockOld, (t) => animationEngine.evaluateTrack(newDepth, t), 'x');
+    const newPace = { id: ROUTE_PACE_TRACK, type: 'float', label: '', keyframes: span } as Track;
+    const clockNew = (t: number): number => animationEngine.evaluateTrack(newDepth, t) * animationEngine.evaluateTrack(newPace, t);
+    /** The share of a leg's clock behind each point of it, by quarter frames. */
+    const share = (clockAt: (f: number) => number, a: number, b: number): ((f: number) => number) => {
+        const cum = [0];
+        for (let f = a; f < b - 1e-9; f += 0.25) cum.push(cum[cum.length - 1] + (clockAt(f) + 4 * clockAt(f + 0.125) + clockAt(f + 0.25)) / 24);
+        return (f) => { const x = (f - a) * 4, i = Math.min(cum.length - 2, Math.max(0, Math.floor(x))); return (cum[i] + (x - i) * (cum[i + 1] - cum[i])) / cum[cum.length - 1]; };
+    };
+    let worstShare = 0, worstSpeed = 0;
+    for (let j = 0; j < 4; j++) {
+        const sOld = share(clockOld, was[j], was[j + 1]), sNew = share(clockNew, warp.now[j], warp.now[j + 1]);
+        for (let t = warp.now[j]; t <= warp.now[j + 1]; t += 0.5) worstShare = Math.max(worstShare, Math.abs(sNew(t) - sOld(warp.back(t).f)));
+        for (let t = warp.now[j]; t <= warp.now[j + 1]; t++) { const { f, rate } = warp.back(t); worstSpeed = Math.max(worstSpeed, Math.abs(Math.log10(clockNew(t) / (clockOld(f) * rate)))); }
+    }
+    check(worstShare < 3e-3 && worstSpeed <= 0.0101 && warp.now.every((f) => span.some((k) => k.frame === f)),
+        `smooth: the clock: the new depth times the Pace track written keeps the camera's share of every leg as it was at the old frame shown (within ${worstShare.toExponential(1)}), the clock within ${worstSpeed.toFixed(4)} decades of the old one times the warp's rate; a pace key on every keyframe (${span.length} keys)`);
+    // The look through the same warp: what it showed at the old frame, within the recorder's own tolerance.
+    const look = { id: LOOK_TRACKS[0], type: 'float', label: '', keyframes: [plain('a', 10, 0), plain('b', 90, 0.4), plain('c', 150, -0.2), plain('d', 230, 0.3), plain('e', 250, 0.1)] } as Track;
+    const carried = { ...look, keyframes: carryLook(look, warp, was[1], was[3], fps, LOOK_FIT_TOLERANCE, 0, 'l') } as Track;
+    let lookOff = 0;
+    for (let t = 0; t <= 260 + delta; t++) lookOff = Math.max(lookOff, Math.abs(animationEngine.evaluateTrack(carried, t) - animationEngine.evaluateTrack(look, warp.back(t).f)));
+    check(lookOff <= LOOK_FIT_TOLERANCE * 1.01 && carried.keyframes.some((k) => k.id === 'a' && k.frame === 10) && carried.keyframes.some((k) => k.id === 'd' && k.frame === 230 + delta),
+        `smooth: the free look through the warp shows what it showed at the old frame, within ${degrees(lookOff)} at every frame; its keys before the range stay, those after move with the route`);
+}
+
+// ── read, smooth, pin, close (2026-10-16, stage S1 of plans/deep-zoom-shell/SMOOTHING.md) ────────
+// THE WORLD of these lines: a cone about the line, its apex at S, narrowing to a passage about 1e-7 from S - what
+// a wall pass is to the picture: the walls come close and the picture rushes. A ray from the camera (on the line,
+// `D` from S) meets the wall where s |d across| = (D + s d.BACK) w, w the cone's width (radius over distance).
+const coneWidth = (distance: number): number => 0.6 - 0.45 * Math.exp(-(((Math.log10(Math.max(1e-300, distance)) + 7) / 0.35) ** 2));
+const cone = (cam: V3, dir: V3): number => {
+    const D = cam[0] * BACK[0] + cam[1] * BACK[1] + cam[2] * BACK[2], along = dir[0] * BACK[0] + dir[1] * BACK[1] + dir[2] * BACK[2];
+    const sideways = Math.hypot(dir[0] - along * BACK[0], dir[1] - along * BACK[1], dir[2] - along * BACK[2]);
+    let s = 0;
+    for (let i = 0; i < 40; i++) { const w = coneWidth(D + s * along); s = (D * w) / (sideways - along * w); }
+    return s > 0 ? s : Infinity;
+};
+/** Looking down the line. */
+const downTheLine = { yaw: Math.atan2(INWARD[2], INWARD[0]), pitch: Math.asin(INWARD[1]) };
+/** Frames where a picture's speed strays over 25 % from its own 3 s average (the study's score: evalbuilt.mts). */
+const strays = (speed: ArrayLike<number>): number => {
+    const L = Array.from(speed, (x) => Math.log(Math.max(1e-4, x))), s = 1.5 * 30, R = Math.ceil(3 * s);
+    let n = 0;
+    for (let i = 0; i < L.length; i++) {
+        let a = 0, w = 0;
+        for (let j = -R; j <= R; j++) { const k = i + j; if (k < 0 || k >= L.length) continue; const g = Math.exp(-0.5 * (j / s) ** 2); a += g * L[k]; w += g; }
+        const r = Math.exp(L[i] - a / w);
+        if (r > 1.25 || r < 0.8) n++;
+    }
+    return n;
+};
+/** The change of a picture's speed across frame `t` (3 to 9 frames after over 3 to 9 before, geometric means): the study's edge measure. */
+const across = (speed: ArrayLike<number>, t: number): number => {
+    const g = (a: number, b: number): number => { let s = 0; for (let i = a; i < b; i++) s += Math.log(speed[i]); return s / (b - a); };
+    return Math.exp(g(t + 3, t + 9) - g(t - 9, t - 3));
+};
+/** The angle between two aims, degrees. */
+const aimsApart = (a: Look, b: Look): number => {
+    const p = routeQ(a), q = routeQ(b);
+    return 2 * Math.acos(Math.min(1, Math.abs(p[0] * q[0] + p[1] * q[1] + p[2] * q[2] + p[3] * q[3]))) * 180 / Math.PI;
+};
+/** Nine keyframes down the line from 1 to 1e-12, legs timed unevenly, aims that wobble; the 3rd and 7th with the K mark. */
+const SMOOTH_DEPTHS = [0, 2, 3.5, 5, 6.5, 7.5, 9, 10.5, 12].map((decades) => 10 ** -decades);
+const SMOOTH_FRAMES = [0, 140, 200, 330, 400, 470, 560, 680, 760];
+function smoothScene(): void {
+    anim().deleteAllTracks();
+    anim().setDuration(900);
+    const keys: Keyframe[] = SMOOTH_DEPTHS.map((d, i) => ({
+        id: `s${i}`, frame: SMOOTH_FRAMES[i], value: d, interpolation: 'Bezier', autoTangent: true, brokenTangents: false,
+        payload: { view: { cam: at(d), yaw: downTheLine.yaw + 0.05 * (i % 2 ? 1 : -1), pitch: downTheLine.pitch + 0.03 * ((i % 3) - 1) }, heading: [...INWARD], ...(i === 2 || i === 6 ? { exact: true } : {}) } as RoutePayload,
+    }));
+    keys.forEach((k, i) => { const { l, r } = AnimationMath.calculateTangents(k, keys[i - 1], keys[i + 1], 'Auto', true); k.leftTangent = l; k.rightTangent = r; });
+    const track = (id: string, label: string, keyframes: Keyframe[]) => ({ id, type: 'float' as const, label, keyframes });
+    useAnimationStore.setState((s) => ({ sequence: { ...s.sequence, tracks: {
+        [ROUTE_TRACK]: track(ROUTE_TRACK, 'Depth', keys),
+        [ROUTE_ITERATIONS_TRACK]: track(ROUTE_ITERATIONS_TRACK, 'Iterations', SMOOTH_DEPTHS.map((d, i) => plain(`c${i}`, SMOOTH_FRAMES[i], countFor(d)))),
+        [LOOK_TRACKS[0]]: track(LOOK_TRACKS[0], 'Look pan', [plain('l0', 0, 0), plain('l1', 250, 0.2), plain('l2', 520, -0.1), plain('l3', 760, 0.05), plain('l4', 800, 0.1)]),
+        'dzFormula.power': track('dzFormula.power', 'Power', [plain('w0', 300, 8), plain('w1', 850, 6)]),
+    } } }));
+    useAnimationStore.setState({ undoStack: [], redoStack: [] });
+    world = cone;
+}
+{
+    smoothScene();
+    scrubRouteTo(400);
+    const stood = host.getView(), drives = routeDrives(), heading = JSON.stringify(headingNow()), ks = routeKeys(), n = ks[ks.length - 1].frame - ks[0].frame;
+    calls.length = 0;
+    const read = await routePictureSpeed('route', 3);
+    const rays = calls.filter((c): c is Extract<Call, { name: 'freeDistance' }> => c.name === 'freeDistance');
+    const readAt = Array.from({ length: n }, (_, i) => i).filter((i) => i % 3 === 0 || i === n - 1), own = readAt.map((i) => routeViewAt(ks[0].frame + i) as RouteKey['view']);
+    const placed = setViews().filter((v) => !sameCamera(v, stood));
+    check(!!read && read.speed.length === n && rays.length === 45 * readAt.length && placed.length === readAt.length && placed.every((v, j) => sameCamera(v, own[j]))
+        && own.some((v, j) => !sameCamera(v, routeShownAt(readAt[j]) as RouteKey['view'])) && !calls.some((c) => c.name === 'step'),
+        `read: every third frame of the route and its last (${readAt.length} of ${n}), 45 rays a frame, the camera put on the route's OWN view there (not the one the free look shows); no frame of the renderer run`,
+        `${rays.length} rays, ${placed.length} views placed, ${calls.filter((c) => c.name === 'step').length} steps`);
+    const iters = anim().sequence.tracks[ROUTE_ITERATIONS_TRACK];
+    check(rays.every((c, j) => c.iters === Math.trunc(animationEngine.evaluateTrack(iters, ks[0].frame + readAt[Math.floor(j / 45)])) && c.cam === own[Math.floor(j / 45)].cam.join()),
+        'read: each frame\'s rays asked from its place with the iteration count keyed there');
+    check(sameCamera(host.getView(), stood) && host.getView().iters === stood.iters && routeDrives() === drives && JSON.stringify(headingNow()) === heading && sameCamera(setViews()[setViews().length - 1], stood),
+        'read: and the camera is back on the very view it had, the route holding it as before, the heading untouched: nobody saw it move');
+    // The speed against the rule worked out here: the camera's step off the route, its turn from the route's aims, each ray's rate.
+    const fps = anim().fps, i = 300, a = routeViewAt(ks[0].frame + i) as Look & { cam: string[] }, b = routeViewAt(ks[0].frame + i + 1) as Look & { cam: string[] };
+    const V = [0, 1, 2].map((j) => (Number(BigInt(b.cam[j]) - BigInt(a.cam[j])) / ROUTE_UNIT) * fps) as V3;
+    const qa = routeQ(a), d0 = mul(conj(qa), routeQ(b)), d = d0[3] < 0 ? d0.map((x) => -x) as Q : d0, sn = Math.hypot(d[0], d[1], d[2]), k = sn > 0 ? (2 * Math.atan2(sn, d[3]) * fps) / sn : 0;
+    const W = turnBy(qa, [d[0] * k, d[1] * k, d[2] * k]), fov = Math.tan(0.55), rates: number[] = [];
+    for (const v of [-0.4, -0.2, 0, 0.2, 0.4]) for (const u of [-0.8, -0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8]) {
+        const raw = turnBy(qa, [fov * u, fov * v, -1]), l = Math.hypot(...raw), dir = raw.map((x) => x / l) as V3;
+        const r = cone(fromS(a.cam), dir), vd = V[0] * dir[0] + V[1] * dir[1] + V[2] * dir[2];
+        const tr = [0, 1, 2].map((j) => -(V[j] - vd * dir[j]) / r), wx = [W[1] * dir[2] - W[2] * dir[1], W[2] * dir[0] - W[0] * dir[2], W[0] * dir[1] - W[1] * dir[0]];
+        rates.push(Math.hypot(tr[0] - wx[0], tr[1] - wx[1], tr[2] - wx[2]) / fov);
+    }
+    const middle = rates.sort((x, y) => x - y)[22], got = read?.speed[i] ?? NaN;
+    check(Math.abs(got / middle - 1) < 1e-6, `read: the picture's speed is the middle of the 45 rays' rates, |-(V - (V.d) d) / r - W x d| over the field of view, as worked out here: ${got.toFixed(4)} picture heights a second at frame ${i} (by hand ${middle.toFixed(4)})`);
+    // While a render runs nothing is read; a route that changes under the reading stops it, the camera where it was.
+    setRouteRendering(true);
+    const whileRendering = await routePictureSpeed('route', 3);
+    setRouteRendering(false);
+    world = (cam, dir) => { const t1 = performance.now(); while (performance.now() - t1 < 0.05) { /* a march at depth */ } return cone(cam, dir); };
+    let tasks = 0;
+    const edited = await routePictureSpeed('route', 1, () => { if (++tasks === 1) anim().updateKeyframes([{ trackId: ROUTE_ITERATIONS_TRACK, keyId: 'c1', patch: { value: 61 } }]); });
+    world = cone;
+    check(whileRendering === null && edited === null && tasks === 1 && sameCamera(host.getView(), stood),
+        'read: nothing while the route is rendered; a route changed between two of its tasks stops it (null), the camera back where it was', `rendering ${!!whileRendering}, edited ${!!edited}, tasks ${tasks}`);
+}
+{
+    // THE PASS, over the whole route: strength 4 s, a miss of 5 degrees, the look carried.
+    smoothScene();
+    const fps = anim().fps, before = await routePictureSpeed('route', 1), ks = routeKeys(), old = JSON.stringify(anim().sequence);
+    const turnsBefore = Array.from({ length: 760 }, (_, f) => aimsApart(routeViewAt(f) as Look, routeViewAt(f + 1) as Look) * fps);
+    const steps = anim().undoStack.length, t0 = performance.now();
+    const done = await smoothRoute({ strength: 4, miss: 5 });
+    const ms = performance.now() - t0, now = routeKeys(), after = await routePictureSpeed('route', 1);
+    const strayBefore = before ? strays(before.speed) : -1, strayAfter = after ? strays(after.speed) : -1;
+    check(!!done && anim().undoStack.length === steps + 1 && strayBefore > 40 && strayAfter * 4 < strayBefore,
+        `smooth: ONE undo step; the middle of the picture strays over 25 % from its own 3 s average in ${strayAfter} frames, ${strayBefore} before (the passage at 1e-7); ${done?.seconds.map((s) => s.toFixed(1)).join(' s -> ')} s, in ${ms.toFixed(0)} ms`,
+        `${anim().undoStack.length - steps} steps, strays ${strayBefore} -> ${strayAfter}`);
+    check(now.length === ks.length && now.every((k, i) => k.id === ks[i].id && sameStrings(k.view.cam, ks[i].view.cam) && sameWay(k.heading, ks[i].heading as number[]) && k.depth === ks[i].depth),
+        'smooth: positions never move: every keyframe keeps its camera to the digit, its heading and its depth reading');
+    const missed = now.map((k, i) => aimsApart(k.view, ks[i].view));
+    check(now.every((k, i) => ([0, 2, 6, 8].includes(i) ? JSON.stringify(k.view) === JSON.stringify(ks[i].view) : missed[i] <= 5 + 1e-9)) && missed.filter((m) => m > 0.5).length >= 3
+        && done?.aimsMoved.every((m, i) => Math.abs(m - missed[i]) < 1e-4),
+        `smooth: the K keyframes and the two ends keep their aims to the digit; the others move by the miss at most (${missed.map((m) => m.toFixed(2)).join(', ')} degrees)`, `reported ${done?.aimsMoved.map((m) => m.toFixed(6)).join(', ')}; measured ${missed.map((m) => m.toFixed(6)).join(', ')}`);
+    const turnsAfter = Array.from({ length: now[8].frame }, (_, f) => aimsApart(routeViewAt(f) as Look, routeViewAt(f + 1) as Look) * fps);
+    const change = (xs: number[]): number => { const c = xs.slice(1).map((x, j) => Math.abs(x - xs[j]) * fps).sort((x, y) => x - y); return c[Math.floor(0.95 * c.length)]; };
+    check(change(turnsAfter) < change(turnsBefore), `smooth: the turn changes less: its change of rate, p95, ${change(turnsBefore).toFixed(1)} -> ${change(turnsAfter).toFixed(1)} degrees a second a second`);
+    const paced = paceKeys();
+    check(now.every((k, i) => Number.isInteger(k.frame) && (i === 0 || k.frame > now[i - 1].frame)) && now[0].frame === 0 && now.every((k) => paced.some((p) => p.frame === k.frame))
+        && countKeys().every((c, i) => c.frame === now[i].frame && c.value === countFor(SMOOTH_DEPTHS[i])) && done?.paceKeys === paced.length,
+        `smooth: keyframes on whole frames, rising, the first where it was; a pace key on each (${paced.length} keys); each iteration key on its keyframe`, now.map((k) => k.frame).join());
+    const delta = now[8].frame - ks[8].frame, lookNow = anim().sequence.tracks[LOOK_TRACKS[0]], power = anim().sequence.tracks['dzFormula.power'].keyframes;
+    const lookOld = { id: LOOK_TRACKS[0], type: 'float', label: '', keyframes: JSON.parse(old).tracks[LOOK_TRACKS[0]].keyframes } as Track;
+    const lookOff = Math.max(...now.map((k, j) => Math.abs(animationEngine.evaluateTrack(lookNow, k.frame) - animationEngine.evaluateTrack(lookOld, ks[j].frame))));
+    check(lookOff <= LOOK_FIT_TOLERANCE * 1.001 && lookNow.keyframes.some((k) => k.frame === 800 + delta && k.value === 0.1) && power.map((k) => k.frame).join() === `300,${850 + delta}`,
+        `smooth: the free look carried with the route (at every keyframe within ${degrees(lookOff)} of what it was there), its key past the route later by the route's change (${delta} frames); after the route a key of another track too, one inside it where it was`,
+        `look off ${lookOff}; look keys ${lookNow.keyframes.map((k) => k.frame)}; power ${power.map((k) => k.frame)}`);
+    let offLine = 0, backwards = 0, prev = Infinity;
+    for (let f = 0; f <= now[8].frame; f += 0.5) {
+        const p = fromS((routeViewAt(f) as { cam: string[] }).cam), D = p[0] * BACK[0] + p[1] * BACK[1] + p[2] * BACK[2];
+        offLine = Math.max(offLine, Math.hypot(p[0] - D * BACK[0], p[1] - D * BACK[1], p[2] - D * BACK[2]) / D);
+        if (D > prev) backwards++;
+        prev = D;
+    }
+    check(offLine < 1e-9 && backwards === 0, `smooth: the camera keeps to its path: on the line at every half frame (within ${offLine.toExponential(1)} of its distance), never backwards`, `${backwards} steps back`);
+    check(done?.close.length === 0 && closeKeyframes().length === 0, 'smooth: (no leg under half a second after it)');
+    anim().undo();
+    check(JSON.stringify(anim().sequence) === old, 'smooth: undone, the route is the one it was, to the digit');
+
+    // EVEN: a strength of the route's length or more is one pace.
+    const even = await smoothRoute({ strength: 1000, miss: null });
+    const evenSpeed = await routePictureSpeed('route', 1);
+    const spreadOf = (xs: ArrayLike<number> | undefined): number => { const s = Array.from(xs ?? [1, 9]).slice(30, -30).sort((x, y) => x - y); return s[Math.floor(0.95 * s.length)] / s[Math.floor(0.05 * s.length)]; };
+    const spread = spreadOf(evenSpeed?.speed), spreadBefore = spreadOf(before?.speed);
+    check(!!even && spread < 1.15 && spreadBefore > 2.5 && even.aimsMoved.every((m) => m === 0) && routeKeys().every((k, j) => JSON.stringify(k.view) === JSON.stringify(ks[j].view)),
+        `smooth: a strength of the route's length or more is one even pace (the middle of the picture as played within x${spread.toFixed(3)}, p95 over p5 a second from each end, where it was x${spreadBefore.toFixed(2)}: what is left is the path's own, its keys' tangents mixing their legs by their lengths in time); with no miss every aim stays to the digit`);
+    anim().undo();
+
+    // A RANGE: keyframes 4 to 6 (the passage), strength 2 s.
+    const head = places(0, ks[1].frame), tail = places(ks[7].frame, ks[8].frame), sides = [...places(ks[1].frame, ks[2].frame), ...places(ks[6].frame, ks[7].frame)];
+    const range = await smoothRoute({ strength: 2, miss: 5, range: [ks[3].id, ks[5].id] });
+    const inRange = routeKeys(), rangeSpeed = await routePictureSpeed('route', 1), d = inRange[5].frame - ks[5].frame;
+    const sidesNow = [...places(ks[1].frame, ks[2].frame), ...places(ks[6].frame + d, ks[7].frame + d)];
+    const offBy = (was: string[], now: string[]): number => Math.max(...was.map((p, j) => { const x = p.split(','), y = now[j].split(','), g = [0, 1, 2].map((c) => Number(BigInt(y[c]) - BigInt(x[c])) / ROUTE_UNIT); return Math.hypot(...g) / Math.hypot(...fromS(x)); }));
+    const sideOff = offBy(sides, sidesNow), tailOff = offBy(tail, places(ks[7].frame + d, ks[8].frame + d));
+    check(!!range && inRange.every((k, j) => (j <= 3 ? k.frame === ks[j].frame : j >= 5 ? k.frame === ks[j].frame + d : true))
+        && head.every((p, j) => p === places(0, ks[1].frame)[j]) && tailOff < 1e-12 && sideOff < 1e-3
+        && JSON.stringify(inRange.slice(0, 4).map((k) => k.view)) === JSON.stringify(ks.slice(0, 4).map((k) => k.view)) && JSON.stringify(inRange.slice(5).map((k) => k.view)) === JSON.stringify(ks.slice(5).map((k) => k.view)),
+        `smooth: a range (keyframes 4 to 6): nothing before it is retimed, everything after it later by its change of length (${d} frames), the aims outside it and at its ends kept; the camera before keyframe 2 to the digit, after keyframe 8 within ${tailOff.toExponential(1)} of its distance (a leg played later is integrated at other frames), on the two legs beside the range within ${sideOff.toExponential(1)}`,
+        JSON.stringify({ frames: inRange.map((k) => k.frame), was: ks.map((k) => k.frame), tailOff, sideOff }));
+    const lookAfter = anim().sequence.tracks[LOOK_TRACKS[0]].keyframes, powerAfter = anim().sequence.tracks['dzFormula.power'].keyframes;
+    check(countKeys().every((c, j) => c.frame === inRange[j].frame) && lookAfter.some((k) => k.frame === 800 + d && k.value === 0.1) && lookAfter.some((k) => k.frame === 250 && k.value === 0.2)
+        && powerAfter.map((k) => k.frame).join() === `300,${850 + d}`,
+        'smooth: after a range the iteration keys, the free look and the keys of other tracks move with it; before it they stay as they were');
+    const edges = before && rangeSpeed ? [across(before.speed, ks[3].frame), across(rangeSpeed.speed, inRange[3].frame), across(before.speed, ks[5].frame), across(rangeSpeed.speed, inRange[5].frame)] : [0, 1, 0, 1];
+    check(Math.abs(Math.log(edges[1] / edges[0])) < Math.log(1.1) && Math.abs(Math.log(edges[3] / edges[2])) < Math.log(1.1),
+        `smooth: a range crosses its edges as the route did before it (the change of the picture's speed across each: x${edges[1].toFixed(2)} / x${edges[3].toFixed(2)}, before the pass x${edges[0].toFixed(2)} / x${edges[2].toFixed(2)})`);
+    anim().undo();
+
+    // The look smoothed: eased to the hand's own values at the ends of what is resampled.
+    await smoothRoute({ strength: 4, miss: 5, look: 0.5 });
+    const lookSmoothed = anim().sequence.tracks[LOOK_TRACKS[0]];
+    check(Math.abs(animationEngine.evaluateTrack(lookSmoothed, 0)) <= LOOK_FIT_TOLERANCE && Math.abs(animationEngine.evaluateTrack(lookSmoothed, routeKeys()[8].frame) - 0.05) <= LOOK_FIT_TOLERANCE,
+        'smooth: the free look smoothed when asked, and at both ends of the route its own values still');
+    anim().undo();
+
+    // While the route renders, and with a range the wrong way round: nothing.
+    const held = anim().undoStack.length;
+    setRouteRendering(true);
+    const rendering = await smoothRoute({ strength: 4, miss: 5 });
+    setRouteRendering(false);
+    const backwardsRange = await smoothRoute({ strength: 4, range: [ks[5].id, ks[3].id] });
+    check(rendering === null && backwardsRange === null && anim().undoStack.length === held && JSON.stringify(anim().sequence) === old,
+        'smooth: while the route is rendered, or given a range the wrong way round, it does nothing and leaves no step');
+
+    // PIN: the K mark set and taken by hand.
+    const loose = ks[3].id, stepsPin = anim().undoStack.length;
+    const pinned = pinKeyframe(loose), pinnedAgain = pinKeyframe(loose), kept = routeKeys()[3];
+    check(pinned && !pinnedAgain && kept.exact === true && JSON.stringify(kept.view) === JSON.stringify(ks[3].view) && anim().undoStack.length === stepsPin + 1,
+        'pin: a keyframe pinned has the K mark, its view untouched, in one undo step; pinned again, nothing and no step');
+    const unpinned = unpinKeyframe(loose);
+    setRouteRendering(true);
+    const whileRendered = pinKeyframe(loose);
+    setRouteRendering(false);
+    check(unpinned && !('exact' in routeKeys()[3]) && !('exact' in (depthKeys()[3].payload as RoutePayload)) && !whileRendered && anim().undoStack.length === stepsPin + 2,
+        'pin: let go, the mark is gone from its payload, in one step; nothing while the route is rendered');
+}
+{
+    // CLOSE KEYFRAMES: five keyframes off the line, a leg of nine frames.
+    const off = (depth: number, side: V3): [string, string, string] => [0, 1, 2].map((j) => String(S[j] + BigInt(Math.round(depth * (BACK[j] + side[j]) * 2 ** 256)))) as [string, string, string];
+    const spots: Array<[number, V3, number]> = [[1, [0, 0, 0], 0], [1e-2, [0.3, -0.2, 0.1], 90], [1e-3, [-0.4, 0.3, 0.2], 180], [1.1e-3, [0.1, -0.5, 0.3], 189], [1e-5, [0, 0.1, -0.1], 280]];
+    anim().deleteAllTracks();
+    const keys: Keyframe[] = spots.map(([d, side, frame], i) => ({ id: `m${i}`, frame, value: d, interpolation: 'Bezier', autoTangent: true, brokenTangents: false,
+        payload: { view: { cam: off(d, side), yaw: downTheLine.yaw, pitch: downTheLine.pitch } } as RoutePayload }));
+    keys.forEach((k, i) => { const { l, r } = AnimationMath.calculateTangents(k, keys[i - 1], keys[i + 1], 'Auto', true); k.leftTangent = l; k.rightTangent = r; });
+    useAnimationStore.setState((s) => ({ sequence: { ...s.sequence, tracks: { [ROUTE_TRACK]: { id: ROUTE_TRACK, type: 'float' as const, label: 'Depth', keyframes: keys },
+        [ROUTE_ITERATIONS_TRACK]: { id: ROUTE_ITERATIONS_TRACK, type: 'float' as const, label: 'Iterations', keyframes: spots.map(([d, , f], i) => plain(`n${i}`, f, countFor(d))) } } } }));
+    useAnimationStore.setState({ undoStack: [], redoStack: [] });
+    check(closeKeyframes().join() === 'm3', 'close: a leg under half a second is listed, by the keyframe it arrives at', closeKeyframes().join());
+    // What dropping each of the two would cost, measured here: how far the route without it passes from where it stood, in its depths.
+    const passes = (j: number): number => {
+        const k = routeKeys()[j], span = routeKeys()[j + 1].frame - routeKeys()[j - 1].frame;
+        deleteKeyframes([k.id]);
+        let best = Infinity;
+        for (let f = k.frame - span; f <= k.frame + span; f += span / 400) {
+            const p = (routeViewAt(f) as { cam: string[] }).cam, gap = [0, 1, 2].map((c) => Number(BigInt(p[c]) - BigInt(k.view.cam[c])) / ROUTE_UNIT);
+            best = Math.min(best, Math.hypot(gap[0], gap[1], gap[2]) / k.depth);
+        }
+        anim().undo();
+        return best;
+    };
+    const costs = [passes(2), passes(3)], cheaper = costs[0] <= costs[1] ? 'm2' : 'm3', other = cheaper === 'm2' ? 'm3' : 'm2';
+    const steps = anim().undoStack.length, merged = mergeCloseKeyframes();
+    check(merged.join() === cheaper && routeKeys().length === 4 && anim().undoStack.length === steps + 1 && countKeys().length === 4 && closeKeyframes().length === 0,
+        `close: a merge drops the keyframe whose removal moves the path least (${cheaper}: ${Math.min(...costs).toFixed(3)} depths, against ${Math.max(...costs).toFixed(3)}), with its iteration key, in one undo step`,
+        `merged ${merged}, steps ${anim().undoStack.length - steps}, costs ${costs}`);
+    anim().undo();
+    pinKeyframe(cheaper);
+    check(mergeCloseKeyframes().join() === other, 'close: a keyframe with the K mark is never dropped: the other one goes');
 }
 
 stopSync();
