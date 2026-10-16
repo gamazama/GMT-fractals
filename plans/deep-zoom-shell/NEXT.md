@@ -302,8 +302,7 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
   scratch tools of `ROUTES.md` R7a (`debug/scratch/r7/shader-diff.mjs <commit>`, `pictures.mts`).
   Parity is retired (ADR-0137).
 - No new smoke script or step unless he asks (he declined one for the formula switch, 2026-10-10).
-- Rebuild the context map (`npm run context:map`) as the last thing before staging: a file added after
-  it makes `context:check` fail.
+- The context map is a git-ignored cache since 2026-10-16: nothing to rebuild or commit before staging.
 - Agents: one builder at a time, continued with a message rather than replaced. The Mandelbox took one
   agent three runs and about 1.46 million tokens.
 - His standing worry is the size of the codebase: report lines added, code against comment, when a

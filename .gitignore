@@ -126,3 +126,8 @@ public/palette/credits.elvensword.*
 !.claude/skills/
 !.claude/hooks/
 !.claude/settings.json
+
+# Context map: a local cache, rebuilt by ensureFreshMap() when stale (plans/context-protocol/scripts/freshMap.mjs)
+plans/context-protocol/context-map.json
+plans/context-protocol/context-report.md
+plans/context-protocol/symbol-index.json

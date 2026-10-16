@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 // build-context-map.mjs
-// Walk every git-tracked file in dev/, classify it (tier / context-class /
-// load-policy), estimate its token cost, and emit:
+// Walk every tracked or untracked-not-ignored file, classify it (tier /
+// context-class / load-policy), estimate its token cost, and emit:
 //   - plans/context-protocol/context-map.json   (machine-readable, full detail)
 //   - plans/context-protocol/context-report.md  (human summary)
+// Both are git-ignored local caches. Readers call ensureFreshMap() (freshMap.mjs),
+// which runs this script when the map is stale, so running it by hand is optional.
 //
 // This is the measurement half of the context-loading protocol. The policy
 // half lives in docs/policy/context-loading-protocol.md.
 //
-// Run:  npm run context:map   (from dev/)
+// Run:  npm run context:map
 // Zero npm deps; uses git + node fs only.
 
-import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,7 @@ import {
   classifyFile, LOAD_POLICY, CONTEXT_CLASS, isLoadable, isOrientation, isContextWorthy,
 } from './classify.mjs';
 import { reachableByApp, APP_ENTRYPOINTS } from './reachability.mjs';
+import { listFiles } from './freshMap.mjs';
 
 // Tiers whose on-demand source is "app code" — eligible for dead-context flagging.
 const APP_CODE_TIERS = new Set([
@@ -39,13 +41,6 @@ const MD_OUT = join(OUT_DIR, 'context-report.md');
 const HEAVY_TOKEN_THRESHOLD = 4000;
 const MAX_READ_BYTES = 2 * 1024 * 1024; // don't slurp anything bigger for counting
 
-function gitLsFiles() {
-  const out = execSync('git ls-files', {
-    cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-  });
-  return out.split(/\r?\n/).filter(Boolean);
-}
-
 function countLines(text) {
   if (!text) return 0;
   let n = 0;
@@ -62,7 +57,7 @@ function main() {
   const argv = process.argv.slice(2);
   const quiet = argv.includes('--quiet');
 
-  const files = gitLsFiles();
+  const files = listFiles();
   const tracked = new Set(files);
 
   // Import-graph reachability: which app entrypoints reach each file.

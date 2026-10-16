@@ -109,10 +109,8 @@ single 20k-token file can blow a focused budget for no marginal understanding.
 
 ## Using the scripts
 
-From `dev/`:
-
 ```bash
-npm run context:map                       # rebuild the cost map + report
+npm run context:map                       # force a rebuild (readers rebuild a stale map themselves)
 npm run context:cost -- <target>          # layered load plan
 npm run context:cost -- --list            # list profiles, apps, subsystems, tiers
 npm run context:cost -- <target> --budget 60000   # cut the plan at 60k tokens
@@ -120,7 +118,7 @@ npm run context:cost -- <target> --pack   # compact ordered reading list (sliced
 npm run context:cost -- --profile <name>  # canned task bundle → packed list
 npm run context:cost -- <target> --json   # machine-readable plan
 npm run context:symbols                   # symbol-index.json for heavy files
-npm run context:check [-- --strict]       # CI gate: staleness / classification
+npm run context:check [-- --strict]       # health report: classification / coverage
 npm run context:cost -- deps <file>       # in-repo files <file> imports
 npm run context:cost -- dependents <file> # in-repo files that import <file>
 npm run context:cost -- dependents <file> --transitive --json
@@ -193,6 +191,13 @@ full index at [`symbol-index.json`](../../plans/context-protocol/symbol-index.js
 
 ### Honesty gate (Phase 5)
 
+> **Update 2026-10-16 (the map is a local cache):** `context-map.json`, `context-report.md` and
+> `symbol-index.json` are git-ignored and no longer committed. Every reader loads the map through
+> `ensureFreshMap()` (`plans/context-protocol/scripts/freshMap.mjs`), which rebuilds it (~4 s) when it is
+> missing, the file set changed, or a file is newer than the map. The file set now includes untracked
+> files git does not ignore. `context:check` no longer gates staleness; it reports classification,
+> coverage and dead context on a current map. The text below describes the earlier committed map.
+
 `context:check` fails CI when the committed map's file set drifts from
 `git ls-files`, warns when the map predates the latest commit or when a file
 falls through to `fallback` classification (an unhandled type — add a rule in
@@ -238,6 +243,13 @@ The protocol keeps most tasks within one or two subsystem bundles of the first
 number — a `--profile` reading list for a typical feature task is ~13k.
 
 ## Maintenance
+
+> **Update 2026-10-16 (the map is a local cache):** `context-map.json`, `context-report.md` and
+> `symbol-index.json` are git-ignored and no longer committed. Every reader loads the map through
+> `ensureFreshMap()` (`plans/context-protocol/scripts/freshMap.mjs`), which rebuilds it (~4 s) when it is
+> missing, the file set changed, or a file is newer than the map. The file set now includes untracked
+> files git does not ignore. `context:check` no longer gates staleness; it reports classification,
+> coverage and dead context on a current map. The first rule below no longer needs a manual step.
 
 **Rule:** regenerate `context:map` after material structure changes (new tiers,
 new doc trees, large file moves). The map is committed so plans are reproducible

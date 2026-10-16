@@ -86,7 +86,7 @@ A SessionStart hook prints the checkout's live state; trust it over notes.
 - `npm run smoke:interact` — state flow + preset round-trip (demo feature).
 - `npm run smoke:chrome` — clicks every top-bar control and menu item in every app; the only smoke that opens panels.
 - `npm run smoke:screenshot` — a capture with no assertion → `debug/scratch/engine-boot.png`.
-- `npm run context:cost -- <subsystem|tier|path|app:name>` — if unsure which files matter for an area. `context:map` rebuilds the map (tracked files only), `context:check` gates staleness.
+- `npm run context:cost -- <subsystem|tier|path|app:name>` — if unsure which files matter for an area. The map is a git-ignored cache it rebuilds when stale; never commit it.
 
 ### How work is closed
 - The default for a change is no new smoke, test or step: try it once and say what it showed. Write one only for a seam nothing cheaper sees (a real GPU, a panel opening, storage across a reload, the boot), on new ground, whose break nobody would notice at once.

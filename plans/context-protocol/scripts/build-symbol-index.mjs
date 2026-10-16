@@ -5,27 +5,20 @@
 // spans. A browsable companion to the on-the-fly slice guide in context-cost;
 // lets a reader target line ranges in big files instead of loading them whole.
 //
-// Run:  npm run context:symbols   (reads context-map.json; run context:map first)
+// Run:  npm run context:symbols   (output is a git-ignored local file, like the map)
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, sep } from 'node:path';
 
 import { extractSymbols } from './symbols.mjs';
+import { ensureFreshMap, REPO_ROOT } from './freshMap.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(__dirname, '..', '..', '..');
-const MAP_PATH = join(REPO_ROOT, 'plans', 'context-protocol', 'context-map.json');
 const OUT = join(REPO_ROOT, 'plans', 'context-protocol', 'symbol-index.json');
 
 const SOURCE_RE = /\.(ts|tsx|js|jsx|mjs|mts)$/;
 
 function main() {
-  if (!existsSync(MAP_PATH)) {
-    process.stderr.write('context-map.json not found. Run: npm run context:map\n');
-    process.exit(1);
-  }
-  const map = JSON.parse(readFileSync(MAP_PATH, 'utf8'));
+  const map = ensureFreshMap();
   const targets = map.entries.filter(
     (e) => e.heavy && e.contextClass === 'source' && SOURCE_RE.test(e.path),
   );

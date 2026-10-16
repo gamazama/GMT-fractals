@@ -11,7 +11,7 @@
 // The point: most questions are answered by Layer 1 for a fraction of Layer 2's
 // cost. The plan makes that trade-off explicit.
 //
-// Usage (from dev/):
+// Usage:
 //   npm run context:cost -- <target> [--budget N] [--full]
 //   npm run context:cost -- --list
 //   npm run context:cost -- deps <file> [--transitive] [--json]
@@ -31,8 +31,9 @@
 //   --full     include source files even when a cheaper doc exists.
 //   --json     emit the plan as JSON instead of markdown.
 //
-// Reads plans/context-protocol/context-map.json (run `npm run context:map`
-// first). Reads plans/context-protocol/subsystems.json for curated bundles.
+// Reads plans/context-protocol/context-map.json through ensureFreshMap(), which
+// rebuilds the git-ignored map first when it is stale (freshMap.mjs). Reads
+// plans/context-protocol/subsystems.json for curated bundles.
 
 import { execSync } from 'node:child_process';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -43,6 +44,7 @@ import { fmtTokens } from './tokens.mjs';
 import { sliceGuide } from './symbols.mjs';
 import { buildEdges, closure } from './edges.mjs';
 import { tierOf } from './classify.mjs';
+import { ensureFreshMap } from './freshMap.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
@@ -56,18 +58,7 @@ const KNOWN_TIERS = new Set([
 ]);
 
 function loadMap() {
-  if (!existsSync(MAP_PATH)) {
-    fail(`context-map.json not found. Run:\n  npm run context:map`);
-  }
-  const map = JSON.parse(readFileSync(MAP_PATH, 'utf8'));
-  // Staleness hint: compare generated_at against latest git commit time.
-  try {
-    const lastCommit = execSync('git log -1 --format=%cI', { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
-    if (lastCommit && map.generated_at && lastCommit > map.generated_at) {
-      process.stderr.write(`note: context-map.json predates the latest commit; consider \`npm run context:map\`.\n`);
-    }
-  } catch { /* not fatal */ }
-  return map;
+  return ensureFreshMap();
 }
 
 function loadSubsystems() {
@@ -509,9 +500,9 @@ function resolveFileArg(arg, trackedPaths) {
 }
 
 // Live tracked set from git — so an edge query always sees THIS session's
-// new/edited files. It must NOT inherit the committed map's staleness: a
-// blast-radius tool that silently under-reports is worse than grep, which
-// always sees the working tree. The map is consulted only for token/tier annotation.
+// new/edited files. It must NOT depend on the map being current: a blast-radius
+// tool that silently under-reports is worse than grep, which always sees the
+// working tree. The cached map is read as-is (no rebuild) for token/tier annotation.
 function liveTrackedPaths() {
   const run = (cmd) => execSync(cmd, { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const tracked = run('git ls-files');
@@ -597,8 +588,7 @@ function main() {
   const subsystems = loadSubsystems();
   const profiles = loadProfiles();
   if (opts.list) {
-    const map = existsSync(MAP_PATH) ? JSON.parse(readFileSync(MAP_PATH, 'utf8')) : null;
-    process.stdout.write(listSubsystems(subsystems, map, profiles) + '\n');
+    process.stdout.write(listSubsystems(subsystems, loadMap(), profiles) + '\n');
     return;
   }
 

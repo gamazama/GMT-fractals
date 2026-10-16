@@ -13,31 +13,33 @@ This folder is the measurement half.
 ```
 plans/context-protocol/
 ├── README.md                 ← you are here (ops + roadmap)
-├── context-map.json          generated — per-file cost map + rollups + reachability
-├── context-report.md         generated — human summary
-├── symbol-index.json         generated — heavy-file slice anchors
+├── context-map.json          generated, git-ignored — per-file cost map + rollups + reachability
+├── context-report.md         generated, git-ignored — human summary
+├── symbol-index.json         generated, git-ignored — heavy-file slice anchors
 ├── profiles.json             canned task bundles for --profile
 └── scripts/
     ├── tokens.mjs            calibrated zero-dep token estimator (pluggable)
     ├── classify.mjs          tier / context-class / load-policy taxonomy
     ├── reachability.mjs      import-graph walker (per-app reachable sets)
     ├── symbols.mjs           top-level symbol + line-range extractor
-    ├── build-context-map.mjs walks git ls-files → context-map.json + report
+    ├── freshMap.mjs          ensureFreshMap(): rebuilds the map when stale; the file set
+    ├── build-context-map.mjs walks the file set → context-map.json + report
     ├── build-symbol-index.mjs heavy source files → symbol-index.json
     ├── context-cost.mjs      query: layered plan / packed list / reachable set
-    └── context-check.mjs     CI gate: staleness / classification drift
+    └── context-check.mjs     health report: classification drift, coverage, dead context
 ```
 
-No npm dependencies — `git` + Node fs only. Generated artifacts are committed so
-load plans reproduce without a rebuild.
+No npm dependencies — `git` + Node fs only. Generated artifacts are git-ignored local
+caches (since 2026-10-16): every reader calls `ensureFreshMap()`, which rebuilds the map
+(~4 s) when it is missing, the file set changed, or a file is newer than the map.
+Nothing to commit, and no rebuild step to remember.
 
 ## Commands
 
 ```bash
-# from dev/
-npm run context:map                          # rebuild map + report
+npm run context:map                          # force a rebuild (optional: readers rebuild when stale)
 npm run context:symbols                      # rebuild heavy-file slice index
-npm run context:check                        # CI gate (--strict to fail on warnings)
+npm run context:check                        # health report (--strict to fail on warnings)
 npm run context:cost -- --list               # profiles, apps, subsystems, tiers
 npm run context:cost -- app:app-gmt          # import-graph reachable set
 npm run context:cost -- e01-feature-system   # subsystem load plan
@@ -66,10 +68,10 @@ with line-range slice anchors so you read sections, not the whole file.
 
 ## Gotchas
 
-- **New files are invisible until tracked.** `build-context-map.mjs` enumerates via
-  `git ls-files`, so a freshly written doc (or any new file) won't appear in a load
-  plan — and a subsystem's `module_doc_path` will still read as a "⚠ doc-coverage gap"
-  — until you `git add` it. Stage new files *before* `npm run context:map`.
+- **New files count at once.** The file set is tracked files plus untracked files git
+  does not ignore (`listFiles()` in `freshMap.mjs`), so a new file shows in a load plan
+  before it is `git add`ed. (Until 2026-10-16 the map read `git ls-files` only and new
+  files had to be staged before `context:map`.)
 
 ## Snapshot (regenerate with `npm run context:map`)
 
@@ -120,6 +122,8 @@ efficiently and smoothly.** Phases 2–6a are now built:
   into `--budget`, slicing heavy files; `--profile` expands canned task bundles.
 - ✅ **Phase 5 — Honesty gate.** `context:check` fails on file-set drift, warns on
   stale map / `fallback` classification, reports doc-coverage + dead context.
+  (2026-10-16: the map stopped being committed; a stale map is rebuilt, not reported,
+  so the drift checks went and the classification / coverage report stayed.)
 - ✅ **Phase 6a — Discoverability.** Pointers added to `AGENTS.md` + `CLAUDE.md`.
 - ✅ **Phase 6c — Import-graph queries.** `edges.mjs` reuses the reachability
   resolver to answer `deps` / `dependents` (+ `--transitive`) live per call —
@@ -132,5 +136,3 @@ Remaining:
 - **Phase 6b — Cross-repo.** The scripts resolve their own repo root, so they're
   copy-portable; generalise the tier/entrypoint tables so `gmt-rs/` (and others)
   can run them without edits. (Deferred — `stable/` intentionally out of scope.)
-- **Wire `context:check` into CI / a pre-push hook** once the map is committed,
-  so drift fails fast.
