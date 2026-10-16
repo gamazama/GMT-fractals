@@ -2196,7 +2196,7 @@ void main(){
                 float a = g.x < -1e29 ? 0.0 : exp2(min(g.x - uFalloffRel, 60.0));
                 vec3 lh = normalize(-rd + uLookD.w*0.22*uUp + uLookD.w*0.12*uRight);   // uLookD.w: how far off the eye the lamp is held (1 = where it always was)
                 float nl = max(dot(n, lh), 0.0);
-                /* THE LAMP'S SHADOWS (2026-10-13; an experiment: look.lampShadow, off at 0). The lamp stands beside
+                /* THE LAMP'S SHADOWS (2026-10-13; look.lampShadow, 1 at the start since 2026-10-16, off at 0). The lamp stands beside
                    the eye, so what stands between it and a point is in the picture, close to that point's own ray:
                    the depth buffer is nearly the lamp's own shadow map, where for the key it holds only the casters
                    that happen to be on screen. The walk goes nearly to the camera (0.95 of the depth): a thing
@@ -2667,7 +2667,7 @@ const look = { mode: 1, view: 0, compare: 0, split: 0.5,
   ao: 1.0, aoRadius: 0.12, aoTaps: 10, shadow: 1.0, soft: 0.05, shadowLen: 0.6, haze: 0.0, hazeCol: [0.03, 0.05, 0.07],
   key: 3.0, sky: 0.3, rough: 0.75, metal: 0.2, refl: 0.6, diffuse: 1.0, sat: 1.0, exposure: 1.0,
   keyElev: 40, keyTurn: 0, keyAz: 152, fillAz: -40, fillElev: 21,
-  fill: 0.5, fillCol: [1.0, 0.246, 0.0], kick: 0.25, kickCol: [0.0, 0.246, 1.0], tint: 0.5, nrmTap: 1, bounce: 0, bounceRadius: 0.4, lampShadow: 0, lampOffset: 1 };   // tint: 1 = GMT's light colours, 0 = all lights white · nrmTap: how many pixels away normals-from-depth read their neighbours · aoRadius, aoTaps: grep OCCLUSION FROM DEPTH
+  fill: 0.5, fillCol: [1.0, 0.246, 0.0], kick: 0.25, kickCol: [0.0, 0.246, 1.0], tint: 0.5, nrmTap: 1, bounce: 0, bounceRadius: 0.4, lampShadow: 1, lampOffset: 1 };   // tint: 1 = GMT's light colours, 0 = all lights white · nrmTap: how many pixels away normals-from-depth read their neighbours · aoRadius, aoTaps: grep OCCLUSION FROM DEPTH
 api.look = look;
 api.setLook = (o)=>{ Object.assign(look, o); accumReset = true; };
 const RIG_N = 32, rigPx = new Float32Array(RIG_N * RIG_N * 4);

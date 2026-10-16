@@ -235,7 +235,7 @@ export interface DzLook {
     bounce?: number;
     /** How far round each point the bounce looks, as a share of the picture's height (0.4 at the start). */
     bounceRadius?: number;
-    /** Strength of the lamp's own shadows (0 at the start: none). */
+    /** Strength of the lamp's own shadows (1 at the start since 2026-10-16; 0: none). */
     lampShadow?: number;
     /** How far off the eye the lamp is held (1 at the start: where it always was). */
     lampOffset?: number;
