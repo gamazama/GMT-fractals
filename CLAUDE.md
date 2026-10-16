@@ -13,7 +13,7 @@ Stack: React 18 + TypeScript + Zustand + Vite + optional GLSL | Forked from GMT 
 
 ### Documentation
 
-**Read code first.** Read source top-to-bottom and grep the markers below; if a doc restates code, read the code. Where sources disagree, authority runs: source JSDoc + markers, then [`.claude/rules/`](./.claude/rules/) (path-scoped; each loads when you open a matching file and carries the entry point, ADRs and guard commands for its area), then ADRs in [`docs/adr/`](./docs/adr/) (why a choice was made), then [`docs/policy/`](./docs/policy/) (rules spanning many files). `docs/history/**` is the pre-extraction attic: possibly stale, never authoritative.
+**Authority.** Code beats docs about code. Where sources disagree, authority runs: source JSDoc + markers, then [`.claude/rules/`](./.claude/rules/) (path-scoped; each loads when you open a matching file and carries the entry point, ADRs and guard commands for its area), then ADRs in [`docs/adr/`](./docs/adr/) (why a choice was made), then [`docs/policy/`](./docs/policy/) (rules spanning many files). `docs/history/**` is the pre-extraction attic: possibly stale, never authoritative.
 
 **Markers** — written at the source site, not in external markdown:
 
@@ -32,10 +32,6 @@ Remove a `@stale`, `@bug` or `@invariant` when your work resolves it.
 - Policy spanning many files → an existing doc in `docs/policy/`.
 - Cite grep targets (`grep DOUBLE_RUN_WINDOW_MS`), not line numbers, in ADRs and JSDoc.
 - After editing a rule's `paths:` or Guards block, run `npm run check:rule-guards`.
-- No rule for your area (state libraries, registries, factories, hotkey / toast / undo machinery)? Look under `engine/store/`, `engine/plugins/`, `components/` and grep the export name.
-
-### TypeScript
-- `isolatedModules: true` — type-only cross-module re-exports MUST use `export type { X }` / `import type { X }`, or esbuild leaves the export in the JS output → runtime SyntaxError.
 
 ### Architecture Rules
 - **Features are isolated.** A feature's state lives at `store[featureId]`; reading another feature's state requires `dependsOn: ['otherId']` in the feature def. A convention, not a runtime guarantee: `dependsOn` drives registration order and a register-time existence check, and nothing intercepts an undeclared read.
@@ -49,7 +45,6 @@ Remove a `@stale`, `@bug` or `@invariant` when your work resolves it.
 ### What NOT to Do
 - Don't add manual Zustand slices for feature state — use `defineFeature`.
 - Don't depend on `set${Feature}` by name-inference in animation — the engine auto-binds via the registry; a custom binder is `binderRegistry.register()`ed explicitly.
-- Don't rewrite anything under `docs/history/**`; appending is fine (a hook enforces it).
 
 ## Engine Principles
 
@@ -65,10 +60,10 @@ Remove a `@stale`, `@bug` or `@invariant` when your work resolves it.
 3. **Manifest-composed UI.** Layout lives in the manifest, not in hand-written panel components. Don't `component: 'panel-X'` around a manifest gap — extend the manifest (a new item type or prop).
 4. **Verbatim ports for self-contained widgets** (FormulaSelect, AudioSpectrum, FlowEditor, EnginePanel): path rewrites, register in `componentRegistry`, reference from the manifest. Don't rewrite the internals.
 5. **One source of truth for shared resources** (component CSS, formula presets, scene fields, modulation events, panel registrations, plugin installs): one module registers, many consume; never copy-paste across entries.
-6. **Read code before reasoning.** After context compaction or in unfamiliar territory, trace the actual flow before proposing a fix.
-7. **Confirm understanding before implementing.** Numbered plans, audit-then-fix.
 
 ### Anti-Patterns to Avoid
+1, 6 and 7 are enforced by `check:steering` and its after-edit hook.
+
 1. **No app-specific names in engine-core.** No `if (formula === 'Mandelbulb')`, no `state.geometry?.juliaX`, no GMT-specific Transaction shapes — use predicates, resolvers, declaration-merging.
 2. **Don't bypass the event bus to talk to the worker.** `engine.setUniform` on the engine-core stub is a no-op; go through `FRACTAL_EVENTS`.
 3. **Don't override engine-core actions in app slices.** Engine-core's `undoStack` is the one history; extend it or register a feature-level extension point.
@@ -78,17 +73,20 @@ Remove a `@stale`, `@bug` or `@invariant` when your work resolves it.
 7. **No `as any` without a comment saying why** (type-grafts between the engine-core stub and engine-gmt are the legitimate case).
 
 ### Automated Checks
-- `npm run typecheck` — tsc, exits 0.
+A SessionStart hook prints the checkout's live state; trust it over notes.
+
+- `npm run typecheck` — tsc, exits 0; pre-commit runs it on staged TS. It also rejects a type re-export without `export type` (TS1205).
 - `npm run build` — the production build the deploy runs; a type-clean tree can still fail here.
 - `npm run check:rule-guards` — every guard a rule cites can reach the files that rule scopes (reports, does not gate).
 - `npm run check:text-bytes` — no NUL or stray control byte in tracked text (one NUL hides a file from grep).
 - `npm run check:zindex` — fails on a new raw z-index ≥ 100 outside the tier scale (`<Layer tier>` / `z('tier')`).
+- `npm run check:steering` — ratchet on anti-patterns 1, 6, 7 and engine-core app-folder imports.
 - `npm run orphans` — knip. Run before deleting "unused" code; grep gives false positives because engine-core and engine-gmt expose same-named siblings.
 - `npm run smoke:boot` — headless Chromium boot, fails on pageerrors.
 - `npm run smoke:interact` — state flow + preset round-trip (demo feature).
 - `npm run smoke:chrome` — clicks every top-bar control and menu item in every app; the only smoke that opens panels.
 - `npm run smoke:screenshot` — a capture with no assertion → `debug/scratch/engine-boot.png`.
-- `npm run context:cost -- <subsystem|tier|path|app:name>` — which files matter for an area, cheapest first, with token costs; run it before reading. `context:map` rebuilds the map, `context:check` gates staleness.
+- `npm run context:cost -- <subsystem|tier|path|app:name>` — if unsure which files matter for an area. `context:map` rebuilds the map (tracked files only), `context:check` gates staleness.
 
 ### How work is closed
 - The default for a change is no new smoke, test or step: try it once and say what it showed. Write one only for a seam nothing cheaper sees (a real GPU, a panel opening, storage across a reload, the boot), on new ground, whose break nobody would notice at once.
