@@ -456,3 +456,21 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
   to become a share of the depth times the keyframes' own estimate-to-depth ratio. Found beside
   it: a keyframe exactly on the bulb's axis reads an estimate of 0 from `estimateAtPoint`.
   Not built: his answers first.
+
+## I. Smoothing a route (`SMOOTHING.md`, the study S0, 2026-10-16)
+
+His render's route measured and smoothed as a pass, three rounds (each after his look at a clip).
+Now: pace by the MIDDLE of the picture, read from 45 rays across it every third frame (about 30 s for
+a 10-minute dive), at 4 s (pictures: `debug/scratch/route-smooth/out/s7zzzooom-paced-by-the-middle.png`
+and `s7zzzooom-2907-paced-by-the-middle.mp4`). The calls are numbered in `SMOOTHING.md`: the third
+round's 1, 2 and 2b (the middle, the strength or even, lulls), and the second round's 3 to 9 (where
+the clock lives, the look inside the pace, a miss of 5 degrees, the look at 0.5 s, close keyframes
+warned, the K mark, the 2^-256 stutter). **ANSWERED 2026-10-16, all of them** (his words in
+`SMOOTHING.md`, "The tool, as decided"): the route's own picture sets the pace, as an option;
+a log slider from 4 s to the selection's length (even); pauses smoothed; the miss and the free
+look as optional sliders; close keyframes warned and merged; the K mark; the stutter left.
+His yes to the two recommendations of "S0, the clock and the K mark" (a Pace track with a binary
+search in the engine's key lookup; a pin on each Route tab row): **ANSWERED 2026-10-16**. Nothing
+was open then; one since ("S0, a section's edges"): after a section grows, keys on other tracks
+(a light, a colour) **ANSWERED 2026-10-16: "Move other tracks' keys later with the route after a
+section."** Nothing is open. S1 is with a builder (session started 2026-10-16).
