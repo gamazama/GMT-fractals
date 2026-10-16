@@ -18,7 +18,9 @@
  *   - Smoothing, while the route came from a trail: how closely it follows what was flown. It cuts
  *     the route again when the hand lets go, not while it drags.
  *   - "As flown" and "Even pace": the route's timing, key times only. Beside them "Reverse"
- *     (`reverseRoute`): a new route that plays this one the other way, one undo step.
+ *     (`reverseRoute`): a new route that plays this one the other way, one undo step; and
+ *     "Smooth...", which opens the smoothing pass's dialog (`SmoothDialog.tsx`; the pass is
+ *     route.ts's `smoothRoute`) with the rows selected here as its "Selected legs".
  *   - One line of count, length and depths, and the pace at the playhead; under them, for a route
  *     that can play, one line on FREE LOOK (turning the view while the route plays: route.ts,
  *     FREE LOOK). Pause here is `pauseRoute`: the camera stays the route's, and a free look that
@@ -32,8 +34,11 @@
  * loaded scene shows its number), its depth, its time and, from the second row on, a SECONDS FIELD:
  * the length of the leg that arrives at it. A typed length moves that keyframe and every later one
  * (`setLegSeconds`), when the field is left or Enter is pressed. A row goes to its keyframe; its
- * buttons play the leg that arrives at it, replace it with the view on screen, and delete it. A
- * row is red when the leg that arrives at it passes through the solid.
+ * buttons play the leg that arrives at it, replace it with the view on screen, and delete it. Its
+ * PIN shows and toggles the K mark (`pinKeyframe` / `unpinKeyframe`, one undo step each): pinned, a
+ * smoothing pass keeps this keyframe's aim to the digit (K, Key Cam and a replace pin it; a keyframe
+ * cut from the trail or from an older scene is not). The pin stays shown while it is on. A row is
+ * red when the leg that arrives at it passes through the solid.
  * SELECTING ROWS: a click selects one (and goes to it), Ctrl / Cmd-click adds or removes one,
  * Shift-click takes the range from the row clicked last. "Delete selected", or the Delete key
  * while the list has the focus (a click on a row gives it), removes them in one undo step
@@ -83,7 +88,9 @@
  *   reaching the timeline), the seconds field setting its length on Enter and when it is left, and
  *   the two buttons above the list are wiring no node check reaches (the functions they call have
  *   lines in check:deep-zoom-route). Driven once in the real app, 2026-10-12
- *   (debug/scratch/route-fixes/app-six.mts, git-ignored).
+ *   (debug/scratch/route-fixes/app-six.mts, git-ignored). The row's pin (one undo step a click, shown
+ *   while on) and "Smooth..." with the rows selected as its legs: driven once in the real app on the
+ *   GPU, 2026-10-17, on the owner's route (debug/scratch/s2/app-smooth.mts, git-ignored).
  * @assumption The last row ends clear of the toggle with the timeline closed, and with it open
  *   the list ends where it did before - measured once, 2026-10-11, in the app at 1280 x 800 with
  *   14 keyframes (debug/scratch/r7c/animate.mts, git-ignored; before the room was there its
@@ -92,18 +99,19 @@
  */
 import React, { useRef, useState } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
-import { CheckeredFlagIcon, PauseIcon, PlayIcon, PlusIcon, SaveIcon, TrashIcon } from '../../components/Icons';
+import { CheckeredFlagIcon, PauseIcon, PinIcon, PlayIcon, PlusIcon, SaveIcon, TrashIcon } from '../../components/Icons';
 import { openRenderPopup } from '../../engine/animation/renderPopupRegistry';
 import { BaseSlider } from '../../components/Slider';
 import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
 import { Modal } from '../../components/ui/Modal';
 import { useDzNavigation } from '../navigationState';
 import {
-    ROUTE_SMOOTHING, ROUTE_TRACK, ROUTE_TYPED_LEG_SECONDS, cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, lookKeyed, pauseRoute, playLeg,
-    playRoute, replaceKeyframe, retimeRoute, returnToRoute, reverseRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo, setKeyframe,
-    setLegSeconds, setRouteSmoothing, useRoute,
+    ROUTE_SMOOTHING, ROUTE_TRACK, ROUTE_TYPED_LEG_SECONDS, cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, lookKeyed, pauseRoute, pinKeyframe,
+    playLeg, playRoute, replaceKeyframe, retimeRoute, returnToRoute, reverseRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo,
+    setKeyframe, setLegSeconds, setRouteSmoothing, unpinKeyframe, useRoute,
 } from '../route';
 import type { RouteKey } from '../route';
+import { SmoothDialog } from './SmoothDialog';
 import { setTrailOn, useTrail } from '../trail';
 import { formatDepth, formatDepthCompact } from './depthFormat';
 
@@ -227,6 +235,8 @@ export const RoutePanel: React.FC = () => {
     /** The rows picked (key ids), and the row a Shift-click takes its range from. */
     const [picked, setPicked] = useState<readonly string[]>([]);
     const rangeFrom = useRef<string | null>(null);
+    /** The Smooth... dialog is open. */
+    const [smoothing, setSmoothing] = useState(false);
 
     const keys = routeKeys();
     // Ids that are keyframes no more (a delete, an undo, a route cut again) are no selection.
@@ -348,6 +358,16 @@ export const RoutePanel: React.FC = () => {
                         className={`${plainButton} flex-1`}
                     >
                         Reverse
+                    </button>
+                    <button
+                        type="button"
+                        data-dz-route-smooth
+                        aria-pressed={smoothing}
+                        onClick={() => setSmoothing(true)}
+                        title="Smooth the route's pace and turn: the whole route or the legs selected, with a graph of the pace before and after. Positions never move. One undo on the timeline brings it back."
+                        className={`${plainButton} flex-1`}
+                    >
+                        Smooth...
                     </button>
                 </div>
             )}
@@ -473,6 +493,18 @@ export const RoutePanel: React.FC = () => {
                                 )}
                             </div>
                             <div className="flex items-center gap-0.5 flex-shrink-0">
+                                <button
+                                    type="button"
+                                    data-dz-route-pin={key.exact ? 'on' : 'off'}
+                                    aria-pressed={!!key.exact}
+                                    onClick={act(key.exact ? unpinKeyframe : pinKeyframe, key.id)}
+                                    className={key.exact ? 'p-1 text-accent-400 hover:text-accent-300' : `${rowButton} hover:text-accent-400`}
+                                    title={key.exact
+                                        ? 'Exact (the K mark): a smoothing pass keeps this keyframe\'s aim to the digit. Click to let it go: a pass may then move it by the miss allowed.'
+                                        : 'Not exact: a smoothing pass may move this keyframe\'s aim by the miss allowed. Click to pin it, as K does.'}
+                                >
+                                    <PinIcon on={!!key.exact} />
+                                </button>
                                 {i > 0 && (
                                     <button type="button" data-dz-route-leg onClick={act(playLeg, key.id)} className={`${rowButton} hover:text-accent-400`} title="Play the leg to this keyframe">
                                         <PlayIcon />
@@ -493,6 +525,8 @@ export const RoutePanel: React.FC = () => {
 
             {/* Room under the last row for the timeline's toggle: out of flow, gone while the timeline is shown (see the header). */}
             <div data-dz-route-room aria-hidden className="absolute left-0 top-full h-14 w-px pointer-events-none [:root:has([data-help-id='ui.timeline'])_&]:hidden" />
+
+            {smoothing && <SmoothDialog picked={selected} onClose={() => setSmoothing(false)} />}
 
             {asking !== null && (
                 <Modal onClose={() => setAsking(null)}>

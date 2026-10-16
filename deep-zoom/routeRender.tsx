@@ -11,7 +11,9 @@
  *   video from the frames, and the dialog prints the line for it. A VIDEO FILE (stage R6b,
  *   2026-10-11): the same frames handed to the engine's encoder and written into an MP4 or a WebM
  *   the user picks, as the run goes. A video cannot be resumed. THERE IS NO PREVIEW FEATURE: a
- *   preview is this dialog at a small size and one sample, and its "Draft" button sets both.
+ *   preview is this dialog at a small size and one sample, and its "Draft" button sets both - the
+ *   size is 320p (a short edge of 320 px: the owner, 2026-10-16, "for previews, we can use a lowres
+ *   like 320p for faster output"), for checking a route's pacing, a smoothing pass's above all.
  *
  * THE SEAM
  *   - `installRouteRender()` once, from main.tsx: the engine's generic render dialog
@@ -53,7 +55,8 @@
  * WHAT IS RENDERED
  *   - THE RANGE the dialog shows, BOTH ENDS INCLUDED - the count it shows is the count rendered.
  *     It opens on the route's first to last keyframe, on the whole timeline when there is no route.
- *   - THE SIZE is a long edge (`DZ_RENDER_LONG_EDGES`: 640 px, the draft's, to 3840) at the
+ *   - THE SIZE is 320p (`DZ_PREVIEW_SHORT_EDGE`, the draft's: the long edge that gives the picture's
+ *     short edge 320 px, 568 x 320 at 16:9) or a long edge (`DZ_RENDER_LONG_EDGES`: 640 to 3840), at the
  *     picture's own shape AS THE RUN STARTS, and that shape is handed to every frame: a window
  *     resized halfway changes nothing. A run that CONTINUES takes the shape of the frames already
  *     in the folder; frames of another long edge, or of more than one size, cannot be continued.
@@ -245,6 +248,8 @@ import { flushHostSync, holdAutoIterations } from './useHostSync';
 
 /** The sizes offered: the frame's long edge in pixels. The other edge follows the picture's shape. */
 export const DZ_RENDER_LONG_EDGES = [640, 1280, 1920, 2560, 3840] as const;
+/** The preview's size, offered first and set by "Draft": the picture's SHORT edge, in pixels (320p). */
+export const DZ_PREVIEW_SHORT_EDGE = 320;
 const DEFAULT_LONG_EDGE = 1920;
 const DEFAULT_SAMPLES = 8;
 /** How often the run looks for a cancel and moves the clock and the bar. */
@@ -273,9 +278,15 @@ function renderSize(longEdge: number, aspect: number): { w: number; h: number } 
     return aspect >= 1 ? { w: even(longEdge), h: even(longEdge / aspect) } : { w: even(longEdge * aspect), h: even(longEdge) };
 }
 
+/** The long edge that gives the picture's short edge `short` pixels at `aspect`. */
+const longEdgeFor = (short: number, aspect: number): number => short * Math.max(aspect, 1 / aspect);
+
 const sizes = (): RenderDialogResolutionPreset[] => {
     const aspect = pictureAspect();
-    return DZ_RENDER_LONG_EDGES.map((edge) => ({ label: `${edge} px`, ...renderSize(edge, aspect) }));
+    return [
+        { label: `${DZ_PREVIEW_SHORT_EDGE}p (preview)`, ...renderSize(longEdgeFor(DZ_PREVIEW_SHORT_EDGE, aspect), aspect) },
+        ...DZ_RENDER_LONG_EDGES.map((edge) => ({ label: `${edge} px`, ...renderSize(edge, aspect) })),
+    ];
 };
 
 /** What the dialog opens with: the route's own span, or the whole timeline when there is no route. */
@@ -290,10 +301,10 @@ function defaults(): Partial<RenderDialogConfig> {
     };
 }
 
-/** The dialog's "Draft" button: the smallest size and one sample a pixel. It leaves the format alone. */
+/** The dialog's "Draft" button: 320p (the smallest size) and one sample a pixel. It leaves the format alone. */
 const DRAFT: RenderDialogPreset = {
     label: 'Draft',
-    title: 'The smallest size and 1 sample: a quick look at the whole route before the real render',
+    title: '320p and 1 sample: a quick look at the whole route, and at its pacing, before the real render',
     apply: () => { const smallest = sizes()[0]; return { width: smallest.w, height: smallest.h, samplesPerFrame: 1 }; },
 };
 

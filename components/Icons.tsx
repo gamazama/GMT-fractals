@@ -279,3 +279,10 @@ export const EyeIcon = ({ active }: { active: boolean }) => (
         <circle cx="12" cy="12" r="3"></circle>
     </svg>
 );
+/** A pushpin: filled when `on` (something is pinned). */
+export const PinIcon = ({ on = false }: { on?: boolean }) => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 3h6l-1 7 3.5 3.5V15h-11v-1.5L10 10z" />
+        <path d="M12 15v6" />
+    </svg>
+);

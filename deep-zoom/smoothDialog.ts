@@ -19,11 +19,13 @@
  *     less can only be even.
  *   - THE MISS ALLOWED at a keyframe and THE FREE LOOK'S SMOOTHING: optional sliders (his answers 4 and 5);
  *     off, every keyframe's aim stays (every keyframe exact) and the look is carried as it is.
- *   - THE PACE GRAPH (`readPace`, `paceColumns`, `paceRange`, `strayFrames`): how fast the middle of the
+ *   - THE PACE GRAPH (`readPace`, `paceColumns`, `keyframeMap`, `paceRange`, `strayFrames`): how fast the middle of the
  *     picture moves along the route, as the reader reads it (`routePictureSpeed`: every third frame, the
  *     picture chosen in "Pace by"), BEFORE the pass and AFTER it. AFTER IS THE ROUTE READ AGAIN as the engine
  *     plays it, not the pass's own reckoning (`SmoothResult.speedAfter`): S1 measured the two apart on the
  *     owner's route (82 frames off against 3; the path between keyframes moves a little with a retime).
+ *     The reading before is drawn on the route's timing after, through the keyframes (`keyframeMap`): the two
+ *     lines meet at every keyframe, so a section's edges are one place in both.
  *     A reading is kept by WHAT THE ROUTE IS (`routeSignature`: its three tracks, the free look's when the
  *     look sets the pace, the formula's values, the frame rate), so an undo or a redo of a pass shows its
  *     graph again without a ray read.
@@ -63,7 +65,7 @@
 import { useAnimationStore } from '../store/animationStore';
 import { useEngineStore } from '../store/engineStore';
 import { getHost } from './host/current';
-import { LOOK_TRACKS, ROUTE_ITERATIONS_TRACK, ROUTE_PACE_TRACK, ROUTE_TRACK, routePictureSpeed, smoothRoute } from './route';
+import { LOOK_TRACKS, ROUTE_ITERATIONS_TRACK, ROUTE_PACE_TRACK, ROUTE_TRACK, routeKeys, routePictureSpeed, smoothRoute } from './route';
 import type { PaceBy, RouteKey, SmoothResult } from './route';
 import { PICTURE_READ_EVERY } from './routeSmooth';
 
@@ -230,19 +232,40 @@ export async function readPace(by: PaceBy, onProgress?: (done: number, of: numbe
     return reading;
 }
 
-/** A reading as `columns` columns over `span` frames: each the mean, in log, of the frames read in it (NaN
- *  where none was). A frame falls in column floor(frame * columns / span). */
-export function paceColumns(speed: ArrayLike<number>, columns: number, span = speed.length): Float64Array {
+/**
+ * A reading as `columns` columns over the frames `[lo, hi)` of the timing the graph is drawn in (frames from the
+ * route's first keyframe): each the mean, in log, of the frames that fall in it (NaN where none does). `at` places
+ * frame i of the reading in that timing - for a reading of the route before a pass, `keyframeMap` through the
+ * keyframes, so that both lines meet at every keyframe; a frame falls in column floor((at(i) - lo) * columns / (hi - lo)).
+ */
+export function paceColumns(speed: ArrayLike<number>, columns: number, lo = 0, hi = speed.length, at: (i: number) => number = (i) => i): Float64Array {
     const sum = new Float64Array(columns), count = new Float64Array(columns), out = new Float64Array(columns).fill(NaN);
-    if (!(span > 0) || columns < 1) return out;
+    if (!(hi > lo) || columns < 1) return out;
     for (let i = 0; i < speed.length; i++) {
-        const v = speed[i], c = Math.floor((i * columns) / span);
+        const v = speed[i], c = Math.floor(((at(i) - lo) * columns) / (hi - lo));
         if (!(v > 0) || c < 0 || c >= columns) continue;
         sum[c] += Math.log(v);
         count[c]++;
     }
     for (let c = 0; c < columns; c++) if (count[c] > 0) out[c] = Math.exp(sum[c] / count[c]);
     return out;
+}
+
+/**
+ * One timing of the route into another, through its keyframes: `was` and `now` are the same keyframes' frames in
+ * the two, in route order (a pass moves keyframes in time, never adds or drops one). Linear between two keyframes;
+ * before the first and past the last, moved as that keyframe was.
+ */
+export function keyframeMap(was: readonly number[], now: readonly number[]): (f: number) => number {
+    const n = Math.min(was.length, now.length);
+    return (f) => {
+        if (n === 0) return f;
+        if (f <= was[0]) return f - was[0] + now[0];
+        if (f >= was[n - 1]) return f - was[n - 1] + now[n - 1];
+        let j = 0, hi = n - 1;
+        while (hi - j > 1) { const mid = (j + hi) >> 1; if (was[mid] <= f) j = mid; else hi = mid; }
+        return now[j] + ((f - was[j]) * (now[j + 1] - now[j])) / (was[j + 1] - was[j]);
+    };
 }
 
 /** The graph's vertical range for these readings: their 1st to 99th percentile, in log, widened by a tenth
@@ -259,13 +282,14 @@ export function paceRange(...speeds: ArrayLike<number>[]): { lo: number; hi: num
 /**
  * FRAMES WHERE THE MIDDLE OF THE PICTURE STRAYS over 25 % from its own 3 s average (a Gaussian of 1.5 s, in
  * log): the study's score (SMOOTHING.md; debug/scratch/route-smooth/evalbuilt.mts), the one number the
- * dialog gives beside the graph. Frames not read (NaN) are left out of it.
+ * dialog gives beside the graph. Frames not read (NaN) are left out of it. Only the frames `[lo, hi)` are
+ * counted (what is smoothed); each is still judged against its average over the frames about it, wherever they lie.
  */
-export function strayFrames(speed: ArrayLike<number>, fps: number): number {
+export function strayFrames(speed: ArrayLike<number>, fps: number, lo = 0, hi = speed.length): number {
     const n = speed.length, L = new Float64Array(n), ok = new Uint8Array(n), sigma = 1.5 * fps, R = Math.ceil(3 * sigma);
     for (let i = 0; i < n; i++) { const v = speed[i]; ok[i] = v > 0 ? 1 : 0; L[i] = Math.log(Math.max(1e-4, v)); }
     let strays = 0;
-    for (let i = 0; i < n; i++) {
+    for (let i = Math.max(0, Math.floor(lo)); i < Math.min(n, Math.ceil(hi)); i++) {
         if (!ok[i]) continue;
         let a = 0, w = 0;
         for (let j = Math.max(0, i - R); j <= Math.min(n - 1, i + R); j++) { if (!ok[j]) continue; const g = Math.exp(-0.5 * ((j - i) / sigma) ** 2); a += g * L[j]; w += g; }
@@ -319,6 +343,10 @@ export interface SmoothRun {
     result: SmoothResult;
     before: PaceReading | null;
     after: PaceReading | null;
+    /** The keyframes' frames before and after the pass, in route order: the graph draws the reading before on the
+     *  route's timing after (`keyframeMap`). */
+    framesBefore: number[];
+    framesAfter: number[];
     /** The route's signatures before and after the pass: the graph shows the before line while the route is the after one. */
     beforeSig: string;
     afterSig: string;
@@ -335,7 +363,7 @@ export const lastSmoothRun = (): SmoothRun | null => lastRun;
  * A Cancel during the reading after keeps the pass (`after` is null then).
  */
 export async function runSmooth(ask: SmoothAsk, onPhase: (phase: SmoothPhase, done: number, of: number) => void, signal?: AbortSignal): Promise<SmoothRun | null> {
-    const beforeSig = routeSignature(ask.paceBy);
+    const beforeSig = routeSignature(ask.paceBy), framesBefore = routeKeys().map((k) => k.frame);
     onPhase('before', 0, 1);
     const before = await readPace(ask.paceBy, (done, of) => onPhase('before', done, of), signal);
     if (!before || signal?.aborted) return null;
@@ -346,7 +374,7 @@ export async function runSmooth(ask: SmoothAsk, onPhase: (phase: SmoothPhase, do
     });
     if (!result) return null;
     const afterSig = routeSignature(ask.paceBy);
-    lastRun = { result, before, after: null, beforeSig, afterSig };
+    lastRun = { result, before, after: null, beforeSig, afterSig, framesBefore, framesAfter: routeKeys().map((k) => k.frame) };
     onPhase('after', 0, 1);
     const after = await readPace(ask.paceBy, (done, of) => onPhase('after', done, of), signal);
     lastRun = { ...lastRun, after };

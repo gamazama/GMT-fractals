@@ -204,7 +204,7 @@ import {
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
 import { carryLook, paceChange, paceSpan, speedMargin, warpRoute } from '../../deep-zoom/routeSmooth';
 import {
-    EVEN, STRENGTH_MIN, closeRows, knownPace, paceColumns, paceRange, routeSignature, runSmooth, smoothSpan, strayFrames, strengthFor, strengthFromSlider,
+    EVEN, STRENGTH_MIN, closeRows, keyframeMap, knownPace, paceColumns, paceRange, routeSignature, runSmooth, smoothSpan, strayFrames, strengthFor, strengthFromSlider,
     strengthScale, timelinePicked,
 } from '../../deep-zoom/smoothDialog';
 import type { SmoothPhase } from '../../deep-zoom/smoothDialog';
@@ -1525,8 +1525,11 @@ function smoothScene(): void {
         JSON.stringify({ rows, timeline, range, exact, tail }));
     // The graph: columns, range.
     const cols = paceColumns([1, 4, NaN, NaN, 2, 8], 3), wide = paceRange([1, 1, 1, 1, 100], [0.5, 2]);
-    check(Math.abs(cols[0] - 2) < 1e-12 && Number.isNaN(cols[1]) && Math.abs(cols[2] - 4) < 1e-12 && wide.lo < 0.5 && wide.hi > 100 && wide.hi < 200,
-        'dialog: the graph\'s columns are the mean in log of the frames read in each (none read: no line there); its range the 1st to 99th percentile, widened by a tenth', `${Array.from(cols)} ${JSON.stringify(wide)}`);
+    const map = keyframeMap([0, 10, 30], [0, 20, 40]), zoomed = paceColumns([1, 4, 9, 16], 2, 20, 40, (i) => map(10 + i * 5));
+    check(Math.abs(cols[0] - 2) < 1e-12 && Number.isNaN(cols[1]) && Math.abs(cols[2] - 4) < 1e-12 && wide.lo < 0.5 && wide.hi > 100 && wide.hi < 200
+        && [map(-5), map(5), map(20), map(35)].join() === '-5,10,30,45' && Math.abs(zoomed[0] - 2) < 1e-12 && Math.abs(zoomed[1] - 12) < 1e-12,
+        'dialog: the graph\'s columns are the mean in log of the frames that fall in each (none: no line there), over a window of the route; the reading before a pass drawn on the timing after it through the keyframes; its range the 1st to 99th percentile, widened by a tenth',
+        `${Array.from(cols)} ${Array.from(zoomed)} ${JSON.stringify(wide)}`);
 
     // THE RUN: the route read before, the pass, the route read after; readings kept by what the route is.
     const read = await routePictureSpeed('route', 3), sigBefore = routeSignature('route'), steps = anim().undoStack.length, phases: SmoothPhase[] = [];
@@ -1534,6 +1537,7 @@ function smoothScene(): void {
     const run = await runSmooth({ strength: strengthFor(4, length), miss: 5, look: null, paceBy: 'route' }, (phase) => { if (phases[phases.length - 1] !== phase) phases.push(phase); });
     const readBefore = calls.filter((c) => c.name === 'freeDistance').length, readAfter = await routePictureSpeed('route', 3);
     check(!!run && phases.join() === 'before,pass,after' && anim().undoStack.length === steps + 1 && run.beforeSig === sigBefore && run.afterSig === routeSignature('route') && run.afterSig !== sigBefore
+        && run.framesBefore.join() === ks.map((k) => k.frame).join() && run.framesAfter.join() === routeKeys().map((k) => k.frame).join()
         && !!read && !!run.before && run.before.speed.every((v, i) => v === read.speed[i]) && !!readAfter && !!run.after && run.after.speed.length === readAfter.speed.length && run.after.speed.every((v, i) => v === readAfter.speed[i]),
         `dialog: a run reads the route before the pass, runs it (one undo step), and reads the route again after it - the route as it now plays, not the pass's own reckoning (${run?.result.seconds.map((s) => s.toFixed(1)).join(' s -> ')} s)`,
         `phases ${phases}, steps ${anim().undoStack.length - steps}, rays ${readBefore}`);
