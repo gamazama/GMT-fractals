@@ -16,6 +16,12 @@
  * THE CHANGELOG: newest entry first, under a `## <GX_VERSION> — <title>` heading with a
  * `> <date>` line, and bump ../version.ts in the same change — that is what relights the
  * What's New dot.
+ *
+ * BETWEEN RELEASES (2026-10-13, the rule of GMT's changelog — data/help/topics/changelog.ts —
+ * applied here): work a user would notice adds its line to an `## Unreleased` block at the top,
+ * WITHOUT a bump of ../version.ts. The push session renames the block to the new version and
+ * date and bumps the version then. It is live content: a push that skips that step ships a
+ * heading that says "Unreleased", and no dot lights for it.
  */
 
 import type { HelpSection } from '../../../types/help';
@@ -139,6 +145,15 @@ Another tab or a new pick applies what a face did; \`Esc\` cancels it. The chip 
     category: "What's New",
     title: "What's New",
     content: `
+## Unreleased
+> Not shipped yet. Entries collect here and are reviewed at release.
+
+- **Zooming the wall keeps the gradient you grabbed under the pointer**, however far down the wall you are, on a phone too.
+- **The wall follows the keyboard cursor** all the way down, and sideways when it is zoomed.
+- **Deep Zoom can open the Explorer on its gradient too**, with a Back to Deep Zoom link.
+
+---
+
 ## 2.0.0 — out of preview
 > September 2026
 
