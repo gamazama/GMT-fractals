@@ -167,6 +167,7 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Smoothing', 'deep-zoom/components/RoutePanel.tsx', 'label="Smoothing"'],
     ['As flown', 'deep-zoom/components/RoutePanel.tsx', 'As flown\n'],
     ['Even pace', 'deep-zoom/components/RoutePanel.tsx', 'Even pace\n'],
+    ['Reverse', 'deep-zoom/components/RoutePanel.tsx', 'Reverse\n'],
     ['Return', 'deep-zoom/components/RoutePanel.tsx', 'Return\n'],
     ['Clear', 'deep-zoom/components/RoutePanel.tsx', 'Clear\n'],
     ['PNG sequence (folder)', 'engine/plugins/RenderDialog/ConfigForm.tsx', "? 'PNG sequence (folder)'"],

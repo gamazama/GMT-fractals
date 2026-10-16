@@ -274,6 +274,47 @@ export const AnimationMath = {
     },
     
     /**
+     * The same keys played backwards about the span [first, last]: a key at frame f goes to
+     * first + last - f, so the span stays where it is, and the curve at frame f is the old curve
+     * at first + last - f. Returned in time order, as new objects; nothing is mutated.
+     *
+     *   - Each key keeps its id, value, payload and flags (`autoTangent`, `brokenTangents`,
+     *     `tangentMode`): only its time, its handles and its interpolation change.
+     *   - HANDLES: left and right swap and their time offsets are negated ({x, y} -> {-x, y}). A
+     *     value offset stays as it is, so this holds on a log track too. Auto handles come out
+     *     mirrored, which is what `calculateTangents` gives for the new neighbours when they were
+     *     up to date; a caller that wants them worked out again does that itself, with its own
+     *     `isLog`.
+     *   - INTERPOLATION: a segment's is its LEFT key's (`interpolate` reads `k1`), and the left key
+     *     of every segment changes, so each moves one key over. The last key, whose interpolation
+     *     leads nowhere, takes the one that led nowhere before (the old last key's): mirrored twice,
+     *     the keys come back as they were.
+     *
+     * PITFALLS
+     *   - A Step segment holds its LEFT key's value, so a mirrored one holds the other end's: the
+     *     jump moves to the other end of the segment. Only Linear and Bezier mirror exactly.
+     *   - A key outside [first, last] lands outside it on the other side: pick the keys first.
+     *   - A payload is carried as it is: data in it that has a direction in time (a heading, say)
+     *     is the caller's to turn round.
+     *
+     * @invariant Linear and Bezier keys mirrored play the old curve backwards, and mirrored twice
+     *   are the keys they were - proven by: npm run check:deep-zoom-route ("reverse: the depth
+     *   curve at mirrored frames ...", "reverse: reversed twice is the route to the digit ...":
+     *   the first user is deep-zoom/route.ts, `reverseRoute`). Falsified 2026-10-16: each key
+     *   keeping its own interpolation -> 3 red there.
+     */
+    mirrorKeyframes: (keys: readonly Keyframe[], first: number, last: number): Keyframe[] => {
+        const sorted = [...keys].sort((a, b) => a.frame - b.frame), n = sorted.length;
+        return sorted.map((_, j) => {
+            const k = sorted[n - 1 - j];
+            const out: Keyframe = { ...k, frame: first + last - k.frame, interpolation: sorted[j < n - 1 ? n - 2 - j : n - 1].interpolation };
+            if (k.rightTangent) out.leftTangent = { x: -k.rightTangent.x, y: k.rightTangent.y }; else delete out.leftTangent;
+            if (k.leftTangent) out.rightTangent = { x: -k.leftTangent.x, y: k.leftTangent.y }; else delete out.rightTangent;
+            return out;
+        });
+    },
+
+    /**
      * Calculates Soft Selection falloff weight (0.0 to 1.0).
      */
     calculateSoftFalloff: (dist: number, radius: number, type: 'Linear' | 'Dome' | 'Pinpoint' | 'S-Curve'): number => {

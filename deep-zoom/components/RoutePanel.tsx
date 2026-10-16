@@ -17,7 +17,8 @@
  *     Cancel leaves the route alone, a click outside does nothing).
  *   - Smoothing, while the route came from a trail: how closely it follows what was flown. It cuts
  *     the route again when the hand lets go, not while it drags.
- *   - "As flown" and "Even pace": the route's timing, key times only.
+ *   - "As flown" and "Even pace": the route's timing, key times only. Beside them "Reverse"
+ *     (`reverseRoute`): a new route that plays this one the other way, one undo step.
  *   - One line of count, length and depths, and the pace at the playhead; under them, for a route
  *     that can play, one line on FREE LOOK (turning the view while the route plays: route.ts,
  *     FREE LOOK). Pause here is `pauseRoute`: the camera stays the route's, and a free look that
@@ -99,7 +100,7 @@ import { Modal } from '../../components/ui/Modal';
 import { useDzNavigation } from '../navigationState';
 import {
     ROUTE_SMOOTHING, ROUTE_TRACK, ROUTE_TYPED_LEG_SECONDS, cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, lookKeyed, pauseRoute, playLeg,
-    playRoute, replaceKeyframe, retimeRoute, returnToRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo, setKeyframe,
+    playRoute, replaceKeyframe, retimeRoute, returnToRoute, reverseRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo, setKeyframe,
     setLegSeconds, setRouteSmoothing, useRoute,
 } from '../route';
 import type { RouteKey } from '../route';
@@ -338,6 +339,15 @@ export const RoutePanel: React.FC = () => {
                         className={`${plainButton} flex-1`}
                     >
                         Even pace
+                    </button>
+                    <button
+                        type="button"
+                        data-dz-route-reverse
+                        onClick={reverseRoute}
+                        title="Make the route run the other way: the last keyframe becomes the first, and the picture at the playhead stays. One undo on the timeline brings it back."
+                        className={`${plainButton} flex-1`}
+                    >
+                        Reverse
                     </button>
                 </div>
             )}

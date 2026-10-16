@@ -30,7 +30,8 @@
  *     controls) and `lookTurned` (a turn while the route plays: a free look, which takes nothing).
  *     `diveBegan` from a dive (`deep-zoom/diveControl.ts`). From the Route tab: `pauseRoute`,
  *     `clearLook`, `deleteKeyframes` (one keyframe or the rows selected), `setLegSeconds` (a row's
- *     seconds field: the length of the leg that arrives at it) and `clearRoute` (all of it).
+ *     seconds field: the length of the leg that arrives at it), `reverseRoute` (Reverse: a new
+ *     route that plays this one backwards, its keys mirrored in time) and `clearRoute` (all of it).
  *   - THE OTHER WAY TO MAKE A ROUTE is to cut it from the trail (`deep-zoom/trail.ts`: what the app
  *     remembers of how the camera was flown). `routeFromTrail()` replaces the route with one whose
  *     keyframes are the trail's own samples; `setRouteSmoothing()` cuts it again from the same
@@ -124,7 +125,9 @@
  *     it had: the nudge that framed it is not the way the route goes.
  *   - WHAT A CUT ROUTE CAME FROM IS SESSION MEMORY (`made`, by key id): the smoothing slider and
  *     "As flown" need the trail. After a reload, or for a route from a scene file, every keyframe
- *     counts as set by hand.
+ *     counts as set by hand. A REVERSED route runs its trail backwards, and `routeSource` hands
+ *     back the trail reversed for it: read off the order of the keyframes' samples each time, so
+ *     a reverse writes nothing into `made` and an undo of one needs nothing either.
  *   - HANDLES. A keyframe's handles on the depth curve are the timeline's own (auto) until somebody
  *     shapes them. While they are, they are worked out again when the keyframe takes a new view
  *     (it is written as a new key: its id changes) and when a neighbour is deleted - here
@@ -281,6 +284,29 @@
  *   keyframes that stay keep their times; after Clear the camera is the user's with no view set
  *   and the iteration rule handed back; each step undone brings back what it took; a typed leg
  *   changes time only and the timeline grows; none of the three acts while a route renders.
+ * @invariant Reverse (`reverseRoute`) is ONE animation-undo step and makes the route that plays the
+ *   old one backwards: frame f at first + last - f, each keyframe with its id and its view to the
+ *   digit, its heading negated; at every mirrored frame the camera within 1e-9 of the depth of
+ *   where it was, and the depth curve (shaped handles, Linear legs), the count and a recorded look
+ *   as they were; reversed twice it is the route to the digit - proven by: npm run
+ *   check:deep-zoom-route (the "reverse: ..." lines). Falsified 2026-10-16: the headings left as
+ *   they were -> 3 red (the keyframes line; the camera 2.9 depths from where it was between two
+ *   keyframes, 2.1 at the playhead); each key keeping its own interpolation in
+ *   `AnimationMath.mirrorKeyframes` -> 3 red (the depth curve 0.034 decades off, the camera 0.10 of
+ *   the depth).
+ * @assumption The ORIENTATION between two keyframes is not quite the same played backwards: the
+ *   curve (`zoomPathOrientation`) turns about each keyframe's own frame, which is not symmetric in
+ *   time. 9.9e-4 rad at worst on the check's route, which turns up to 0.4 rad a leg (its line
+ *   allows 2e-3); the zoom-out study measured up to 0.3 degrees on a route that turns 19 times
+ *   (plans/deep-zoom-shell/ZOOM-OUTS.md). So a playhead between two keyframes may see the picture
+ *   turn by that much when the route is reversed; on a keyframe it does not move at all.
+ * @invariant A route cut from the trail and reversed still knows it came from the trail: the
+ *   trail reversed (`routeSource`). "As flown" times each leg as it was flown, the other way
+ *   round; the smoothing cuts again from the trail reversed, and turned back to the smoothing it
+ *   had gives the reversed route again; reversed again, it reads the very trail it was cut from -
+ *   proven by: npm run check:deep-zoom-trail (the "reverse: ..." lines of its second half).
+ *   Falsified 2026-10-16: `routeSource` never turning the trail round -> 4 red there ("As flown"
+ *   stayed green: off the trail forwards with the samples descending, each leg is the same size).
  * @assumption PICTURES: every keyframe of a cut route gets the picture of its own view at its
  *   keyed count, the camera is put back to the digit, the trail, the heading and the undo stack
  *   are not touched, and a route cut again draws only its new samples - green lines in
@@ -345,7 +371,7 @@ import { isFlying, useDzNavigation } from './navigationState';
 import { toOrientation, toQuaternion } from './orbitCamera';
 import type { V3 } from './orbitCamera';
 import {
-    FIXED_UNIT, TRAIL_HEADING_TRAVEL, cutDetours, depthCurve, evenFrames, followTrail, pickKeyframes, previousTrail,
+    FIXED_UNIT, TRAIL_HEADING_TRAVEL, cutDetours, depthCurve, evenFrames, followTrail, pickKeyframes, previousTrail, reverseTrail,
     trailDirections, trailFrames, trailHeadingNow, trailToHere, trailTurned, trailViewSet,
 } from './trail';
 import type { RouteTiming, TrailSample } from './trail';
@@ -1157,10 +1183,20 @@ const timing = (): RouteTiming => ({ fps: anim().fps, pace: ROUTE_PACE, maxLegSe
 const viewOfSample = (s: TrailSample): RouteView =>
     ({ cam: [String(s.p[0]), String(s.p[1]), String(s.p[2])], yaw: s.yaw, pitch: s.pitch, ...(s.roll ? { roll: s.roll } : {}) });
 
-/** What the route was cut from: set while every one of its keyframes came from one trail, this session. */
-export function routeSource(): { trail: readonly TrailSample[]; smoothing: number } | null {
+/**
+ * What the route was cut from: set while every one of its keyframes came from one trail, this
+ * session. `samples`: which sample of `trail` each keyframe is, in route order. A route that runs
+ * its trail BACKWARDS (it was reversed: `reverseRoute`) came from the trail reversed: that is
+ * what is handed back, so the smoothing cuts again from it and "As flown" reads its clock. Read
+ * off the keyframes each time, never written by the reverse, so an undo of one needs nothing.
+ */
+export function routeSource(): { trail: readonly TrailSample[]; smoothing: number; samples: number[] } | null {
     const keys = route().keys, first = keys.length > 0 ? made.get(keys[0].id) : undefined;
-    return first && keys.every((k) => made.get(k.id)?.trail === first.trail) ? first : null;
+    if (!first || !keys.every((k) => made.get(k.id)?.trail === first.trail)) return null;
+    const samples = keys.map((k) => made.get(k.id)?.sample ?? 0), end = first.trail.length - 1;
+    return samples[0] > samples[samples.length - 1]
+        ? { trail: trailReversed(first.trail), smoothing: first.smoothing, samples: samples.map((s) => end - s) }
+        : { trail: first.trail, smoothing: first.smoothing, samples };
 }
 
 /** The route holds a keyframe that no trail made: one set by hand, or from a scene. */
@@ -1187,9 +1223,11 @@ function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
     anim().replaceKeyframes([{ trackId: ROUTE_TRACK, newKeys: depthKeys }, { trackId: ROUTE_ITERATIONS_TRACK, newKeys: countKeys }]);
     depthKeys.forEach((k, j) => made.set(k.id, { trail, sample: pick.index[j], smoothing }));
     for (const id of made.keys()) { if (made.size <= MADE_KEPT) break; made.delete(id); }
-    // Their pictures: the ones this trail's samples already have (the route cut again), the rest a moment from now.
-    const known = pictured.get(trail), have: Record<string, string> = {};
-    owed = depthKeys.filter((k, j) => { const p = known?.get(pick.index[j]); if (p) have[k.id] = p; return !p; }).map((k) => k.id);
+    // Their pictures: the ones this trail's samples already have (the route cut again; a reversed route cut
+    // again from the trail reversed: the same samples the other way), the rest a moment from now.
+    const known = pictured.get(trail), turned = reversedTrails.get(trail), knownTurned = turned && pictured.get(turned), have: Record<string, string> = {};
+    const pictureOf = (i: number): string | undefined => known?.get(i) ?? knownTurned?.get(trail.length - 1 - i);
+    owed = depthKeys.filter((k, j) => { const p = pictureOf(pick.index[j]); if (p) have[k.id] = p; return !p; }).map((k) => k.id);
     keepPictures(have);
     picturesSoon();
 
@@ -1243,7 +1281,7 @@ export function retimeRoute(flown: boolean): void {
     if (from) flownTiming = flown;
     const was = keys.map((k) => k.frame);
     const now = from
-        ? trailFrames(from.trail, keys.map((k) => made.get(k.id)?.sample ?? 0), timing(), flown, was[0])
+        ? trailFrames(from.trail, from.samples, timing(), flown, was[0])
         : evenFrames(keys.map(zoomKey), timing(), was);
     moveKeyframes(r, was, now);
 }
@@ -1305,6 +1343,81 @@ function moveKeyframes(r: Built, was: readonly number[], now: readonly number[])
     anim().seek(at);
     if (driving) animationEngine.scrub(at); else lastFrame = at;
     bump();
+}
+
+// ── reverse ──────────────────────────────────────────────────────────────────────────────────────
+
+/** By trail, the same trail the other way, both ways round: a reversed route reversed again reads
+ *  the very trail it was cut from, and a route cut from either finds the pictures of the other. */
+const reversedTrails = new WeakMap<readonly TrailSample[], readonly TrailSample[]>();
+
+/** `trail` the other way (`reverseTrail`), made once. */
+function trailReversed(trail: readonly TrailSample[]): readonly TrailSample[] {
+    let back = reversedTrails.get(trail);
+    if (!back) { back = reverseTrail(trail); reversedTrails.set(trail, back); reversedTrails.set(back, trail); }
+    return back;
+}
+
+/** `keys` (a track's, in time order) with every handle that is still the timeline's own worked out
+ *  again where it now stands, as `moveKeyframes` does. Shaped handles are left as they are. */
+function timelineHandles(trackId: string, keys: readonly Keyframe[]): Keyframe[] {
+    return keys.map((k, i) => {
+        if (k.interpolation !== 'Bezier' || !k.autoTangent) return k;
+        const { l, r } = AnimationMath.calculateTangents(k, keys[i - 1], keys[i + 1], 'Auto', isLogTrack(trackId));
+        return { ...k, leftTangent: l, rightTangent: r };
+    });
+}
+
+/**
+ * Reverse the route: a NEW route that plays the old one backwards, in place of it, in ONE
+ * animation-undo step. Not a direction of playback: Play, a scrub, the render and the graph editor
+ * all read keys in time order, and mirrored keys need no player of their own. About the route's
+ * own span (frame f becomes first + last - f, so the span stays where it is):
+ *   - THE KEYFRAMES (`AnimationMath.mirrorKeyframes`): each keeps its id and its view, to the digit
+ *     (its picture, and what it was cut from, stay with it). EVERY HEADING IS NEGATED, or each
+ *     keyframe would be entered backwards (engine/animation/zoomPath.ts, PITFALLS). Handles the
+ *     timeline worked out are worked out again; shaped ones are mirrored.
+ *   - The iteration keys in the span, the same way: each stays with its keyframe.
+ *   - A recorded free look (the three look tracks), the same way. A look is a turn in the camera's
+ *     own frame, so its values stay as they are. A LOOK KEY OUTSIDE THE SPAN IS DROPPED: left where
+ *     it was, the track would run from the mirrored span to it.
+ *   - A route cut from the trail: its keyframes keep what they were cut from (`made` is by key id,
+ *     and is not touched), and now run that trail backwards, so `routeSource` hands back the trail
+ *     reversed (`reverseTrail`): the smoothing cuts again from it and "As flown" is its clock
+ *     mirrored. An undo of the reverse needs nothing more.
+ * The playhead goes to its mirrored frame (from outside the span, the mirror of the end it was
+ * past), so the picture on screen does not change: to the digit on a keyframe; between two, the
+ * orientation curve is not quite symmetric in time (the check prints how far). Nothing else on the
+ * timeline moves: a light, a colour, an iteration key outside the span. Nothing with fewer than two
+ * keyframes, or while the route is rendered.
+ */
+export function reverseRoute(): void {
+    if (route().keys.length < 2 || routeRendering()) return;
+    stopAt = null;
+    if (anim().isPlaying) anim().pause();                            // a pass being recorded ends here, before its keys are read
+    const r = route(), keys = r.keys, first = keys[0].frame, last = keys[keys.length - 1].frame, tracks = anim().sequence.tracks;
+    if (!r.depth) return;
+    const inSpan = (k: Keyframe): boolean => k.frame >= first && k.frame <= last;
+    /** The track's keys in the span mirrored (and each passed through `each`); those outside it kept where they are, or (`drop`) gone. */
+    const mirrored = (track: Track, drop = false, each = (k: Keyframe): Keyframe => k): Keyframe[] => {
+        const ks = track.keyframes, back = AnimationMath.mirrorKeyframes(ks.filter(inSpan), first, last).map(each);
+        return timelineHandles(track.id, drop ? back : [...ks.filter((k) => k.frame < first), ...back, ...ks.filter((k) => k.frame > last)]);
+    };
+    const turned = (k: Keyframe): Keyframe => {
+        const h = isPayload(k.payload) ? k.payload.heading : undefined;
+        return h ? { ...k, payload: { ...(k.payload as RoutePayload), heading: [-h[0], -h[1], -h[2]] } } : k;
+    };
+    const swaps = [{ trackId: ROUTE_TRACK, newKeys: mirrored(r.depth, false, turned) }];
+    if (r.iters && r.iters.keyframes.some(inSpan)) swaps.push({ trackId: ROUTE_ITERATIONS_TRACK, newKeys: mirrored(r.iters) });
+    for (const id of LOOK_TRACKS) { if (tracks[id]?.keyframes.length) swaps.push({ trackId: id, newKeys: mirrored(tracks[id], true) }); }
+    anim().snapshot();
+    anim().replaceKeyframes(swaps);
+    const at = first + last - Math.min(last, Math.max(first, anim().currentFrame));
+    anim().seek(at);
+    // A camera the route holds is put on the mirrored frame (at a keyframe, the view it already shows: nothing is set); one the user holds stays.
+    if (driving) animationEngine.scrub(at); else lastFrame = at;
+    bump();
+    showToast('Route reversed. One undo on the timeline brings it back', 'success');
 }
 
 // ── pictures of keyframes that were not set from the screen ──────────────────────────────────────

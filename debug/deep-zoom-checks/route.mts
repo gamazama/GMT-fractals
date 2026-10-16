@@ -43,6 +43,11 @@
  *   clear    Clear route: every keyframe, its iteration key and a recorded free look in one undo step; the playhead at
  *            frame 0; the camera the user's; undone, all of it is back
  *   seconds  a typed leg moves its keyframe and every later one by the same frames; time only; a frame at least
+ *   reverse  (2026-10-16, stage Z1 of plans/deep-zoom-shell/ZOOM-OUTS.md; another scene: five keyframes on the line and
+ *            off it, a shaped handle, two Linear depth keys, a recorded look) Reverse is one undo step; the keyframes the
+ *            other way round with their ids, views and negated headings; the view, the depth curve, the count and the
+ *            look at mirrored frames as they were; the playhead mirrored and the picture kept; reversed twice is the
+ *            route to the digit; a look key past the route dropped, an iteration key past it kept
  *
  * FALSIFICATION RECORD, 2026-10-11, one break per run in deep-zoom/route.ts, the file put back
  * byte for byte after each. The break, then what went red:
@@ -122,6 +127,20 @@
  *     (debug/scratch/route-fixes/delete-measure.mts, git-ignored), was red: 252 of 417 half frames differed from the fresh
  *     route with the third keyframe deleted, 403 with the middle three, 414 with the second and the fourth; the depth curve
  *     by up to 0.048 decades. The Route tab's own delete was 0 of 417 in all three, before the stage and after.
+ *   - reverse (2026-10-16, stage Z1; THREE breaks, the stage's allowance, the third in route.ts for the trail check; each
+ *     file put back byte for byte, its checksum compared):
+ *     1. route.ts, `reverseRoute` leaving every heading as it was                 -> 3 red: "reverse: ONE undo step; the keyframes
+ *        the other way round ..." (the headings), "reverse: at every mirrored frame the camera is where it was ..." (2.9 depths
+ *        off between keyframes), "reverse: between two keyframes the camera is put on the mirrored frame ..." (2.1); and in
+ *        check:deep-zoom-trail "reverse: and turned back to the smoothing it had ..."
+ *     2. engine/math/AnimationMath.ts, `mirrorKeyframes` letting each key keep its own interpolation
+ *                                                                               -> 3 red: "reverse: at every mirrored frame the camera
+ *        is where it was ..." (0.10 of the depth), "reverse: the depth curve at mirrored frames ..." (0.034 decades), "reverse:
+ *        between two keyframes ..." (0.013)
+ *     3. (check:deep-zoom-trail's lines; see its header)
+ *     NOT FALSIFIED, green only: the one undo step, reversed twice, each step undone, the count and the look at mirrored
+ *     frames, the playhead on a keyframe, the camera the user holds, the keys outside the span, and nothing while a route
+ *     renders or with one keyframe.
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -140,7 +159,7 @@ import { toOrientation } from '../../deep-zoom/orbitCamera';
 import {
     LOOK_FIT_TOLERANCE, LOOK_TRACKS, ROUTE_ITERATIONS_TRACK, ROUTE_MAX_LEG_SECONDS, ROUTE_MIN_LEG_SECONDS, ROUTE_SOLID_SAMPLES, ROUTE_TRACK, ROUTE_UNIT,
     cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, headingNow, installRoute, legFrames, legInSolid, lookKeyed, lookTurned, noteMove, playLeg,
-    replaceKeyframe, returnToRoute, routeDrives, routeKeys, routePaceAt, routeShownAt, routeViewAt, scrubRouteTo, setKeyframe, setLegSeconds, setRouteRendering,
+    replaceKeyframe, returnToRoute, reverseRoute, routeDrives, routeKeys, routePaceAt, routeShownAt, routeViewAt, scrubRouteTo, setKeyframe, setLegSeconds, setRouteRendering,
     stopRoutePlayback, useRoute,
 } from '../../deep-zoom/route';
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
@@ -838,6 +857,168 @@ keyRound();
     check(JSON.stringify(anim().sequence) === held && anim().undoStack.length === heldSteps, 'render: while the route is rendered a delete of several, a typed leg and Clear route change nothing and leave no step');
 }
 ball = null;
+
+// ── reverse (2026-10-16, stage Z1 of plans/deep-zoom-shell/ZOOM-OUTS.md) ─────────────────────────
+// Five keyframes set with K, on the line and off it, legs of uneven length, turning and rolling;
+// the first has no heading (it was set right after a jump). One depth key's handles are shaped by
+// hand, the fourth depth key is Linear (the leg after it runs straight in log) and so is the last
+// (whose interpolation leads nowhere). The iteration keys are the ones K writes. A recorded free
+// look: pan and roll Linear keys, tilt Bezier keys with shaped handles, all inside the route's span.
+{
+    const off = (depth: number, side: V3): [string, string, string] =>
+        [0, 1, 2].map((j) => String(S[j] + BigInt(Math.round(depth * (BACK[j] + side[j]) * 2 ** 256)))) as [string, string, string];
+    /** The hands fly to `cam`, `depth` from what is looked at there, looking as given: a move told to the route, the way it went. */
+    const flyThere = (cam: [string, string, string], depth: number, look: Look): void => {
+        const was = fromS(view.cam), now = fromS(cam);
+        view = { ...view, cam, yaw: look.yaw, pitch: look.pitch, iters: countFor(depth) };
+        if (look.roll) view.roll = look.roll; else delete view.roll;
+        depthHere = depth;
+        noteMove(now[0] - was[0], now[1] - was[1], now[2] - was[2]);
+    };
+    anim().deleteAllTracks();
+    useAnimationStore.setState({ undoStack: [], redoStack: [] });
+    anim().setDuration(300);
+    host.setView({ ...host.getView(), cam: at(1), yaw: -1.2, pitch: 0.3, roll: 0, iters: countFor(1) });   // a jump to the start
+    depthHere = 1;
+    setKeyframe();
+    flyThere(off(1e-3, [0.4, -0.3, 0.2]), 1e-3, { yaw: -1.1, pitch: 0.25 });
+    setKeyframe();
+    flyThere(off(1e-6, [-0.5, 0.2, 0.3]), 1e-6, { yaw: -0.9, pitch: 0.1, roll: 0.2 });
+    setKeyframe();
+    flyThere(off(1e-12, [0.1, 0.6, -0.4]), 1e-12, { yaw: -1.3, pitch: 0.35, roll: -0.1 });
+    setKeyframe();
+    flyThere(at(1e-20), 1e-20, { yaw: -1.0, pitch: 0.2, roll: 0.25 });
+    setKeyframe();
+    const ks = depthKeys();
+    anim().updateKeyframes([
+        { trackId: ROUTE_TRACK, keyId: ks[2].id, patch: { autoTangent: false, leftTangent: { x: -0.45 * (ks[2].frame - ks[1].frame), y: 1.2 }, rightTangent: { x: 0.2 * (ks[3].frame - ks[2].frame), y: -2.5 } } },
+        { trackId: ROUTE_TRACK, keyId: ks[3].id, patch: { interpolation: 'Linear' } },
+        { trackId: ROUTE_TRACK, keyId: ks[4].id, patch: { interpolation: 'Linear' } },     // leads nowhere: it is the one a reverse hands round to the end
+    ]);
+    const was = routeKeys().map((k) => ({ ...k })), first = was[0].frame, last = was[4].frame, F = first + last;
+    check(was.length === 5 && !was[0].heading && was.slice(1).every((k) => !!k.heading) && !depthKeys()[2].autoTangent && depthKeys()[3].interpolation === 'Linear'
+        && depthKeys()[4].interpolation === 'Linear' && countKeys().length === 5,
+        `reverse: (five keyframes at frames ${was.map((k) => k.frame).join(', ')}, the first with no heading; shaped handles, two Linear keys, five counts)`);
+    // On a keyframe, the route driving the camera, no free look yet.
+    scrubRouteTo(was[3].frame);
+    let n = setViews().length;
+    reverseRoute();
+    check(anim().currentFrame === F - was[3].frame && setViews().length === n && sameCamera(host.getView(), was[3].view) && routeDrives() && cameraOnRoute(),
+        'reverse: the playhead goes to the mirrored frame; standing on a keyframe, the camera shows the very view it did and nothing is set',
+        `frame ${anim().currentFrame}, ${setViews().length - n} setView, drives ${routeDrives()}`);
+    anim().undo();
+    const linear =(id: string, frame: number, value: number): Keyframe => ({ id: `${id}-${frame}`, frame, value, interpolation: 'Linear', autoTangent: false, brokenTangents: false });
+    const bent = (id: string, frame: number, value: number, l: number, r: number): Keyframe =>
+        ({ id: `${id}-${frame}`, frame, value, interpolation: 'Bezier', autoTangent: false, brokenTangents: true, leftTangent: { x: -0.3 * l, y: 0.1 }, rightTangent: { x: 0.25 * r, y: -0.05 } });
+    const part = (u: number): number => Math.round(first + (last - first) * u);
+    const lookTracks: Keyframe[][] = [
+        [linear('pan', part(0), 0), linear('pan', part(0.3), 0.4), linear('pan', part(0.7), -0.3), linear('pan', part(1), 0.1)],
+        [bent('tilt', part(0.1), 0.05, part(0.1) - first, part(0.5) - part(0.1)), bent('tilt', part(0.5), 0.25, part(0.5) - part(0.1), part(0.9) - part(0.5)), bent('tilt', part(0.9), -0.1, part(0.9) - part(0.5), last - part(0.9))],
+        [linear('roll', part(0.2), 0), linear('roll', part(0.6), 0.3)],
+    ];
+    useAnimationStore.setState((s) => ({ sequence: { ...s.sequence, tracks: { ...s.sequence.tracks, ...Object.fromEntries(LOOK_TRACKS.map((id, j) => [id, { id, type: 'float' as const, label: id, keyframes: lookTracks[j] }])) } } }));
+    useAnimationStore.setState({ undoStack: [], redoStack: [] });
+    check(lookKeyed() && LOOK_TRACKS.every((id, j) => anim().sequence.tracks[id].keyframes.length === lookTracks[j].length), 'reverse: (and now a recorded look)');
+
+    // What plays before: the view, the depth curve, the count and the look, at every 3.5 frames of the span and at each keyframe.
+    const frames = [...Array.from({ length: Math.floor((last - first) / 3.5) + 1 }, (_, i) => first + 3.5 * i), ...was.map((k) => k.frame)];
+    const playing = (frame: number) => {
+        const tracks = anim().sequence.tracks;
+        return { view: routeViewAt(frame) as Look & { cam: [string, string, string] }, depth: animationEngine.evaluateTrack(tracks[ROUTE_TRACK], frame),
+            count: animationEngine.evaluateTrack(tracks[ROUTE_ITERATIONS_TRACK], frame), look: LOOK_TRACKS.map((id) => animationEngine.evaluateTrack(tracks[id], frame)) };
+    };
+    const before = frames.map(playing), whole = JSON.stringify(anim().sequence);
+
+    // On a keyframe again, now under the recorded look.
+    scrubRouteTo(was[3].frame);
+    const shown = host.getView();
+    n = setViews().length;
+    reverseRoute();
+    const now = routeKeys(), once = JSON.stringify(anim().sequence);
+    const negated = (a: V3 | undefined, b: V3 | undefined): boolean => (!a ? !b : !!b && b.every((v, j) => v === -a[j]));
+    check(anim().undoStack.length === 1 && now.length === 5 && now.every((k, j) => {
+        const old = was[4 - j];
+        return k.id === old.id && k.frame === F - old.frame && k.depth === old.depth && JSON.stringify(k.view) === JSON.stringify(old.view) && negated(old.heading, k.heading);
+    }), 'reverse: ONE undo step; the keyframes the other way round, frame f at first + last - f, each with its id and its view to the digit, every heading negated (and none where there was none)',
+    `${anim().undoStack.length} steps, frames ${now.map((k) => k.frame)}, ids ${now.map((k) => was.findIndex((o) => o.id === k.id))}`);
+    check(anim().currentFrame === F - was[3].frame && setViews().length <= n + 1 && sameStrings(host.getView().cam, shown.cam) && apart(host.orientation(), routeQ(shown)) < 1e-12 && routeDrives() && cameraOnRoute(),
+        `reverse: under a recorded look too: on the keyframe's own place, turned as it was (within ${apart(host.orientation(), routeQ(shown)).toExponential(1)} rad: the look is read at the mirrored frame)`,
+        `frame ${anim().currentFrame}, ${setViews().length - n} setView, drives ${routeDrives()}`);
+    let worstAt = 0, worstTurn = 0, worstDepth = 0, worstCount = 0, worstLook = 0, keyed = true, counted = true;
+    frames.forEach((f, i) => {
+        const a = before[i], b = playing(F - f);
+        const gap = [0, 1, 2].map((j) => Number(BigInt(b.view.cam[j]) - BigInt(a.view.cam[j])) / ROUTE_UNIT);
+        worstAt = Math.max(worstAt, Math.hypot(gap[0], gap[1], gap[2]) / a.depth);
+        worstTurn = Math.max(worstTurn, apart(b.view, routeQ(a.view)));
+        worstDepth = Math.max(worstDepth, Math.abs(Math.log10(b.depth / a.depth)));
+        worstCount = Math.max(worstCount, Math.abs(b.count - a.count));
+        counted = counted && Math.trunc(b.count) === Math.trunc(a.count);
+        worstLook = Math.max(worstLook, ...a.look.map((v, j) => Math.abs(b.look[j] - v)));
+        if (i >= frames.length - was.length) keyed = keyed && JSON.stringify(b.view) === JSON.stringify(a.view);
+    });
+    check(keyed && worstAt < 1e-9, `reverse: at every mirrored frame the camera is where it was: at the keyframes to the digit, between them within ${worstAt.toExponential(1)} of the depth there (${frames.length} frames)`,
+        `keyframes ${keyed}, worst ${worstAt}`);
+    check(worstTurn < 2e-3, `reverse: and it looks the way it did, within ${worstTurn.toExponential(1)} rad (the orientation curve is not quite the same played backwards: it turns about the keyframes' own frames)`, `worst ${worstTurn}`);
+    check(worstDepth < 1e-9, `reverse: the depth curve at mirrored frames is the one before, the shaped handles mirrored and the Linear leg Linear still (within ${worstDepth.toExponential(1)} decades)`, `worst ${worstDepth}`);
+    check(counted && worstCount < 1e-9, `reverse: the iteration count at mirrored frames is the one before (within ${worstCount.toExponential(1)})`, `worst ${worstCount}, whole counts the same ${counted}`);
+    check(worstLook < 1e-9, `reverse: the recorded look at mirrored frames is the one before, its values as they were (within ${worstLook.toExponential(1)} rad)`, `worst ${worstLook}`);
+
+    reverseRoute();
+    check(JSON.stringify(anim().sequence) === whole && anim().undoStack.length === 2 && anim().currentFrame === was[3].frame,
+        'reverse: reversed twice is the route to the digit: keys, ids, frames, handles, interpolations, payloads, counts and the look, in a second undo step',
+        `same ${JSON.stringify(anim().sequence) === whole}, ${anim().undoStack.length} steps, frame ${anim().currentFrame}`);
+    anim().undo();
+    const undoneOnce = JSON.stringify(anim().sequence);
+    anim().undo();
+    check(undoneOnce === once && JSON.stringify(anim().sequence) === whole, 'reverse: each step undone brings back the route it replaced');
+
+    // Between two keyframes: the camera follows to the mirrored frame, the same place.
+    const between = was[1].frame + 0.4 * (was[2].frame - was[1].frame);
+    scrubRouteTo(between);
+    const stood = host.getView(), depthThere = animationEngine.evaluateTrack(anim().sequence.tracks[ROUTE_TRACK], between);
+    n = setViews().length;
+    reverseRoute();
+    const moved = [0, 1, 2].map((j) => Number(BigInt(host.getView().cam[j]) - BigInt(stood.cam[j])) / ROUTE_UNIT), movedBy = Math.hypot(moved[0], moved[1], moved[2]) / depthThere;
+    check(anim().currentFrame === F - between && setViews().length <= n + 1 && movedBy < 1e-9 && apart(host.orientation(), routeQ(stood)) < 2e-3 && cameraOnRoute(),
+        `reverse: between two keyframes the camera is put on the mirrored frame: the same place (${movedBy.toExponential(1)} of the depth), turned by ${apart(host.orientation(), routeQ(stood)).toExponential(1)} rad`,
+        `frame ${anim().currentFrame}, ${setViews().length - n} setView`);
+    anim().undo();
+
+    // The user holds the camera: it stays, and so does a scrub of the same frame after it.
+    flyThere(off(1e-7, [0.2, 0.2, 0.2]), 1e-7, { yaw: 0.4, pitch: -0.1 });
+    const theirs = host.getView(), playhead = anim().currentFrame;
+    n = setViews().length;
+    reverseRoute();
+    scrub(anim().currentFrame);
+    check(anim().currentFrame === F - Math.min(last, Math.max(first, playhead)) && setViews().length === n && sameCamera(host.getView(), theirs) && !routeDrives(),
+        'reverse: a camera the user holds stays where it is, also when the timeline scrubs the same frame after the edit', `${setViews().length - n} setView, drives ${routeDrives()}`);
+    anim().undo();
+
+    // Outside the span: a look key is dropped, an iteration key stays.
+    anim().setDuration(last + 400);
+    anim().addKeyframe(LOOK_TRACKS[0], last + 300, 0.9, 'Linear');
+    anim().addKeyframe(ROUTE_ITERATIONS_TRACK, last + 300, 77, 'Linear');
+    const outside = countKeys().find((c) => c.frame === last + 300);
+    reverseRoute();
+    const pan = anim().sequence.tracks[LOOK_TRACKS[0]].keyframes;
+    check(pan.length === 4 && pan.every((k) => k.frame >= first && k.frame <= last) && countKeys().find((c) => c.frame === last + 300) === outside && countKeys().length === 6,
+        'reverse: a look key past the end of the route is dropped (the look in the span is mirrored); an iteration key past it stays as it was',
+        `pan at ${pan.map((k) => k.frame)}, counts at ${countKeys().map((k) => k.frame)}`);
+    anim().undo();
+
+    // While the route renders, and with one keyframe: nothing.
+    const held = JSON.stringify(anim().sequence), heldSteps = anim().undoStack.length;
+    setRouteRendering(true);
+    reverseRoute();
+    setRouteRendering(false);
+    const rendered = JSON.stringify(anim().sequence) === held && anim().undoStack.length === heldSteps;
+    deleteKeyframes(routeKeys().slice(1).map((k) => k.id));
+    const oneKey = JSON.stringify(anim().sequence);
+    reverseRoute();
+    check(rendered && JSON.stringify(anim().sequence) === oneKey && anim().undoStack.length === heldSteps + 1,
+        'reverse: while the route is rendered, and with one keyframe, it changes nothing and leaves no step', `rendered ${rendered}, ${anim().undoStack.length - heldSteps} steps`);
+    anim().undo();
+}
 
 stopSync();
 console.log(failed === 0 ? '\nroute: all green' : `\nroute: ${failed} FAILED`);

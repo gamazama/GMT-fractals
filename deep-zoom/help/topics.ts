@@ -154,6 +154,7 @@ The app remembers how you fly. That is the trail, and its line on the Route tab 
 ## Timing
 - **Even pace** times every leg by its length on screen, half a decade a second.
 - **As flown** times a route made from the trail the way you flew it.
+- **Reverse** makes the route run the other way: its last keyframe becomes the first. One undo brings it back.
 
 ## Playing
 - **Play** runs the route from the playhead to its last keyframe.

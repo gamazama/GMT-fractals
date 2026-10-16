@@ -36,6 +36,18 @@
  *            the route's track taken out of `installRoute` -> 4 red: "picture: a route that arrives with a loaded scene
  *            ..." (0 owed), the two lines after it, and "a keyframe whose picture could not be drawn ..." (0 of 5 pictured).
  *   follow   an iteration key follows its keyframe on the timeline: moved, deleted, across another
+ *   reverse  (2026-10-16, stage Z1 of plans/deep-zoom-shell/ZOOM-OUTS.md) `reverseTrail`: the same views the other way,
+ *            each gap on its step, the clock mirrored, the directions negated, twice the trail it was. In the app: the
+ *            cut route reversed still knows its trail (the trail reversed); "As flown" times each leg as flown, the
+ *            other way round; the smoothing cuts again from the trail reversed, with the pictures its samples had, and
+ *            turned back gives the reversed route; reversed again it reads the very trail it was cut from.
+ *            FALSIFIED 2026-10-16, route.ts, `routeSource` never turning the trail round -> 4 red: "reverse: a route cut
+ *            from the trail, reversed ...", "reverse: the smoothing slider cuts it again ..." (the route ran forwards
+ *            again), "reverse: and turned back ...", "reverse: reversed again ...". "As flown" stayed green: timed off the
+ *            trail forwards with the samples descending, each leg is the same size. Two later lines ("heading: a
+ *            keyframe set by hand after it ...", "end: a route is made from the previous trail ...") went red too: they
+ *            stood on the playhead the broken block left. The block has put the playhead back since; that run was not
+ *            repeated. NOT FALSIFIED: the three lines of `reverseTrail` alone, and the pictures.
  *
  * MEASURED HERE, 2026-10-11 (this machine, node; the two "cost:" lines the check prints):
  * `cutDetours` on 3767 samples that are all at one depth - its worst case, every sample compared
@@ -100,12 +112,12 @@ import type { DeepZoomHost, DzParams, DzView } from '../../deep-zoom/host/DeepZo
 import { startHostSync } from '../../deep-zoom/useHostSync';
 import { setReadings } from '../../deep-zoom/navigationState';
 import {
-    ROUTE_ITERATIONS_TRACK, ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, headingNow, installRoute, noteMove, noteTurn, retimeRoute,
+    ROUTE_ITERATIONS_TRACK, ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, headingNow, installRoute, noteMove, noteTurn, retimeRoute, reverseRoute,
     routeDrives, routeFromTrail, routeHandSet, routeKeys, routeSource, routeViewAt, setKeyframe, setRouteSmoothing, takeOwedPictures, useRoute,
 } from '../../deep-zoom/route';
 import type { RoutePayload } from '../../deep-zoom/route';
 import {
-    FIXED_UNIT, TRAIL_CAP, TRAIL_DEPTH_SLACK, createTrail, cutDetours, depthCurve, evenFrames, pickKeyframes, previousTrail, setTrailOn,
+    FIXED_UNIT, TRAIL_CAP, TRAIL_DEPTH_SLACK, createTrail, cutDetours, depthCurve, evenFrames, pickKeyframes, previousTrail, reverseTrail, setTrailOn,
     trailDecades, trailDirections, trailEnds, trailFrames, trailHeading, trailSamples, trailSeconds, useTrail,
 } from '../../deep-zoom/trail';
 import type { TrailPick, TrailSample, TrailView } from '../../deep-zoom/trail';
@@ -325,6 +337,25 @@ function offLine(s: TrailSample, line: readonly P3[]): number {
     along(hover, (u) => [80 * u, 3 * Math.sin(40 * u), 1], 0, 1, 16400);
     const t0 = performance.now(), kept2 = cutDetours(hover.trail.samples()).length;
     console.log(`  cost: cutDetours on ${hover.trail.samples().length} samples at one depth: ${(performance.now() - t0).toFixed(0)} ms (${kept2} kept)`);
+}
+
+// ── reverse: the trail the other way ─────────────────────────────────────────────────────────────
+{
+    // The dead end of the "cut:" lines again: one gap, where the way back met the way out.
+    const f = flown();
+    along(f, straight([0, 0, 1], [5, 0, 1]), 0, 1, 1000);
+    along(f, straight([5, 0, 1], [2, 0, 1]), 0, 1, 600);
+    along(f, straight([2, 0, 1], [2, 0, 0.01]), 0, 1, 198 * 5);
+    const cut = cutDetours(f.trail.samples()), m = cut.length, back = reverseTrail(cut), marked = cut.findIndex((s) => s.gap);
+    const forward = trailDirections(cut), backward = trailDirections(back);
+    check(marked > 0 && back.length === m && back.every((s, i) => s.p === cut[m - 1 - i].p && s.depth === cut[m - 1 - i].depth && s.yaw === cut[m - 1 - i].yaw && s.iters === cut[m - 1 - i].iters)
+        && back.every((s, i) => s.gap === (i === 0 ? cut[0].gap : cut[m - i].gap)) && back[m - marked].gap === true && back.filter((s) => s.gap).length === 1,
+        'reverse: a trail reversed holds the same views the other way, its gap on the same step (the one into the other end of it)', `gap at ${marked} -> ${back.findIndex((s) => s.gap)} of ${m}`);
+    check(back[0].t === cut[0].t && back.every((s, i) => i === 0 || Math.abs((s.t - back[i - 1].t) - (cut[m - i].t - cut[m - 1 - i].t)) < 1e-9)
+        && backward.every((d, i) => { const a = forward[m - 1 - i]; return !a ? !d : !!d && d.every((v, j) => v === -a[j]); }),
+        'reverse: its clock starts where it did and every step takes as long as it did; the direction of travel at each sample is negated, to the digit');
+    const twice = reverseTrail(back);
+    check(twice.every((s, i) => s.p === cut[i].p && s.gap === cut[i].gap && Math.abs(s.t - cut[i].t) < 1e-9), 'reverse: and reversed twice it is the trail it was');
 }
 
 // ── pick ─────────────────────────────────────────────────────────────────────────────────────────
@@ -688,6 +719,54 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
     retimeRoute(false);
     check(routeKeys().map((k) => k.frame).join() === even.join(), 'time: "Even pace" puts every leg back at 0.5 decades a second', `${routeKeys().map((k) => k.frame)} against ${even}`);
     keys = routeKeys();
+}
+
+// ── reverse (in the app; 2026-10-16, stage Z1 of plans/deep-zoom-shell/ZOOM-OUTS.md) ─────────────
+// The cut route reversed (`reverseRoute`): its keyframes now run the trail backwards, so what the
+// route came from is the trail reversed - the smoothing cuts again from that, and "As flown" is
+// the flown clock mirrored.
+{
+    const pictures = (): Record<string, string> => useRoute.getState().thumbnails;
+    const legsOf = (frames: readonly number[]): number[] => frames.slice(1).map((f, i) => f - frames[i]);
+    const trail = routeSource()?.trail ?? [], n = trail.length, sequence = anim().sequence, stack = anim().undoStack, again = anim().redoStack, playhead = anim().currentFrame;
+    retimeRoute(true);
+    const flownLegs = legsOf(routeKeys().map((k) => k.frame));
+    retimeRoute(false);
+    const steps = anim().undoStack.length, first = keys[0].frame;
+    reverseRoute();
+    const from = routeSource(), back = from?.trail ?? [];
+    check(anim().undoStack.length === steps + 1 && !!from && !routeHandSet() && from.smoothing === ROUTE_SMOOTHING.initial && back !== trail && back.length === n
+        && back.every((s, i) => s.p === trail[n - 1 - i].p) && routeKeys().every((k, j) => camOf(back[from.samples[j]]).join() === k.view.cam.join()),
+        'reverse: a route cut from the trail, reversed in one undo step, still knows it came from the trail: the trail reversed, each keyframe its sample, at the smoothing it had');
+    retimeRoute(true);
+    const reversedFlown = routeKeys().map((k) => k.frame), reversedLegs = legsOf(reversedFlown), mirroredLegs = [...flownLegs].reverse();
+    const legsOff = reversedLegs.filter((l, i) => l !== mirroredLegs[i]).length;
+    check(reversedFlown[0] === first && reversedLegs.length === mirroredLegs.length && reversedLegs.every((l, i) => Math.abs(l - mirroredLegs[i]) <= 1)
+        && Math.abs((reversedFlown[reversedFlown.length - 1] - first) / 30 - trailSeconds(trail)) < 0.5 && anim().undoStack.length === steps + 2,
+        `reverse: "As flown" on the reversed route: every leg takes the time it was flown in, the other way round (${legsOff} of ${reversedLegs.length} legs a frame apart), in one undo step`,
+        `${legsOff} legs differ, ${(reversedFlown[reversedFlown.length - 1] - first) / 30} s against ${trailSeconds(trail)}`);
+    retimeRoute(false);
+    const cutBefore = routeKeys();
+    setRouteSmoothing(0.2);
+    const loose = routeKeys(), now = routeSource(), carried = loose.filter((k) => pictures()[k.id]?.startsWith(`${k.view.cam.join()} | `)).length;
+    check(now?.trail === back && now.smoothing === 0.2 && loose.length < cutBefore.length && sameCamera(loose[0].view, cutBefore[0].view)
+        && sameCamera(loose[loose.length - 1].view, cutBefore[cutBefore.length - 1].view) && worstOffRoute() <= 0.2 && cameraOnRoute(),
+        `reverse: the smoothing slider cuts it again from the trail reversed: from where the route ended to where it began, ${loose.length} keyframes, every sample within the smoothing`,
+        `${loose.length} keyframes, worst ${worstOffRoute()}, on the route ${cameraOnRoute()}`);
+    check(carried === loose.length, `reverse: and the pictures taken at the trail's samples go with them: ${carried} of ${loose.length} keyframes have theirs at once`);
+    setRouteSmoothing(ROUTE_SMOOTHING.initial);
+    const recut = routeKeys();
+    check(JSON.stringify(recut.map((k) => [k.frame, k.view, k.heading])) === JSON.stringify(cutBefore.map((k) => [k.frame, k.view, k.heading])),
+        'reverse: and turned back to the smoothing it had, it is the reversed route again: the same views and headings at the same frames', `${recut.length} keyframes against ${cutBefore.length}`);
+    reverseRoute();
+    check(routeSource()?.trail === trail && sameCamera(routeKeys()[0].view, keys[0].view) && sameCamera(routeKeys()[routeKeys().length - 1].view, keys[keys.length - 1].view),
+        'reverse: reversed again, the route reads the very trail it was cut from, and runs the way it was flown');
+    anim().undo();
+    check(routeSource()?.trail === back, 'reverse: (and that reverse undone, it reads the trail reversed again)');
+    // The cut route as it was, the playhead on its last keyframe, for the lines below.
+    useAnimationStore.setState({ sequence, undoStack: stack, redoStack: again });
+    anim().seek(playhead);
+    check(routeKeys().every((k, i) => k.id === keys[i].id) && routeSource()?.trail === trail && cameraOnRoute(), 'reverse: (the cut route is put back for the lines below)');
 }
 
 // ── follow ───────────────────────────────────────────────────────────────────────────────────────

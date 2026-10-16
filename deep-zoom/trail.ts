@@ -40,6 +40,10 @@
  *                    length on screen of the way that was FLOWN, sample to sample), or on the
  *                    trail's own clock. `evenFrames` is the same pace for a route with no trail
  *                    behind it: each leg by the straight line between its two keyframes.
+ *   `reverseTrail`   the trail the other way, for a route that was reversed (`reverseRoute` in
+ *                    `deep-zoom/route.ts`): a cut route reversed runs its trail backwards, and
+ *                    `routeSource` hands it this instead, so the smoothing and "As flown" go on
+ *                    working.
  *
  * THE SEAM
  *   - `followTrail`, `trailTurned`, `trailViewSet`: from `deep-zoom/route.ts` (a move, a turn, a
@@ -87,6 +91,11 @@
  *   retreat - proven by: npm run check:deep-zoom-trail (the "thin: ...", "turn: ...", "end: ...",
  *   "cut: ...", "pick: ...", "time: ...", "heading: ..." lines). Falsified 2026-10-11: see the
  *   check's header.
+ * @assumption `reverseTrail` holds the same views the other way, each gap on its step, the clock
+ *   starting where it did with every step as long as it was, the directions of travel negated to
+ *   the digit, and reversed twice is the trail it was: green lines in check:deep-zoom-trail
+ *   ("reverse: a trail reversed ...", "reverse: its clock ...", "reverse: and reversed twice
+ *   ..."), none broken on its own (the stage's three breaks went to route.ts and the engine).
  * @assumption The staleness guard (PITFALLS: THE DEPTH SHOWN LAGS) holds for a quarter second at
  *   most. One line of the check opens it ("end: after a view is set, nothing is taken while the
  *   depth shown is still that of the place left"); it was not seen red.
@@ -400,6 +409,24 @@ export function cutDetours(samples: readonly TrailSample[]): TrailSample[] {
         lengths.push(len(step));
     }
     return out;
+}
+
+// ── a reversed route: the trail the other way ────────────────────────────────────────────────────
+
+/**
+ * The trail flown the other way: the same views in the opposite order. The clock is mirrored (the
+ * first sample keeps its time, and every step takes as long as it did), and a `gap` stays on its
+ * step: it marks the step INTO a sample, so it moves to the sample at that step's other end. The
+ * first sample, which no step arrives at, takes the mark that marked no step before (the old first
+ * one's), as `AnimationMath.mirrorKeyframes` does with an interpolation. The directions of travel
+ * (`trailDirections`) come out negated, to the digit.
+ */
+export function reverseTrail(samples: readonly TrailSample[]): TrailSample[] {
+    const n = samples.length, start = n > 0 ? samples[0].t : 0, end = n > 0 ? samples[n - 1].t : 0;
+    return samples.map((_, j) => {
+        const { gap: _gap, ...s } = samples[n - 1 - j], marked = samples[j === 0 ? 0 : n - j].gap;
+        return { ...s, t: start + (end - s.t), ...(marked ? { gap: true as const } : {}) };
+    });
 }
 
 // ── cutting a route: its keyframes and their times ───────────────────────────────────────────────
