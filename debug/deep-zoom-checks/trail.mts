@@ -35,6 +35,12 @@
  *            stack as they were, each keyframe tried once. FALSIFIED 2026-10-12, route.ts, the `owePictures` listener on
  *            the route's track taken out of `installRoute` -> 4 red: "picture: a route that arrives with a loaded scene
  *            ..." (0 owed), the two lines after it, and "a keyframe whose picture could not be drawn ..." (0 of 5 pictured).
+ *            A KEYFRAME WHOSE VIEW CHANGES under its id (2026-10-16, stage S2 of plans/deep-zoom-shell/SMOOTHING.md: a
+ *            smoothing pass moves aims) is pictured again, and no other; undone, its old picture is back at once with
+ *            nothing drawn; redone, the new one. FALSIFIED 2026-10-16, route.ts, `pictureNow` not comparing the view
+ *            (`!!pictures[k.id]` alone) -> 2 red: "picture: a keyframe whose view changes under its id ..." (0 setView,
+ *            0 owed), "picture: redone, the new one ..." (the picture of the old view). NOT FALSIFIED: "picture: undone,
+ *            its old picture is back at once ..." (green under that break: the old picture had never been replaced).
  *   follow   an iteration key follows its keyframe on the timeline: moved, deleted, across another
  *   reverse  (2026-10-16, stage Z1 of plans/deep-zoom-shell/ZOOM-OUTS.md) `reverseTrail`: the same views the other way,
  *            each gap on its step, the clock mirrored, the directions negated, twice the trail it was. In the app: the
@@ -701,6 +707,28 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
     // The cut route again, as it was, for the lines below.
     useAnimationStore.setState({ sequence: cutSequence, undoStack: cutUndo, redoStack: cutRedo });
     check(routeKeys().length === keys.length && routeKeys().every((k, i) => k.id === keys[i].id) && !routeHandSet(), 'picture: (the cut route is put back for the lines below)');
+
+    // A keyframe whose VIEW changes under its id (2026-10-16, stage S2: a smoothing pass moves aims) is owed a new picture and
+    // gets it from the same pass; undone, its old picture is back at once with nothing drawn; redone, the new one.
+    const turnIt = routeKeys()[3], wasPicture = pictures()[turnIt.id];
+    anim().snapshot();
+    anim().updateKeyframes([{ trackId: ROUTE_TRACK, keyId: turnIt.id, patch: { payload: { ...(depthKeys()[3].payload as RoutePayload), view: { ...turnIt.view, yaw: turnIt.view.yaw + 0.05 } } } }]);
+    const turnedKey = routeKeys()[3];
+    calls.length = 0;
+    stepped = 0;
+    const leftTurned = takeOwedPictures();
+    check(leftTurned === 0 && wasPicture === own(turnIt) && pictures()[turnIt.id] === own(turnedKey) && pictures()[turnIt.id] !== wasPicture && calls.length === 2
+        && routeKeys().every((k, i) => i === 3 || pictures()[k.id] === own(k)),
+        'picture: a keyframe whose view changes under its id (a smoothing pass moves its aim) is pictured again, and no other', `${calls.length} setView, ${leftTurned} owed`);
+    calls.length = 0;
+    anim().undo();
+    const backAtOnce = pictures()[turnIt.id] === wasPicture, owedAfterUndo = takeOwedPictures();
+    check(backAtOnce && owedAfterUndo === 0 && calls.length === 0, 'picture: undone, its old picture is back at once, and nothing is drawn', `back ${backAtOnce}, ${owedAfterUndo} owed, ${calls.length} setView`);
+    anim().redo();
+    const newAtOnce = pictures()[turnIt.id] === own(turnedKey), owedAfterRedo = takeOwedPictures();
+    check(newAtOnce && owedAfterRedo === 0 && calls.length === 0, 'picture: redone, the new one, and nothing is drawn', `new ${newAtOnce}, ${owedAfterRedo} owed, ${calls.length} setView`);
+    useAnimationStore.setState({ sequence: cutSequence, undoStack: cutUndo, redoStack: cutRedo });
+    check(pictures()[turnIt.id] === wasPicture, 'picture: (the cut route is put back again, with its pictures)');
 }
 
 // ── time (the two buttons) ───────────────────────────────────────────────────────────────────────

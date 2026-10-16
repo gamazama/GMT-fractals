@@ -34,8 +34,9 @@
  *     `clearLook`, `deleteKeyframes` (one keyframe or the rows selected), `setLegSeconds` (a row's
  *     seconds field: the length of the leg that arrives at it), `reverseRoute` (Reverse: a new
  *     route that plays this one backwards, its keys mirrored in time) and `clearRoute` (all of it).
- *     The smoothing pass (stage S1; its dialog is S2): `smoothRoute`, `routePictureSpeed`,
- *     `pinKeyframe` / `unpinKeyframe`, `closeKeyframes`, `mergeCloseKeyframes`.
+ *     The smoothing pass (stage S1): `smoothRoute`, `routePictureSpeed`, `pinKeyframe` /
+ *     `unpinKeyframe`, `closeKeyframes`, `mergeCloseKeyframes`; its dialog (stage S2) is
+ *     `deep-zoom/components/SmoothDialog.tsx`, the dialog's logic `deep-zoom/smoothDialog.ts`.
  *   - THE OTHER WAY TO MAKE A ROUTE is to cut it from the trail (`deep-zoom/trail.ts`: what the app
  *     remembers of how the camera was flown). `routeFromTrail()` replaces the route with one whose
  *     keyframes are the trail's own samples; `setRouteSmoothing()` cuts it again from the same
@@ -190,7 +191,12 @@
  *     when the renderer becomes ready, the camera is put on each in turn and its picture taken, a
  *     task at a time (`PICTURE_TASK_MS`), until none is owed; then nothing runs. A KEYFRAME IS
  *     TRIED ONCE (`asked`): one whose picture cannot be drawn keeps its number, and is not tried
- *     again when the track next changes. WITHIN ONE TASK the camera goes
+ *     again when the track next changes. A PICTURE IS OF A KEYFRAME'S VIEW (2026-10-16, stage S2
+ *     of the smoothing): a keyframe whose view changes under its id - a smoothing pass moves its
+ *     aim by up to the miss allowed; an undo or a redo of one - is owed a new picture, and tried
+ *     once for that view; a keyframe back at a view it was pictured at gets that picture back at
+ *     once, with nothing drawn (`byView`, by key id and view: another keyframe at the same view is
+ *     another picture, a loaded scene may bring another formula). WITHIN ONE TASK the camera goes
  *     to a keyframe, the renderer is stepped BY HAND (`host.step`: its picture of a view needs
  *     the reference orbit and the depth of that view, which only a frame works out - with no
  *     frame run the picture is of the place the camera came from, seen 2026-10-12), the picture
@@ -387,6 +393,13 @@
  *   the camera was the same view object for object afterwards, and at every animation frame in
  *   between; the still went from 64 samples to 0 and was at 64 again 1.2 to 1.4 s later. A
  *   keyframe costs two live frames and one 96-pixel draw: on a larger frame, more.
+ * @invariant A keyframe whose view changes under its id (a smoothing pass moves its aim) is pictured
+ *   again, and no other; redone after an undo, its new picture is back at once with nothing drawn -
+ *   proven by: npm run check:deep-zoom-trail ("picture: a keyframe whose view changes under its id
+ *   ...", "picture: redone, the new one, and nothing is drawn"). Falsified 2026-10-16: `pictureNow`
+ *   not comparing the view -> those 2 red (0 setView, 0 owed). "picture: undone, its old picture is
+ *   back at once ..." stayed green under that break (nothing had replaced the old picture): an
+ *   @assumption, not broken on its own.
  * @invariant Keyframes that ARRIVE with no picture (a loaded scene's: `setSequence`) are owed one
  *   from the moment the route's track changes, and get it from the same pass, the camera and the
  *   undo stack left as they were - proven by: npm run check:deep-zoom-trail ("picture: a route that
@@ -1219,7 +1232,7 @@ function write(on: RouteKey | undefined, frame: number | null, skipSnapshot = fa
     const key = route().keys.find((k) => k.frame === target);
     if (!key) return null;
     const picture = host.thumbnail(THUMBNAIL_PX);
-    if (picture) keepPictures({ [key.id]: picture });
+    if (picture) keepPictures([{ id: key.id, view: key.view, picture }]);
     if (target > anim().durationFrames) anim().setDuration(target);
     anim().seek(target);
     // The camera already stands on this keyframe: the scrub brings the timeline's values level and sets no view.
@@ -1364,9 +1377,9 @@ function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
     for (const id of made.keys()) { if (made.size <= MADE_KEPT) break; made.delete(id); }
     // Their pictures: the ones this trail's samples already have (the route cut again; a reversed route cut
     // again from the trail reversed: the same samples the other way), the rest a moment from now.
-    const known = pictured.get(trail), turned = reversedTrails.get(trail), knownTurned = turned && pictured.get(turned), have: Record<string, string> = {};
+    const known = pictured.get(trail), turned = reversedTrails.get(trail), knownTurned = turned && pictured.get(turned), have: Picture[] = [];
     const pictureOf = (i: number): string | undefined => known?.get(i) ?? knownTurned?.get(trail.length - 1 - i);
-    owed = depthKeys.filter((k, j) => { const p = pictureOf(pick.index[j]); if (p) have[k.id] = p; return !p; }).map((k) => k.id);
+    owed = depthKeys.filter((k, j) => { const p = pictureOf(pick.index[j]); if (p) have.push({ id: k.id, view: (k.payload as RoutePayload).view, picture: p }); return !p; }).map((k) => k.id);
     keepPictures(have);
     picturesSoon();
 
@@ -1591,15 +1604,17 @@ const READ_TASK_MS = 50;
  * the camera is put back on the very view it had, as the keyframes' pictures are taken (PICTURES):
  * nothing else sees it anywhere else, and the route, the trail and the navigation are told of none
  * of it (`picturing`). Resolves to each frame's distances (Infinity where a ray meets nothing), or
- * null when it could not finish: no renderer, a render began, or the route changed under it.
+ * null when it could not finish: no renderer, a render began, the route changed under it, or `signal`
+ * was aborted (the Smooth dialog's Cancel: it stops between two tasks, the camera already back).
  * On the owner's route in the app (2026-10-16): 0.5 ms a frame of route read every third frame,
  * 1.6 to 2.6 ms read every frame.
  */
-export async function readRouteRays(frames: readonly number[], dirs: (frame: number) => readonly V3[], onProgress?: (done: number, of: number) => void): Promise<Float64Array[] | null> {
+export async function readRouteRays(frames: readonly number[], dirs: (frame: number) => readonly V3[], onProgress?: (done: number, of: number) => void,
+    signal?: AbortSignal): Promise<Float64Array[] | null> {
     const r = route(), out: Float64Array[] = [];
     while (out.length < frames.length) {
         const host = getHost();
-        if (!host || !host.bootParams() || routeRendering() || route() !== r) return null;
+        if (!host || !host.bootParams() || routeRendering() || route() !== r || signal?.aborted) return null;
         flushHostSync();                                             // what the timeline wrote and the sync still holds, before the look is read
         const here = host.getView(), held = autoIterationsHeld(), began = performance.now();
         const { roll: _roll, ...look } = here;                       // every look value as the renderer has it: only the camera differs
@@ -1635,7 +1650,7 @@ export type PaceBy = 'route' | 'look' | 'path';
  * rays could not be read.
  */
 async function pictureSpeedAlong(r: Built, turns: readonly TurnKey[], by: PaceBy, lo: number, hi: number, every: number,
-    onProgress?: (done: number, of: number) => void): Promise<Float64Array | null> {
+    onProgress?: (done: number, of: number) => void, signal?: AbortSignal): Promise<Float64Array | null> {
     const fps = anim().fps, first = r.keys[0].frame, n = r.keys[r.keys.length - 1].frame - first;
     // The motion of every frame read and of the one after it (a read frame's turn is the step to the next).
     const reads = readFrames(lo, hi, n, every);
@@ -1653,7 +1668,7 @@ async function pictureSpeedAlong(r: Built, turns: readonly TurnKey[], by: PaceBy
     };
     const rays = new Map<number, V3[]>(), aims = new Map<number, THREE.Quaternion>();
     for (const i of reads) { const a = aim(i); aims.set(i, a); rays.set(first + i, pictureDirections(toOrientation(a, 0))); }
-    const dist = await readRouteRays(reads.map((i) => first + i), (frame) => rays.get(frame) as V3[], onProgress);
+    const dist = await readRouteRays(reads.map((i) => first + i), (frame) => rays.get(frame) as V3[], onProgress, signal);
     if (!dist) return null;
     const read = new Map<number, number>();
     reads.forEach((i, j) => {
@@ -1666,12 +1681,14 @@ async function pictureSpeedAlong(r: Built, turns: readonly TurnKey[], by: PaceBy
 /**
  * How fast the middle of the picture moves at every frame of the route, from its first keyframe, in
  * picture heights a second: what a pass paces by (`by`), read as a pass reads it, every `every`
- * frames. For the pace graph and for scoring a timing. Null with no route, or when it could not be read.
+ * frames. For the pace graph and for scoring a timing. Null with no route, or when it could not be read
+ * (`readRouteRays`: `signal` aborted among them).
  */
-export async function routePictureSpeed(by: PaceBy = 'route', every = PICTURE_READ_EVERY, onProgress?: (done: number, of: number) => void): Promise<{ first: number; speed: Float64Array } | null> {
+export async function routePictureSpeed(by: PaceBy = 'route', every = PICTURE_READ_EVERY, onProgress?: (done: number, of: number) => void,
+    signal?: AbortSignal): Promise<{ first: number; speed: Float64Array } | null> {
     const r = route();
     if (r.keys.length < 2 || !r.path || routeRendering()) return null;
-    const n = r.keys[r.keys.length - 1].frame - r.keys[0].frame, speed = await pictureSpeedAlong(r, r.turns, by, 0, n, every, onProgress);
+    const n = r.keys[r.keys.length - 1].frame - r.keys[0].frame, speed = await pictureSpeedAlong(r, r.turns, by, 0, n, every, onProgress, signal);
     return speed && { first: r.keys[0].frame, speed };
 }
 
@@ -1689,6 +1706,8 @@ export interface SmoothOptions {
     range?: readonly [string, string];
     /** Called as the rays are read (the long part). */
     onProgress?: (done: number, of: number) => void;
+    /** Aborted: the pass stops while its rays are read, or before it writes anything - nothing changes, no step. */
+    signal?: AbortSignal;
 }
 
 export interface SmoothResult {
@@ -1722,8 +1741,8 @@ export interface SmoothResult {
  *      warped as the look and the iteration keys are): inside the selection through the warp, on
  *      whole frames unless two of a track's keys would meet there (that track then takes the warp's
  *      own frames); after it later (or earlier) by its change of length.
- * Nothing while the route is rendered, with fewer than two keyframes, or when the route changes
- * while its rays are read (resolves null then).
+ * Nothing while the route is rendered, with fewer than two keyframes, when the route changes while
+ * its rays are read, or when `o.signal` is aborted before the pass writes (resolves null then).
  */
 export async function smoothRoute(o: SmoothOptions): Promise<SmoothResult | null> {
     const r = route(), keys = r.keys, last = keys.length - 1, fps = anim().fps;
@@ -1742,8 +1761,8 @@ export async function smoothRoute(o: SmoothOptions): Promise<SmoothResult | null
 
     // 2. The picture's speed.
     const from = was[a] - first, to = was[b] - first, margin = speedMargin(fps, o.strength);
-    const speed = await pictureSpeedAlong(r, turns, o.paceBy ?? 'route', Math.max(0, from - margin), Math.min(n, to + margin), PICTURE_READ_EVERY, o.onProgress);
-    if (!speed || anim().sequence.tracks !== tracks || routeRendering()) return null;
+    const speed = await pictureSpeedAlong(r, turns, o.paceBy ?? 'route', Math.max(0, from - margin), Math.min(n, to + margin), PICTURE_READ_EVERY, o.onProgress, o.signal);
+    if (!speed || anim().sequence.tracks !== tracks || routeRendering() || o.signal?.aborted) return null;
 
     // 3. The warp, and every track through it.
     const warp = warpRoute(paceChange(speed, { fps, strength: o.strength, from, to, easeFrom: a > 0, easeTo: b < last }), was, a, b);
@@ -1851,33 +1870,65 @@ export function mergeCloseKeyframes(seconds = CLOSE_LEG_SECONDS): string[] {
 
 // ── pictures of keyframes that were not set from the screen ──────────────────────────────────────
 
-/** The keyframes that have no picture yet and are to get one, in route order (PICTURES in the header). */
+/** The keyframes that have no picture of their view yet and are to get one, in route order (PICTURES in the header). */
 let owed: string[] = [];
-/** The keyframes a picture was tried for. A keyframe is tried once: one that cannot be drawn keeps its number. */
+/** The keyframes' views a picture was tried for (`pictureId`). A keyframe's view is tried once: a keyframe whose picture cannot be drawn keeps its number. */
 const asked = new Set<string>();
 /** By trail: the picture taken at a sample. A route cut again from the same trail draws only the samples that are new. */
 const pictured = new WeakMap<readonly TrailSample[], Map<number, string>>();
+/** A picture is OF A KEYFRAME'S VIEW: its own stored view, as a string. */
+const viewKey = (v: RouteView): string => `${v.cam.join()}|${v.yaw}|${v.pitch}|${v.roll ?? 0}`;
+/** Which keyframe, holding which view: what one picture is of. Another keyframe at the same view is another picture (a
+ *  loaded scene may bring another formula with it). */
+const pictureId = (id: string, view: RouteView): string => `${id}|${viewKey(view)}`;
+/** By key id: the view its picture in `thumbnails` is of. A keyframe whose view is another one now is owed a new picture. */
+const shows = new Map<string, string>();
+/** Pictures by what they are of (`pictureId`), the oldest gone past `PICTURES_KEPT`: an undo that brings a keyframe's
+ *  old view back brings its old picture back with it, and nothing is drawn. */
+const byView = new Map<string, string>();
+interface Picture { id: string; view: RouteView; picture: string }
 
-/** Pictures by key id, into the Route tab's list. Past `PICTURES_KEPT` the oldest go. */
-function keepPictures(add: Record<string, string>): void {
-    if (Object.keys(add).length === 0) return;
+/** Pictures, each of a keyframe's view, into the Route tab's list. Past `PICTURES_KEPT` the oldest go. */
+function keepPictures(add: readonly Picture[]): void {
+    if (add.length === 0) return;
+    for (const { id, view, picture } of add) {
+        const of = pictureId(id, view);
+        shows.set(id, viewKey(view));
+        byView.delete(of);                                           // to the back: the newest
+        byView.set(of, picture);
+    }
+    for (const v of byView.keys()) { if (byView.size <= PICTURES_KEPT) break; byView.delete(v); }
     useRoute.setState((s) => {
-        const all = { ...s.thumbnails, ...add }, ids = Object.keys(all);
-        for (const id of ids.slice(0, Math.max(0, ids.length - PICTURES_KEPT))) delete all[id];
+        const all = { ...s.thumbnails };
+        for (const { id, picture } of add) all[id] = picture;
+        const ids = Object.keys(all);
+        for (const id of ids.slice(0, Math.max(0, ids.length - PICTURES_KEPT))) { delete all[id]; shows.delete(id); }
         return { thumbnails: all };
     });
 }
 
+/** The keyframe has a picture, and it is of the view the keyframe holds now. */
+const pictureNow = (k: RouteKey, pictures: Record<string, string> = useRoute.getState().thumbnails): boolean =>
+    !!pictures[k.id] && shows.get(k.id) === viewKey(k.view);
+
 /**
- * Every keyframe that has no picture, and was never tried for one, is owed one from here on: the
- * keyframes of a loaded scene, of a restored session, of an undo that brings back ones never
- * pictured. Called when the route's track changes and when a renderer becomes ready
- * (`installRoute`). It only NOTES them: the pictures are taken a moment later by the pass a cut
+ * Every keyframe that has no picture OF ITS VIEW, and whose view was never tried for one, is owed one
+ * from here on: the keyframes of a loaded scene, of a restored session, of an undo that brings back
+ * ones never pictured - and a keyframe whose view changed under its id (a smoothing pass moves its
+ * aim; an undo or a redo of one). A view pictured before gets that picture back here, at once, with
+ * nothing drawn (`byView`). Called when the route's track changes and when a renderer becomes ready
+ * (`installRoute`). It only NOTES the rest: the pictures are taken a moment later by the pass a cut
  * route's are taken by, under the same holds. Nothing owed, nothing scheduled.
  */
 function owePictures(): void {
-    const have = useRoute.getState().thumbnails, waiting = new Set(owed);
-    const more = route().keys.filter((k) => !have[k.id] && !asked.has(k.id) && !waiting.has(k.id)).map((k) => k.id);
+    const have = useRoute.getState().thumbnails, waiting = new Set(owed), back: Picture[] = [], more: string[] = [];
+    for (const k of route().keys) {
+        if (pictureNow(k, have) || waiting.has(k.id)) continue;
+        const of = pictureId(k.id, k.view), known = byView.get(of);
+        if (known) back.push({ id: k.id, view: k.view, picture: known });
+        else if (!asked.has(of)) more.push(k.id);
+    }
+    keepPictures(back);
     if (more.length === 0) return;
     owed.push(...more);
     picturesSoon();
@@ -1898,11 +1949,11 @@ export function takeOwedPictures(budgetMs = Infinity): number {
     if (!host || !state || state.error) { owed = []; return 0; }     // no renderer to draw them: asked for again when one is ready
     // What is not owed any more goes first - a keyframe that has its picture by now (K's own, from the screen) or is
     // gone - so that the wait below ends when nothing is left to wait for.
-    const r = route(), pictures = useRoute.getState().thumbnails, there = new Set(r.keys.map((k) => k.id));
-    owed = owed.filter((id) => there.has(id) && !pictures[id]);
+    const r = route(), pictures = useRoute.getState().thumbnails, there = new Map(r.keys.map((k) => [k.id, k]));
+    owed = owed.filter((id) => { const k = there.get(id); return !!k && !pictureNow(k, pictures); });
     if (owed.length === 0 || !state.ready || routeRendering() || anim().isPlaying || isFlying() || diving > 0 || host.building()) return owed.length;
     flushHostSync();                                                 // what a loaded scene wrote and the sync still holds, before the look is read
-    const here = host.getView(), held = autoIterationsHeld(), began = performance.now(), taken: Record<string, string> = {};
+    const here = host.getView(), held = autoIterationsHeld(), began = performance.now(), taken: Picture[] = [];
     const { roll: _roll, ...look } = here;                           // every look value as the renderer has it: only the camera differs
     // One frame works out the reference orbit and the depth of a view that was set. The shell's renderer draws
     // every depth one way ('deep'); under the developer lever's other two, the frame after a jump is still drawn
@@ -1914,8 +1965,8 @@ export function takeOwedPictures(budgetMs = Infinity): number {
     try {
         while (owed.length > 0 && (!away || performance.now() - began < budgetMs)) {
             const id = owed.shift() as string, key = r.keys.find((k) => k.id === id);
-            if (!key || useRoute.getState().thumbnails[id]) continue;   // gone (an undo, a newer edit), or it has one
-            asked.add(id);                                           // tried from here on, whatever comes of it
+            if (!key || pictureNow(key)) continue;                   // gone (an undo, a newer edit), or it has one of its view
+            asked.add(pictureId(key.id, key.view));                  // this view is tried from here on, whatever comes of it
             const view = routeShownAt(key.frame) ?? key.view, count = itersAt(r, key.frame);
             holdAutoIterations(count > 0);                           // the rule only raises a count: a picture would depend on where the camera stood
             host.setView({ ...look, cam: view.cam, yaw: view.yaw, pitch: view.pitch, ...(view.roll ? { roll: view.roll } : {}), iters: count || here.iters });
@@ -1923,9 +1974,12 @@ export function takeOwedPictures(budgetMs = Infinity): number {
             run();
             const picture = host.thumbnail(THUMBNAIL_PX);
             if (!picture) continue;                                  // nothing can be drawn now: it keeps its number
-            taken[id] = picture;
+            taken.push({ id, view: key.view, picture });
+            // A trail's sample keeps the picture only while the keyframe is that sample's very view (a pass may have moved its aim).
             const from = made.get(id);
-            if (from) pictured.set(from.trail, (pictured.get(from.trail) ?? new Map<number, string>()).set(from.sample, picture));
+            if (from && viewKey(viewOfSample(from.trail[from.sample])) === viewKey(key.view)) {
+                pictured.set(from.trail, (pictured.get(from.trail) ?? new Map<number, string>()).set(from.sample, picture));
+            }
         }
         if (away) { host.setView(here); run(); }
     } finally {
