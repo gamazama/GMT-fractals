@@ -1317,7 +1317,10 @@ function smoothScene(): void {
         [ROUTE_TRACK]: track(ROUTE_TRACK, 'Depth', keys),
         [ROUTE_ITERATIONS_TRACK]: track(ROUTE_ITERATIONS_TRACK, 'Iterations', SMOOTH_DEPTHS.map((d, i) => plain(`c${i}`, SMOOTH_FRAMES[i], countFor(d)))),
         [LOOK_TRACKS[0]]: track(LOOK_TRACKS[0], 'Look pan', [plain('l0', 0, 0), plain('l1', 250, 0.2), plain('l2', 520, -0.1), plain('l3', 760, 0.05), plain('l4', 800, 0.1)]),
-        'dzFormula.power': track('dzFormula.power', 'Power', [plain('w0', 300, 8), plain('w1', 850, 6)]),
+        // Another track: a key before the passage, one on keyframe 5, one between keyframes 5 and 6, one past the route.
+        'dzFormula.power': track('dzFormula.power', 'Power', [plain('w0', 300, 8), plain('w1', 400, 7), plain('w2', 430, 7.5), plain('w3', 850, 6)]),
+        // And one keyed every frame of the first leg, which the pass shortens: rounded, two of its keys would meet.
+        'dzFormula.boxScale': track('dzFormula.boxScale', 'Box scale', Array.from({ length: 121 }, (_, i) => plain(`b${i}`, 10 + i, 2 + Math.sin(i / 9)))),
     } } }));
     useAnimationStore.setState({ undoStack: [], redoStack: [] });
     world = cone;
@@ -1369,6 +1372,9 @@ function smoothScene(): void {
     smoothScene();
     const fps = anim().fps, before = await routePictureSpeed('route', 1), ks = routeKeys(), old = JSON.stringify(anim().sequence);
     const turnsBefore = Array.from({ length: 760 }, (_, f) => aimsApart(routeViewAt(f) as Look, routeViewAt(f + 1) as Look) * fps);
+    /** How far the camera is from S at a frame: where it is on its way down the line. */
+    const along = (f: number): number => Math.hypot(...fromS((routeViewAt(f) as { cam: string[] }).cam));
+    const was300 = along(300), was430 = along(430);
     const steps = anim().undoStack.length, t0 = performance.now();
     const done = await smoothRoute({ strength: 4, miss: 5 });
     const ms = performance.now() - t0, now = routeKeys(), after = await routePictureSpeed('route', 1);
@@ -1392,9 +1398,19 @@ function smoothScene(): void {
     const delta = now[8].frame - ks[8].frame, lookNow = anim().sequence.tracks[LOOK_TRACKS[0]], power = anim().sequence.tracks['dzFormula.power'].keyframes;
     const lookOld = { id: LOOK_TRACKS[0], type: 'float', label: '', keyframes: JSON.parse(old).tracks[LOOK_TRACKS[0]].keyframes } as Track;
     const lookOff = Math.max(...now.map((k, j) => Math.abs(animationEngine.evaluateTrack(lookNow, k.frame) - animationEngine.evaluateTrack(lookOld, ks[j].frame))));
-    check(lookOff <= LOOK_FIT_TOLERANCE * 1.001 && lookNow.keyframes.some((k) => k.frame === 800 + delta && k.value === 0.1) && power.map((k) => k.frame).join() === `300,${850 + delta}`,
-        `smooth: the free look carried with the route (at every keyframe within ${degrees(lookOff)} of what it was there), its key past the route later by the route's change (${delta} frames); after the route a key of another track too, one inside it where it was`,
-        `look off ${lookOff}; look keys ${lookNow.keyframes.map((k) => k.frame)}; power ${power.map((k) => k.frame)}`);
+    check(lookOff <= LOOK_FIT_TOLERANCE * 1.001 && lookNow.keyframes.some((k) => k.frame === 800 + delta && k.value === 0.1),
+        `smooth: the free look carried with the route (at every keyframe within ${degrees(lookOff)} of what it was there), its key past the route later by the route's change (${delta} frames)`,
+        `look off ${lookOff}; look keys ${lookNow.keyframes.map((k) => k.frame)}`);
+    const pw = power.map((k) => k.frame), at300 = Math.abs(Math.log10(along(pw[0]) / was300)), at430 = Math.abs(Math.log10(along(pw[2]) / was430));
+    check(pw.every(Number.isInteger) && pw[0] > now[2].frame && pw[0] < now[3].frame && pw[1] === now[4].frame && pw[2] > now[4].frame && pw[2] < now[5].frame
+        && pw[3] === 850 + delta && Math.max(at300, at430) < 0.03 && power.map((k) => k.value).join() === '8,7,7.5,6',
+        `smooth: another track's keys go with the route (the owner: "Move other tracks' keys later with the route after a section"): one on a keyframe stays on it, one between two keyframes lands on a whole frame where the camera is where it was at the old one (within ${Math.max(at300, at430).toFixed(4)} decades), one past the route later by its change`,
+        `power at ${pw}; keyframes at ${now.map((k) => k.frame)}`);
+    const dense = anim().sequence.tracks['dzFormula.boxScale'].keyframes, denseWas = JSON.parse(old).tracks['dzFormula.boxScale'].keyframes as Keyframe[];
+    check(now[1].frame < ks[1].frame && dense.length === 121 && dense.every((k, j) => j === 0 || k.frame > dense[j - 1].frame) && dense.some((k) => !Number.isInteger(k.frame))
+        && dense.every((k, j) => k.value === denseWas[j].value) && dense[0].frame > 0 && dense[0].frame < 10 && dense[120].frame < 130,
+        `smooth: a track keyed every frame of a leg the pass shortens (${ks[1].frame} -> ${now[1].frame} frames) keeps every key, rising: where two would meet on a whole frame the track takes the warp's own frames`,
+        `${dense.length} keys, first ${dense[0].frame}, last ${dense[120]?.frame}`);
     let offLine = 0, backwards = 0, prev = Infinity;
     for (let f = 0; f <= now[8].frame; f += 0.5) {
         const p = fromS((routeViewAt(f) as { cam: string[] }).cam), D = p[0] * BACK[0] + p[1] * BACK[1] + p[2] * BACK[2];
@@ -1430,8 +1446,9 @@ function smoothScene(): void {
         JSON.stringify({ frames: inRange.map((k) => k.frame), was: ks.map((k) => k.frame), tailOff, sideOff }));
     const lookAfter = anim().sequence.tracks[LOOK_TRACKS[0]].keyframes, powerAfter = anim().sequence.tracks['dzFormula.power'].keyframes;
     check(countKeys().every((c, j) => c.frame === inRange[j].frame) && lookAfter.some((k) => k.frame === 800 + d && k.value === 0.1) && lookAfter.some((k) => k.frame === 250 && k.value === 0.2)
-        && powerAfter.map((k) => k.frame).join() === `300,${850 + d}`,
-        'smooth: after a range the iteration keys, the free look and the keys of other tracks move with it; before it they stay as they were');
+        && powerAfter[0].frame === 300 && powerAfter[1].frame === inRange[4].frame && powerAfter[2].frame > inRange[4].frame && powerAfter[2].frame < inRange[5].frame && powerAfter[3].frame === 850 + d,
+        'smooth: with a range the iteration keys, the free look and the keys of other tracks go with the route - inside it through the warp, after it later by its change; before it they stay as they were',
+        `power at ${powerAfter.map((k) => k.frame)}; keyframes at ${inRange.map((k) => k.frame)}`);
     const edges = before && rangeSpeed ? [across(before.speed, ks[3].frame), across(rangeSpeed.speed, inRange[3].frame), across(before.speed, ks[5].frame), across(rangeSpeed.speed, inRange[5].frame)] : [0, 1, 0, 1];
     check(Math.abs(Math.log(edges[1] / edges[0])) < Math.log(1.1) && Math.abs(Math.log(edges[3] / edges[2])) < Math.log(1.1),
         `smooth: a range crosses its edges as the route did before it (the change of the picture's speed across each: x${edges[1].toFixed(2)} / x${edges[3].toFixed(2)}, before the pass x${edges[0].toFixed(2)} / x${edges[2].toFixed(2)})`);

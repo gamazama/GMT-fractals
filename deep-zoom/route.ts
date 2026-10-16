@@ -120,9 +120,10 @@
  *     is read with the host (`readRouteRays`: the camera put on frames of the route and back, no frame
  *     run); the keyframes are retimed on whole frames and the Pace track written so the camera keeps
  *     its path; the iteration keys go with their keyframes; the free look is carried (smoothed when
- *     asked). POSITIONS ARE NEVER TOUCHED. After a range every key of every track moves by the range's
- *     change of length (the owner, 2026-10-16: "Move other tracks' keys later with the route after a
- *     section"); keys of other tracks INSIDE a range stay at their frames, as for every other timing.
+ *     asked). POSITIONS ARE NEVER TOUCHED. Every other track's keys go with the route too (the owner,
+ *     2026-10-16: "Move other tracks' keys later with the route after a section"): inside what is
+ *     smoothed through the warp, as the iteration keys; after it by its change of length. (The two
+ *     timings and a typed leg still move no other track.)
  *   - THE K MARK (`RoutePayload.exact`): K, Key Cam and a row's replace write it (`write`); a pass keeps
  *     a marked keyframe's aim to the digit. A keyframe cut from the trail has none, and neither has any
  *     of a scene saved before the mark (2026-10-16): those may be missed. `pinKeyframe` and
@@ -360,8 +361,8 @@
  *   the digit; positions, headings and depth readings to the digit; K keyframes and a selection's ends
  *   keep their aims; every third frame read from the route's OWN view with its keyed count, 45 rays,
  *   no frame run, the camera back on its very view; nothing while a render runs; the reading stopped
- *   by a route changed under it; after a range every track's keys later by its change; the cheaper
- *   keyframe merged, never a K one.
+ *   by a route changed under it; every other track's keys through the warp inside, later by its
+ *   change after; the cheaper keyframe merged, never a K one.
  * @assumption The ORIENTATION between two keyframes is not quite the same played backwards: the
  *   curve (`zoomPathOrientation`) turns about each keyframe's own frame, which is not symmetric in
  *   time. 9.9e-4 rad at worst on the check's route, which turns up to 0.4 rad a leg (its line
@@ -1716,9 +1717,11 @@ export interface SmoothResult {
  *      far beyond it as its target reads (`readRouteRays`; the route as it stands, the new aims).
  *   3. The warp: keyframes retimed on whole frames; the Pace track written so the camera keeps its
  *      path; the iteration keys with their keyframes; the free look carried (`o.look`: smoothed).
- *   4. After a range, every key of every track moves by the range's change of length (the owner,
- *      2026-10-16: "Move other tracks' keys later with the route after a section"). Keys of other
- *      tracks inside the range stay at their frames, as they do for every other timing.
+ *   4. Every other track's keys go with the route (the owner, 2026-10-16: "Move other tracks' keys
+ *      later with the route after a section"; recorded in SMOOTHING.md as: inside a section they are
+ *      warped as the look and the iteration keys are): inside the selection through the warp, on
+ *      whole frames unless two of a track's keys would meet there (that track then takes the warp's
+ *      own frames); after it later (or earlier) by its change of length.
  * Nothing while the route is rendered, with fewer than two keyframes, or when the route changes
  * while its rays are read (resolves null then).
  */
@@ -1768,14 +1771,15 @@ export async function smoothRoute(o: SmoothOptions): Promise<SmoothResult | null
         const track = tracks[id];
         if (track?.keyframes.length) swaps.push({ trackId: id, newKeys: carryLook(track, warp, was[a], was[b], fps, LOOK_FIT_TOLERANCE, o.look ?? 0, nanoid()) });
     }
-    // 4. After the selection, every other track's keys move with the route.
+    // 4. Every other track's keys go with the route: inside the selection through the warp, on whole frames
+    //    as the iteration keys are (unless two would meet: then that track's exactly), after it later by its change.
     const routeTracks = new Set<string>([ROUTE_TRACK, ROUTE_ITERATIONS_TRACK, ROUTE_PACE_TRACK, ...LOOK_TRACKS]);
-    if (warp.delta !== 0) {
-        for (const track of Object.values(tracks)) {
-            if (routeTracks.has(track.id) || !track.keyframes.some((k) => k.frame > was[b])) continue;
-            const later = track.keyframes.map((k) => (k.frame > was[b] ? { ...k, frame: k.frame + warp.delta } : k)).sort((x, y) => x.frame - y.frame);
-            swaps.push({ trackId: track.id, newKeys: timelineHandles(track.id, later) });
-        }
+    for (const track of Object.values(tracks)) {
+        if (routeTracks.has(track.id) || !track.keyframes.some((k) => k.frame > was[a])) continue;
+        const rounded = track.keyframes.map((k) => whole(k.frame));
+        const meet = rounded.some((f, i) => i > 0 && f <= rounded[i - 1] && track.keyframes[i].frame > track.keyframes[i - 1].frame);
+        const newKeys = movedKeys(track, meet ? warp.fwd : whole);
+        if (newKeys.some((k, i) => k.frame !== track.keyframes[i].frame)) swaps.push({ trackId: track.id, newKeys });
     }
 
     anim().snapshot();
