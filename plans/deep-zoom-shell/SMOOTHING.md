@@ -520,3 +520,42 @@ the iteration keys follow the warp; other tracks' keys inside a section are warp
 | S0 | Study | DONE 2026-10-16: four rounds, every call answered (above) |
 | S1 | The pass, with no UI | (1) A binary search in the engine's key lookup (`evaluateCurveInternal`, engine/AnimationEngine.ts), the same values to the bit. (2) The Pace track in `deep-zoom/route.ts`: `camera.pace`, a log track, absent = x1; the path's clock is depth x pace; moved, mirrored, cleared and removed with the route (see "S0, the clock and the K mark"). (3) The K mark: a `RoutePayload` field written by `write()`, a pin / unpin function. (4) Pure functions (a new file beside route.ts): the picture's speed from a 45-ray grid, the warp (strength up to the selection's length = even), the keyframes on whole frames and the pace keys fitted at 0.01 decades, the turn (a miss allowed, pinned keys exact), the free look (carried; smoothed when asked), close keyframes listed and merged. (5) The reader: walks the route's OWN view every third frame with the host, `freeDistance` on the grid, no frame drawn, the camera put back (as the keyframes' pictures are taken). (6) A pass over the whole route or a range of legs as one animation-undo step; a range's edges eased as in "S0, a section's edges". Checks in `check:deep-zoom-route`. Reference: `debug/scratch/route-smooth/` (`warp.mts`, `lib.mts`, `motion.mts`, `grid.mts`, `evalbuilt.mts`) and `scene-R4.json` |
 | S2 | In the app | The Smooth... dialog on the Route tab: Pace by (the route's own picture / with the free look / the path alone), the strength (a log slider, 4 s to the selection's length), the miss and the free look as optional sliders, legs or a range, a progress line while the rays are read, one undo step; close keyframes warned with a merge offered; the pin on each row; previews at about 320p |
+
+## S2: the dialog, built (2026-10-17)
+
+**Where.** Route tab > **Smooth...** (`deep-zoom/components/SmoothDialog.tsx`; its logic, which node reaches, in
+`deep-zoom/smoothDialog.ts`; the pass is S1's `smoothRoute`). Each row of the Route tab has a pin: the K mark,
+shown while on. The render dialog's **Draft** is 320p (a short edge of 320 px) and 1 sample.
+
+**Decisions taken inside the brief** (say if any is wrong):
+1. The graph's AFTER is the route read again as the engine plays it, not the pass's own reckoning (S1 measured
+   those apart: 82 frames off against 3). So a run is: the route read before (kept from the dialog's opening), the
+   pass, the route read after. Readings are kept by what the route is, so an undo or a redo shows its graph at once.
+2. The graph of a section is zoomed to it with half its length (5 s at least) each side, keyframes ticked, and
+   the line before the pass drawn on the timing after it through the keyframes: the two lines meet at every
+   keyframe, so a section's edges are one place in both. The score under it counts the whole route and, for a
+   section, its inside too.
+3. "Selected legs" = from the first keyframe selected to the last (rows of the Route tab, else the route's keys on
+   the timeline); a frame range = the legs that hold it (a pass works on whole legs).
+4. The miss slider runs 1 to 15 degrees (5 at the start); the free look's 0.1 to 2 s (0.5), on when a look is
+   recorded. Draft keeps 1 sample (the 2907 clip of the study was 320p at 4).
+5. A keyframe's picture follows its view: the keyframes whose aim a pass moved are pictured again (103 of 105 on
+   his route, a task at a time, beside the reading after the pass); an undo or a redo gets back the picture of the
+   view it returns to, with nothing drawn.
+6. The dialog lives in the Route tab: showing another dock tab closes it, and that is Cancel.
+
+**Measured on his route** (s7zzzooom, in the app on this GPU; frames off their own 3 s average by over 25 %, read
+every third frame over the whole route, the last 2.4 s included - S1's 82 was read every frame up to keyframe 100):
+
+| | Time | Route | Frames off |
+|---|---|---|---|
+| read on opening | 3.9 s | 192.0 s | 1,230 |
+| whole route, 4 s, miss 5, look 0.5 | 14.2 s (pass 5.4, read after 8.6) | 203.3 s | 248 |
+| keyframes 51 to 57, the same | 7.2 s | section 10.5 -> 12.5 s | inside 118 -> 18; whole 1,230 -> 1,126 |
+
+Screenshots for his eye: `debug/scratch/s2/out/` in the S2 worktree (git-ignored): `04-whole-done.png`,
+`09-range-done.png`, `13b-dialog-close.png`, `14-pin-on.png`, `15-render-draft.png`.
+
+**Open.** The reader puts the camera on each frame with the count keyed there but every other formula value as
+the playhead has it: a route that keys power or a box value is read with one value throughout. The reading after
+a pass shares the page with the pictures being retaken (8.6 s against 3.9 s on opening).

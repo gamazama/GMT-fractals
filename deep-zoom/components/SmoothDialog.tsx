@@ -15,7 +15,7 @@
  *   - THE PACE GRAPH: how fast the middle of the picture moves along the route (picture heights a second,
  *     log), what is smoothed shaded; after a pass the route before it in gray, as it is now in colour, and
  *     the study's score under it (frames off their own 3 s average by over 25 %). The route is read when
- *     the dialog opens and whenever it changes (not while it plays): about 0.5 ms a frame of route.
+ *     the dialog opens and whenever it changes (not while it plays): about 4 s for the owner's 192 s route.
  *   - THE PROGRESS LINE while anything is read, with Cancel; the page stays usable (the reader works in
  *     tasks of 50 ms, the camera back on its view at the end of each).
  *   - CLOSE KEYFRAMES: legs under half a second, a warning, and Merge (his: "warn, merge"; one undo step;
@@ -35,7 +35,14 @@
  *
  * @assumption The dialog's wiring (the controls to `runSmooth`'s options, the auto reading, Cancel, the graph
  *   and the Merge) is reached by no node check; its logic is (check:deep-zoom-route, "dialog: ..."). Driven in
- *   the real app on the GPU on 2026-10-16 with the owner's route (debug/scratch/s2/app-smooth.mts, git-ignored).
+ *   the real app on the GPU on 2026-10-17 with the owner's route, s7zzzooom (debug/scratch/s2/app-smooth.mts,
+ *   git-ignored; headless Chrome, ANGLE d3d11, RTX 5070 Ti): read on opening in 3.9 s; the whole route at the
+ *   defaults in 14.2 s (the pass and its rays 5.4 s, the route read after it 8.6 s while 103 keyframes were
+ *   pictured again beside it), 192.0 -> 203.3 s, frames off 1,230 -> 248; keyframes 51 to 57 in 7.2 s, 10.5 ->
+ *   12.5 s, nothing outside moved, inside 118 -> 18; an undo and a redo of each to the digit with no ray read and
+ *   no picture taken; Cancel in the middle of the rays (the route to the digit, no step); Merge (5 of 6 close
+ *   keyframes, one step); the pin; Draft at 320p. THE PAGE while it runs: the reader's tasks leave a timer a
+ *   turn every 78 ms (median; 158 at p99); the longest task, the pass's writing, 0.5 s.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
