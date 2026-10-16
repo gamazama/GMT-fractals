@@ -304,7 +304,9 @@ let binomN = binomPad(nPower), binomN1 = binomPad(nPower-1);   // for (1+u)^n an
    scale, from outside, deep, and beside the plane x = L). Falsified 2026-10-09, three breaks, each exit 1: `-gh`
    -> `d` in boxFoldD (the three deep lines FAIL), the shell / shell case of the sphere fold -> 0 (two FAIL), and
    the fold distances uploaded as plain floats in buildBoxOrbit (ONLY the fold-plane line FAILS). The record is in
-   debug/deep-zoom-direct-check.mts.
+   debug/deep-zoom-direct-check.mts. THE PREFIX JUMP (2026-10-16, grep) is inside what it proves - falsified that
+   day, two breaks, each exit 1: the shell's reflection left out of M_k in boxJumpRows (11 box lines FAIL), and the
+   fold planes left out of the radius (6 FAIL: the fold-plane line and KaliBox's abs-plane line among them).
    MEASURED beyond that check, the same day, by debug/scratch/formula-study/gpu-box.mjs (git-ignored): 3,438 points
    over 8 views, among them scale 2.566 with GMT's default pre-rotation (the check has no rotated view) - no escape
    flag differs, none more than 1e-3 off, the worst 5.3e-4, medians 2e-7 to 5e-7 from outside and 3e-6 to 8e-6 at
@@ -331,6 +333,7 @@ uniform vec4  uBoxB;             // minR² · fixedR² · fixedR² / minR² · t
 uniform mat3  uBoxRot;           // the pre-rotation
 uniform int   uBoxHasRot;        // 0 = no pre-rotation: the matrix is not applied
 uniform float uBoxFar;           // how far from the camera the far-field march follows a ray (the bulb: 12)
+uniform int   uBoxJump;          // THE PREFIX JUMP (grep): the last orbit index a jump may land on; 0 = no jump
 float boxOnE(vec2 g, float e) { return g.x * exp2(clamp(g.y - e, -160.0, 120.0)); }      // a distance (mantissa, exponent) as a mantissa on e
 #ifdef USE_KALI
 /* KALIBOX (grep; the USE_KALI variant of this kernel): one axis of the fold x -> abs(x) as a DELTA. Z = the
@@ -371,6 +374,29 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   float S = uBoxA.x, aS = uBoxA.y, m2 = uBoxB.x, F2 = uBoxB.y, kA = uBoxB.z;
   vec4 T00 = texelFetch(orbit, ivec2(0, 0), 0);
   vec4 cT0 = T00;                              // (V, |V|) at the current reference index
+  /* THE PREFIX JUMP (grep; rows 6-9, built by boxJumpRows). D is still δc here. The largest index k whose
+     radius R_k this δc is under (R_k never rises with k: a binary search), then δ = M_k·δc and the loop goes
+     on from k with the reference's own dr and trap: over the iterations jumped the pixel's step was the
+     reference's, linear in δ. */
+  if (uBoxJump > 0) {
+    float lc = log2(max(length(D), 1e-30)) + e;
+    int lo = 0, hi = min(uBoxJump, maxIter - 1);
+    for (int s = 0; s < 10; s++) {             // 2^10 entries: an orbit holds at most 512
+      if (lo >= hi) break;
+      int mid = (lo + hi + 1) >> 1;
+      vec4 rk = texelFetch(orbit, ivec2(mid, 6), 0);
+      if (lc < log2(rk.x) + rk.y) lo = mid; else hi = mid - 1;
+    }
+    if (lo > 0) {
+      vec4 r6 = texelFetch(orbit, ivec2(lo, 6), 0);
+      vec4 a0 = texelFetch(orbit, ivec2(lo, 7), 0), a1 = texelFetch(orbit, ivec2(lo, 8), 0), a2 = texelFetch(orbit, ivec2(lo, 9), 0);
+      D = vec3(dot(a0.xyz, D), dot(a1.xyz, D), dot(a2.xyz, D)); e += a0.w;
+      sclNorm(D, e);
+      drM = r6.z; drE = r6.w; trap = a1.w;
+      m = lo; it = lo;
+      cT0 = texelFetch(orbit, ivec2(m, 0), 0);
+    }
+  }
   for (int loop = 0; loop < 512; loop++) {
     if (it >= maxIter) break;
 #ifdef USE_STATS
@@ -2566,7 +2592,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
             land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), addC:g('uAddC'), juliaC:g('uJuliaC'), farSwitch:g('uFarSwitch'), holdR:g('uHoldR'), farOnly:g('uFarOnly'), burnNeg:g('uBurnNeg'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
-            boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar'), kaliT:g('uKaliT') }; }   // the last six: null but in the USE_BOX variant (kaliT: but with USE_KALI)
+            boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar'), kaliT:g('uKaliT'), boxJump:g('uBoxJump') }; }   // the last seven: null but in the USE_BOX variant (kaliT: but with USE_KALI)
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -3078,6 +3104,7 @@ const hp = makeHP(256);
    check:deep-zoom-box-orbit ("twin = exact ..." lines). Falsified 2026-10-09: see that file's header. */
 const BOX_ESC = 1000, BOX_ESC2 = BOX_ESC * BOX_ESC;
 const BOX_REF_MAX2 = 1e14;                       // the reference orbit is kept this far past the escape radius, so a pixel can ride it to its own escape
+let boxJumpOn = true;                            // THE PREFIX JUMP (grep); off only through api.setBoxJump, a measuring handle
 let dzFormula = 'mandelbulb';
 let formulaStamp = 0;                            // bumped by every change of formula or of its parameters: kept orbits and kept rays are keyed by it
 const boxOn = () => dzFormula !== 'mandelbulb';  // the Mandelbox, or KALIBOX (grep): both are drawn by the box's kernel, march and rules
@@ -3464,7 +3491,8 @@ function boxFar(){
    difference: a crossing test compares a pixel's delta with it, and at depth a delta is 1e-50. As a
    plain f32 a distance under 1e-38 would read 0 and lose its sign.
    The same numbers in f64 (GH, GL, Wf, R2, GM, GF, REG) are what the CPU kernel reads; Rk and DRk are
-   the reference's own radius and derivative, for the estimate at the camera. */
+   the reference's own radius and derivative, for the estimate at the camera.
+     rows 6-9  THE PREFIX JUMP (grep boxJumpRows): R_k and DR_k; the matrix M_k, a row each, one exponent; the trap */
 function buildBoxOrbit(CHP, lenMax) {
   const p = boxP, B = p.fixed, Vs = [], Qs = [], cHP = cOfHP(CHP);   // JULIA MODE (grep): the orbit of the camera's point adds K
   let v = CHP.slice();
@@ -3474,7 +3502,7 @@ function buildBoxOrbit(CHP, lenMax) {
     if (k > 0 && hp.toNum(hp.norm2(v)) > BOX_REF_MAX2) break;   // never one entry alone: a step needs the index after it, however far out the camera is
     v = hp.boxStep(q, cHP, B);
   }
-  const len = Vs.length, rows = 6, data = new Float32Array(len * rows * 4), A = () => new Float64Array(len);
+  const len = Vs.length, rows = 10, data = new Float32Array(len * rows * 4), A = () => new Float64Array(len);
   const O = { box: p, julia: juliaOn, len, rows, data, Vf: [], Wf: [], Rk: [], DRk: [], GH: [A(), A(), A()], GL: [A(), A(), A()], R2: A(), GM: A(), GF: A(), REG: new Int8Array(len) };
   const put = (row, k, vals) => { for (let j = 0; j < 4; j++) data[(row * len + k) * 4 + j] = vals[j]; };
   let DR = 1;
@@ -3493,7 +3521,68 @@ function buildBoxOrbit(CHP, lenMax) {
     put(5, k, [gm.m, gm.e, gf.m, gf.e]);
     DR = DR * hp.toNum(q.k) * Math.abs(p.scale) + 1;
   }
+  boxJumpRows(O, p, put);
   return O;
+}
+/* ════════ THE PREFIX JUMP (2026-10-16; @see docs/adr/0140-the-mandelbox-jumps-its-linear-prefix.md) ════════
+   WHY. Every march step runs its pixel's orbit from iteration 0, and at depth nearly every orbit runs to where the
+   camera's own orbit escapes: 2.6 more iterations a decade at scale -1.5, 3.1 at scale 2. That alone is why the box
+   slowed as a dive went deeper (Block city's live frame 7.4 ms at 4e-6, 41 ms at 8.7e-42; the march's steps stay
+   level). WHAT. For most of such an orbit the pixel's delta is far smaller than the reference's distance to every
+   fold, and there the box's step is LINEAR in the delta: the box fold is the identity or a reflection on each
+   axis (KaliBox's abs fold: the sign of the coordinate), the sphere fold a constant factor inside minR and outside
+   fixedR, and in the shell between, F2 / |W|² (I − 2 ŵŵᵀ) to first order. So δ_k = M_k·δc, one 3×3 matrix per
+   index, composed here in f64:
+       M_0 = I ,   M_k+1 = scale · k_k · H_k · F_k · R · M_k + I        (+ 0 in Julia mode: δc is not added again)
+   and the prefix up to k holds for every δc with |δc| < R_k = min over j < k of r_j / |M_j| (Frobenius, an upper
+   bound of the stretch), r_j being the distance to the nearest fold plane (rows 2-4), to either sphere (|W|
+   against minR, fixedR), BOX_JUMP_TAU·|W| inside the shell (its second-order term over its first is |δ| / |W|),
+   and |V_j| / 2 (no rebase falls inside a jump). The kernel jumps to the largest such k (grep THE PREFIX JUMP in
+   BOX_KERNEL); over those iterations its pixel had the reference's region every step, so dr is the reference's
+   DR_k and the trap the reference's minimum. One jump does as well as a whole skip table (BLA) here: on the
+   starters' orbits within 1 to 4 passes of it, because the first iteration a delta outgrows its radius is near
+   the end of the orbit, not scattered through it.
+   MEASURED (RTX 5070 Ti, the shell's defaults, a 1080p window; debug/scratch/box-depth/, git-ignored): the live
+   frame at Arches 4.2 -> 2.6 ms, Lace 10.5 -> 4.2, Block city 41.3 -> 7.8, and level with depth along all three
+   dives; views shallower than about 1e-5 within 5 %. The picture: 0.09 to 0.18 % of pixels more than 8 levels
+   apart, where two renders at Step size 1 % apart differ on 8 to 11 %; rays ending more than 2 pixels of depth
+   apart 0.00 to 0.04 %, none between hit and miss. An orbit is now its tail, 27 to 33 passes at scale -1.5 and
+   14 to 17 at scale 2, at every depth. The rows cost 0.04 to 0.09 ms a frame on the CPU.
+   PITFALLS. R_k must never rise with k: the shader's binary search assumes it (the running minimum keeps it so).
+   An index past the reference's escape is never landed on (jumpMax): over it the delta is not small. */
+const BOX_JUMP_TAU = 1e-5;                       // the shell's relative second-order term allowed a step (1e-4 jumped 0 to 5 passes further on the starters)
+function boxJumpRows(O, p, put) {
+  const len = O.len, S = p.scale, addC = O.julia ? 0 : 1, Rt = p.R;
+  const mm = (A, B) => { const C = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i*3+j] = A[i*3] * B[j] + A[i*3+1] * B[3+j] + A[i*3+2] * B[6+j]; return C; };
+  const rot = p.hasRot ? [Rt[0][0], Rt[0][1], Rt[0][2], Rt[1][0], Rt[1][1], Rt[1][2], Rt[2][0], Rt[2][1], Rt[2][2]] : [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  const sm = Math.sqrt(p.m2), sF = Math.sqrt(p.F2);
+  let M = [1, 0, 0, 0, 1, 0, 0, 0, 1], Rmin = Infinity, trap = 1e30, ke = len - 2;
+  for (let k = 0; k < len; k++) if (O.Rk[k] > BOX_ESC) { ke = k; break; }
+  O.jumpMax = Math.max(0, Math.min(ke, len - 2));
+  for (let k = 0; k < len; k++) {
+    if (k > 0) trap = Math.min(trap, O.Rk[k] * O.Rk[k]);
+    let mx = 0, fro = 0; for (const v of M) { mx = Math.max(mx, Math.abs(v)); fro += v * v; }
+    const eM = mx > 0 && isFinite(mx) ? Math.floor(Math.log2(mx)) : 0, sc = Math.pow(2, -eM);
+    const r = Rmin === Infinity ? { m: 1, e: 2000 } : Rmin > 0 ? hdrSplit(Rmin) : { m: 1, e: -2000 }, dr = hdrSplit(O.DRk[k]);
+    put(6, k, [r.m, r.e, dr.m, dr.e]);
+    put(7, k, [M[0] * sc, M[1] * sc, M[2] * sc, eM]);
+    put(8, k, [M[3] * sc, M[4] * sc, M[5] * sc, trap]);
+    put(9, k, [M[6] * sc, M[7] * sc, M[8] * sc, 0]);
+    /* iteration k: its radius, and its Jacobian F (the fold's signs), H (the shell's reflection), the factor */
+    const R2 = O.R2[k], Wm = Math.sqrt(R2), reg = O.REG[k], F = [1, 1, 1];
+    let rk = Math.min(Math.abs(Wm - sm), Math.abs(Wm - sF), 0.5 * O.Rk[k], reg === 1 ? BOX_JUMP_TAU * Wm : Infinity);
+    for (let a = 0; a < 3; a++) {
+      const gh = O.GH[a][k], gl = O.GL[a][k];
+      rk = Math.min(rk, Math.abs(gh), Math.abs(gl));
+      F[a] = p.kali ? (gh < 0 ? -1 : 1) : (gh > 0 || gl < 0 ? -1 : 1);   // KALIBOX: rows 2-4 hold the coordinate itself
+    }
+    Rmin = Math.min(Rmin, rk / Math.sqrt(fro));
+    let J = rot.map((v, i) => v * F[(i / 3) | 0]);
+    if (reg === 1) { const w = O.Wf[k].map(x => x / Wm), H = []; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) H.push((i === j ? 1 : 0) - 2 * w[i] * w[j]); J = mm(H, J); }
+    const f = S * (reg === 0 ? p.kA : reg === 1 ? p.F2 / R2 : 1);
+    M = mm(J, M).map(v => v * f);
+    M[0] += addC; M[4] += addC; M[8] += addC;
+  }
 }
 
 function hdrSplit(v) {
@@ -3698,7 +3787,8 @@ function setPowerUniforms(x){
     for (let i = 0; i < 80; i++) rho = Math.pow(rho + cl, 1 / nPower);
     gl.uniform1f(x.rayLine, burnNeg !== 1 ? burnLine : rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }   // BURNING (grep): the line rule is held off (burnLine is 0 but for a measurement)
   gl.uniform1i(x.maxSteps, march.maxSteps);
-  if (boxOn()) setBoxUniforms(x);                // THE FORMULA SEAM: nothing is set here for the bulb that was not set before
+  if (boxOn()) { setBoxUniforms(x);              // THE FORMULA SEAM: nothing is set here for the bulb that was not set before
+    gl.uniform1i(x.boxJump, boxJumpOn && curOrbit && curOrbit.jumpMax ? curOrbit.jumpMax : 0); }   // THE PREFIX JUMP (grep)
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
     gl.uniform1f(x.refE, e); gl.uniform1f(x.farFrom, Math.log2(march.farFromDist * d) - e); }
@@ -5149,6 +5239,7 @@ api.setGate = (b)=>{ gateOn=!!b; if(!gateOn) gate.relT=NaN; };  // live ground-t
 api.setLight = (m,f)=>{ lightMode=m|0; if(f) falloffMul=f; accumReset=true; };  // 0 dir/1 headlamp/2 both
 let forceRebuild=false;                            // measurement: simulate flight (rebuild every frame)
 api.forceRebuild = (b)=>{ forceRebuild = !!b; };
+api.setBoxJump = (b)=>{ boxJumpOn = !!b; accumReset = true; };   // measurement: THE PREFIX JUMP off = every box orbit from iteration 0, as before 2026-10-16
 api.setAccum = (b)=>{ accumEnabled = !!b; accumReset = true; };  // progressive-still toggle
 api.setMode = (m)=>{ modeOverride = m; orbitDirty = true; };     // 'auto' | 'deep' | 'f32' (perf-harness handle)
 

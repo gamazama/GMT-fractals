@@ -31,6 +31,11 @@
 > PICTURE, timed against today's march at the same picture, and left it out
 > (`plans/deep-zoom-shell/ADR-DRAFT-box-ray-step.md`, not filed).
 
+> **Update 2026-10-16 (a skip for the box; decision 3 in part superseded by ADR-0140):** "the skip table" is no
+> longer among what the box does not use. The box's kernel now jumps the linear prefix of each orbit in one
+> step (grep `THE PREFIX JUMP` in `deep-zoom/renderer/core.js`): Block city's live frame 43.9 -> 7.5 ms, the
+> picture the same within 0.18 % of pixels. Decision 3's march, by Step size, stands.
+
 ## Context
 
 The deep zoomer drew one formula, the Mandelbulb, and `core.js` was that formula throughout: the

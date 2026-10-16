@@ -224,6 +224,11 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
   emulation says about 17 iterations at scale 2). No noise was seen in any picture.
 - No kept GPU line for pre-rotation (the direct proof's five lines are unrotated).
 - Time, only with numbers: resumed orbits, skipping runs that cross no fold (`MANDELBOX.md` stage 7).
+  - DONE 2026-10-16, the skip (his question that day: "the mandelbox slows down as we get deeper in"):
+    one jump over each orbit's linear prefix (ADR-0140; grep `THE PREFIX JUMP` in `core.js`). Block city's
+    live frame 43.9 -> 7.5 ms, Lace's 10.6 -> 4.0, and level with depth. The study and its tools:
+    `debug/scratch/box-depth/REPORT.md`. Still open from that study: starting the march from the last
+    frame's depth, which works on the steps (50 to 65 a pixel at Block city), not on the depth.
 - Detail depends on the place (6 of 24 searched directions were intricate at 2e-20). A dive aims
   straight ahead; steering a dive toward intricate ground is an idea, not a plan - the same wish he
   voiced for the bulb ("dives into the more defined areas").
