@@ -61,6 +61,11 @@
  *            camera put back on its very view; the picture's speed against the rule worked out by hand
  *   pin      the K mark set and taken by hand
  *   close    legs under half a second listed; a merge drops the keyframe that moves the path least, never a K one
+ *   dialog   (2026-10-16, stage S2 of plans/deep-zoom-shell/SMOOTHING.md) the Smooth... dialog's logic
+ *            (deep-zoom/smoothDialog.ts): the strength's scale and its far end, what is smoothed (rows, the
+ *            timeline's keys, a frame range), the graph's columns and range, the study's stray score, the close
+ *            keyframes' rows; the run (read before, the pass, read after) and its readings kept by what the route
+ *            is (an undo shows the before again without a ray); Cancel while the rays are read, and after the pass
  *
  * FALSIFICATION RECORD, 2026-10-11, one break per run in deep-zoom/route.ts, the file put back
  * byte for byte after each. The break, then what went red:
@@ -167,6 +172,14 @@
  *        x1.27 / x1.07)
  *     NOT FALSIFIED, green only: every other "pace:", "smooth:", "read:", "pin:" and "close:" line, and the two new
  *     "payload:" lines (the K mark).
+ *   - dialog (2026-10-16, stage S2 of SMOOTHING.md; THREE breaks, the stage's allowance - the first in route.ts for the
+ *     trail check's "picture:" lines, see its header; each file put back byte for byte, its checksum compared):
+ *     2. route.ts, `readRouteRays` not looking at the signal                  -> 2 red: "dialog: Cancel while the rays are
+ *        read stops the reading at once ..." (22,860 rays asked, 12,375 when it was cancelled at 21 of 254 frames), "dialog:
+ *        Cancel while the route is read after the pass keeps the pass ..." (the reading after it finished)
+ *     3. smoothDialog.ts, `strengthFor` handing 4 s for `EVEN`                -> 1 red: "dialog: the strength is one log slider
+ *        from 4 s ..."
+ *     NOT FALSIFIED, green only: every other "dialog:" line.
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -190,6 +203,12 @@ import {
 } from '../../deep-zoom/route';
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
 import { carryLook, paceChange, paceSpan, speedMargin, warpRoute } from '../../deep-zoom/routeSmooth';
+import {
+    EVEN, STRENGTH_MIN, closeRows, knownPace, paceColumns, paceRange, routeSignature, runSmooth, smoothSpan, strayFrames, strengthFor, strengthFromSlider,
+    strengthScale, timelinePicked,
+} from '../../deep-zoom/smoothDialog';
+import type { SmoothPhase } from '../../deep-zoom/smoothDialog';
+import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
 import { AnimationMath } from '../../engine/math/AnimationMath';
 import { buildZoomPath, zoomPathPosition } from '../../engine/animation/zoomPath';
 import type { Keyframe, Track } from '../../types';
@@ -1483,6 +1502,76 @@ function smoothScene(): void {
         'pin: let go, the mark is gone from its payload, in one step; nothing while the route is rendered');
 }
 {
+    // THE DIALOG'S LOGIC (deep-zoom/smoothDialog.ts), on the scene of the pass.
+    smoothScene();
+    const fps = anim().fps, ks = routeKeys(), length = (ks[8].frame - ks[0].frame) / fps;
+    // The strength: one log slider from 4 s to the length of what is smoothed; its far end one even pace.
+    const scale = strengthScale(length), slide = createLogMapping(scale.min, scale.max, { reserveZero: false }), mid = slide.fromDisplay(50);
+    const atEnd = strengthFromSlider(slide.fromDisplay(100), length), atStart = strengthFromSlider(slide.fromDisplay(0), length), atMid = strengthFromSlider(mid, length);
+    check(scale.min === STRENGTH_MIN && scale.max === length && scale.slides && atEnd === EVEN && strengthFor(atEnd, length) === length && Math.abs((atStart as number) - 4) < 1e-9
+        && Math.abs((atMid as number) - Math.sqrt(4 * length)) < 1e-6 && strengthFor(EVEN, 2 * length) === 2 * length && strengthFor(2, length) === 4
+        && !strengthScale(3.5).slides && strengthFromSlider(3.5, 3.5) === EVEN && strengthFor(EVEN, 3.5) === 3.5,
+        `dialog: the strength is one log slider from 4 s to the length of what is smoothed (${length.toFixed(1)} s; its middle ${(atMid as number).toFixed(2)} s, the geometric mean); its far end is one even pace, the length itself, and stays even when the selection grows; under 4 s only even`,
+        `ends ${String(atStart)} / ${String(atEnd)}, middle ${String(atMid)}`);
+    // What is smoothed.
+    const whole = smoothSpan(ks, 'route', [], [0, 0], fps), rows = smoothSpan(ks, 'legs', ['s5', 's3', 's4'], [0, 0], fps), one = smoothSpan(ks, 'legs', ['s6', 'gone'], [0, 0], fps);
+    const timeline = smoothSpan(ks, 'legs', timelinePicked([`${ROUTE_TRACK}::s6`, `${ROUTE_ITERATIONS_TRACK}::c3`, `${ROUTE_TRACK}::s2`]), [0, 0], fps);
+    const range = smoothSpan(ks, 'frames', [], [420, 350], fps), exact = smoothSpan(ks, 'frames', [], [330, 400], fps), tail = smoothSpan(ks, 'frames', [], [700, 900], fps);
+    const outside = smoothSpan(ks, 'frames', [], [800, 900], fps), before = smoothSpan(ks, 'frames', [], [-50, -10], fps);
+    check(!!whole && whole.a === 0 && whole.b === 8 && !whole.range && whole.seconds === length && rows?.a === 3 && rows.b === 5 && rows.range?.join() === 's3,s5'
+        && one === null && timeline?.a === 2 && timeline.b === 6 && range?.a === 3 && range.b === 5 && exact?.a === 3 && exact.b === 4 && tail?.a === 7 && tail.b === 8
+        && outside === null && before === null,
+        'dialog: what is smoothed: the whole route; the legs from the first keyframe selected to the last (the rows in any order, or the route\'s keys among the timeline\'s); the legs that hold a frame range; nothing for one keyframe or a range that holds no leg',
+        JSON.stringify({ rows, timeline, range, exact, tail }));
+    // The graph: columns, range.
+    const cols = paceColumns([1, 4, NaN, NaN, 2, 8], 3), wide = paceRange([1, 1, 1, 1, 100], [0.5, 2]);
+    check(Math.abs(cols[0] - 2) < 1e-12 && Number.isNaN(cols[1]) && Math.abs(cols[2] - 4) < 1e-12 && wide.lo < 0.5 && wide.hi > 100 && wide.hi < 200,
+        'dialog: the graph\'s columns are the mean in log of the frames read in each (none read: no line there); its range the 1st to 99th percentile, widened by a tenth', `${Array.from(cols)} ${JSON.stringify(wide)}`);
+
+    // THE RUN: the route read before, the pass, the route read after; readings kept by what the route is.
+    const read = await routePictureSpeed('route', 3), sigBefore = routeSignature('route'), steps = anim().undoStack.length, phases: SmoothPhase[] = [];
+    calls.length = 0;
+    const run = await runSmooth({ strength: strengthFor(4, length), miss: 5, look: null, paceBy: 'route' }, (phase) => { if (phases[phases.length - 1] !== phase) phases.push(phase); });
+    const readBefore = calls.filter((c) => c.name === 'freeDistance').length, readAfter = await routePictureSpeed('route', 3);
+    check(!!run && phases.join() === 'before,pass,after' && anim().undoStack.length === steps + 1 && run.beforeSig === sigBefore && run.afterSig === routeSignature('route') && run.afterSig !== sigBefore
+        && !!read && !!run.before && run.before.speed.every((v, i) => v === read.speed[i]) && !!readAfter && !!run.after && run.after.speed.length === readAfter.speed.length && run.after.speed.every((v, i) => v === readAfter.speed[i]),
+        `dialog: a run reads the route before the pass, runs it (one undo step), and reads the route again after it - the route as it now plays, not the pass's own reckoning (${run?.result.seconds.map((s) => s.toFixed(1)).join(' s -> ')} s)`,
+        `phases ${phases}, steps ${anim().undoStack.length - steps}, rays ${readBefore}`);
+    check(!!run?.before && !!run.after && strayFrames(run.after.speed, fps) * 4 < strayFrames(run.before.speed, fps) && strayFrames(run.before.speed, fps) === strays(run.before.speed)
+        && strayFrames(run.after.speed, fps) === strays(run.after.speed),
+        `dialog: its score is the study's (the middle of the picture off its own 3 s average by over 25 %): ${run?.before ? strayFrames(run.before.speed, fps) : '-'} frames before, ${run?.after ? strayFrames(run.after.speed, fps) : '-'} after`);
+    calls.length = 0;
+    anim().undo();
+    const undone = knownPace('route'), undoneRays = calls.filter((c) => c.name === 'freeDistance').length;
+    anim().redo();
+    const redone = knownPace('route');
+    check(undone === run?.before && redone === run?.after && undoneRays === 0 && calls.filter((c) => c.name === 'freeDistance').length === 0,
+        'dialog: undone, the route\'s reading is the one from before the pass, redone the one after it: kept by what the route is, no ray read again');
+    anim().undo();
+
+    // CANCEL while the pass reads its rays (a march at depth: 0.05 ms a ray, so the reading takes several tasks).
+    const old = JSON.stringify(anim().sequence), stepsCancel = anim().undoStack.length, stood = host.getView();
+    world = (cam, dir) => { const t1 = performance.now(); while (performance.now() - t1 < 0.05) { /* a march at depth */ } return cone(cam, dir); };
+    const ctl = new AbortController();
+    let cancelledAt = -1, of = 0, doneAt = 0;
+    calls.length = 0;
+    const cancelled = await runSmooth({ strength: 2, miss: 5, look: null, paceBy: 'path' }, (phase, done, n) => {
+        if (phase === 'pass' && done > 0 && cancelledAt < 0) { cancelledAt = calls.filter((c) => c.name === 'freeDistance').length; of = n; doneAt = done; ctl.abort(); }
+    }, ctl.signal);
+    const asked = calls.filter((c) => c.name === 'freeDistance').length;
+    world = cone;
+    check(cancelled === null && cancelledAt >= 0 && JSON.stringify(anim().sequence) === old && anim().undoStack.length === stepsCancel && sameCamera(host.getView(), stood)
+        && asked === cancelledAt && doneAt < of,
+        'dialog: Cancel while the rays are read stops the reading at once (no ray asked after it): nothing changes, no undo step, the camera back where it stood',
+        `run ${cancelled ? 'done' : 'null'}, ${asked} rays asked, ${cancelledAt} when cancelled (${doneAt} of ${of} frames read), steps ${anim().undoStack.length - stepsCancel}`);
+    // CANCEL while the route is read after the pass: the pass stands, the reading after it is left unread.
+    const ctlAfter = new AbortController();
+    const kept = await runSmooth({ strength: 3, miss: 5, look: null, paceBy: 'route' }, (phase) => { if (phase === 'after') ctlAfter.abort(); }, ctlAfter.signal);
+    check(!!kept && kept.after === null && anim().undoStack.length === stepsCancel + 1 && knownPace('route') === null,
+        'dialog: Cancel while the route is read after the pass keeps the pass (one undo step); the reading after it is left unread');
+    anim().undo();
+}
+{
     // CLOSE KEYFRAMES: five keyframes off the line, a leg of nine frames.
     const off = (depth: number, side: V3): [string, string, string] => [0, 1, 2].map((j) => String(S[j] + BigInt(Math.round(depth * (BACK[j] + side[j]) * 2 ** 256)))) as [string, string, string];
     const spots: Array<[number, V3, number]> = [[1, [0, 0, 0], 0], [1e-2, [0.3, -0.2, 0.1], 90], [1e-3, [-0.4, 0.3, 0.2], 180], [1.1e-3, [0.1, -0.5, 0.3], 189], [1e-5, [0, 0.1, -0.1], 280]];
@@ -1494,6 +1583,9 @@ function smoothScene(): void {
         [ROUTE_ITERATIONS_TRACK]: { id: ROUTE_ITERATIONS_TRACK, type: 'float' as const, label: 'Iterations', keyframes: spots.map(([d, , f], i) => plain(`n${i}`, f, countFor(d))) } } } }));
     useAnimationStore.setState({ undoStack: [], redoStack: [] });
     check(closeKeyframes().join() === 'm3', 'close: a leg under half a second is listed, by the keyframe it arrives at', closeKeyframes().join());
+    const rowsClose = closeRows(routeKeys(), closeKeyframes(), anim().fps);
+    check(rowsClose.length === 1 && rowsClose[0].number === 4 && Math.abs(rowsClose[0].seconds - 9 / anim().fps) < 1e-12 && rowsClose[0].merge,
+        'dialog: its row in the dialog: the keyframe it arrives at (4), its length, and a merge offered', JSON.stringify(rowsClose));
     // What dropping each of the two would cost, measured here: how far the route without it passes from where it stood, in its depths.
     const passes = (j: number): number => {
         const k = routeKeys()[j], span = routeKeys()[j + 1].frame - routeKeys()[j - 1].frame;
@@ -1514,6 +1606,10 @@ function smoothScene(): void {
     anim().undo();
     pinKeyframe(cheaper);
     check(mergeCloseKeyframes().join() === other, 'close: a keyframe with the K mark is never dropped: the other one goes');
+    anim().undo();
+    pinKeyframe(other);
+    check(closeRows(routeKeys(), closeKeyframes(), anim().fps).every((r) => !r.merge) && mergeCloseKeyframes().length === 0,
+        'dialog: a leg whose two keyframes are both K keyframes (or ends) offers no merge, and a merge leaves it');
 }
 
 stopSync();
