@@ -231,6 +231,14 @@ export interface DzLook {
     aoRadius?: number;
     /** The occlusion's taps a pixel (10 at the start; the shader takes 1 to 32). */
     aoTaps?: number;
+    /** Light the surfaces in the picture send on to their neighbours (0 at the start: none; 1: what they would send). */
+    bounce?: number;
+    /** How far round each point the bounce looks, as a share of the picture's height (0.4 at the start). */
+    bounceRadius?: number;
+    /** Strength of the lamp's own shadows (0 at the start: none). */
+    lampShadow?: number;
+    /** How far off the eye the lamp is held (1 at the start: where it always was). */
+    lampOffset?: number;
     shadow?: number;
     haze?: number;
     sky?: number;

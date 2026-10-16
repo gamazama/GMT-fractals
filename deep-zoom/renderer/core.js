@@ -1864,6 +1864,9 @@ uniform vec3  uFillCol, uKickCol;// their colours times their intensities (the k
 uniform vec3  uHaze;             // what distance fades to; also the background
 uniform int   uNrmTap;           // normals from depth: how many pixels away the four taps are (1 = crisp; 2 or 3 = smoother)
 uniform int   uAoTaps;           // occlusion: how many taps a pixel takes, 1 to 32 (a uniform: the row is dragged, nothing compiles)
+uniform int   uStage;            // 0 = the picture | 1 = write the diffuse light leaving each point instead (grep BOUNCE FROM DEPTH)
+uniform sampler2D uLit;          // what stage 1 wrote: the light the bounce of stage 0 gathers
+uniform vec4  uLookD;            // bounce strength (0 = none), bounce radius (fraction of picture height), the lamp's shadow strength, the lamp's offset from the eye (1 = as built)
 /* palette: a loaded gradient strip if present, else the built-in IQ cosine palette */
 vec3 palette(float s){
   if (uUseGradient == 1) return texture(uGradient, vec2(fract(s), 0.5)).rgb;
@@ -1987,6 +1990,65 @@ float occlusion(ivec2 c, float Lc, vec3 rdC, vec3 n){
     }
     return 2.2 * occ / taps;
 }
+/* ── BOUNCE FROM DEPTH (2026-10-13; an experiment: look.bounce, off at 0) ──
+   One bounce of diffuse light between the surfaces in the picture: a lit wall colours the shadowed
+   face beside it. Pass S is drawn twice while it is on. Stage 1 writes, for every pixel, the
+   diffuse light leaving its point under the lights as they are (key, fill, kicker, lamp and sky,
+   with their shadows and the occlusion; linear, no tone map) into uLit. Stage 0, the picture, asks
+   a spiral of neighbours what they send this way and adds it to what the point receives.
+   A tap stands for a ring of the spiral: its pixel's patch of surface as this point sees it (the
+   patch's area over the squared distance, turned by how it faces), times the pixels in the ring.
+   No tap stands for more than its share of the hemisphere (2 pi over the count), so one near
+   neighbour cannot light a point like a whole sky. At strength 1 the sum is the light those
+   surfaces would send: the row scales it.
+   WHAT IT CANNOT SEE is what the shadows cannot: a surface outside the picture or behind a nearer
+   one sends nothing. And nothing is known of what stands BETWEEN two points, so light passes
+   through whatever does. A tap's facing is read from its packed normal; with normals from depth
+   (uNormalMode 0 or 3) a near hit carries none, and the tap is taken to face this point as this
+   point faces it.
+   The taps are the occlusion's count (uAoTaps) on a spiral of their own: one frame is grainy at
+   10, a gathered still is not. */
+vec3 bounce(ivec2 c, float Lc, vec3 rdC, vec3 n){
+    const int MAX_TAPS = 32;
+    float taps = float(uAoTaps);
+    float px = uFovScale / uRes.y;
+    float Rpx = max(uLookD.y * uRes.y, 8.0);
+    float rot = 6.2831853 * fract(ign(vec2(c) + 59.0) + float(uSampleN) * 0.61803399);
+    float jit = fract(ign(vec2(c) + 83.0) + float(uSampleN) * 0.75487767);
+    float share = 6.2831853 / taps;
+    ivec2 gmax = textureSize(uG, 0);
+    vec3 E = vec3(0.0);
+    for (int i = 0; i < MAX_TAPS; i++) {
+        if (i >= uAoTaps) break;
+        float f = (float(i) + jit) / taps;
+        float r = 1.5 + Rpx * f * f;
+        float a = rot + float(i) * 2.3999632;
+        ivec2 q = c + ivec2(round(vec2(cos(a), sin(a)) * r));
+        ivec2 gq = q - ivec2(uOrigin);
+        if (any(lessThan(gq, ivec2(0))) || any(greaterThanEqual(gq, gmax))
+            || any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, ivec2(uRes)))) continue;
+        vec4 g = texelFetch(uG, gq, 0);
+        float kind = floor((g.z >= 1024.0 ? g.z - 1024.0 : g.z) / 256.0);
+        if (kind < 1.0 || kind > 2.0 || g.x < -1e29) continue;       // no surface there
+        vec3 rq = rayDir(q);
+        float e = exp2m1(g.x - Lc);                                   // the tap's depth over this pixel's, less 1
+        vec3 D = (rq - rdC) + rq * e;                                 // to the tap's point, in units of this pixel's depth (as depthTap)
+        float d2 = dot(D, D);
+        vec3 w = D * inversesqrt(max(d2, 1e-18));
+        float cp = dot(n, w);
+        if (cp <= 0.0) continue;                                      // below this point's horizon
+        float cq = cp, cv = 1.0;
+        if (kind == 2.0 || uNormalMode == 1 || uNormalMode == 2) {
+            vec3 nq = octUnpack(g.w);
+            cq = max(dot(nq, -w), 0.0); cv = max(dot(nq, -rq), 0.15);
+        }
+        float tq = 1.0 + e;
+        float ring = 12.5663706 * r * Rpx * f / taps;                 // pixels this tap stands for: 2 pi r, times the ring's width
+        float dw = cq * (px * px * tq * tq / cv) / max(d2, 2.25 * px * px) * ring;
+        E += texelFetch(uLit, gq, 0).rgb * (cp * min(dw, share));
+    }
+    return E;
+}
 /* ── SHADOW FROM DEPTH ──
    Walk from this pixel's hit point toward the key light, in steps that grow geometrically, and at
    each step look the point up in the depth buffer: if the visible surface there is in front of
@@ -1994,8 +2056,9 @@ float occlusion(ivec2 c, float Lc, vec3 rdC, vec3 n){
    It sees only what is on screen — a caster outside the frame or hidden behind a nearer surface
    casts nothing. The light direction is tilted a little per sample (uLookC.y), so a still's
    samples add up to a soft edge. Returns 1 lit, 0 shadowed. Positions are in units of this
-   pixel's depth, as everywhere in this pass. */
-float shadowed(ivec2 c, float Lc, vec3 rdC, vec3 n, vec3 Ldir, float seed){
+   pixel's depth, as everywhere in this pass. The last argument, reach, is how far the walk goes, in those units
+   (the key and the fill: uLookC.z; the lamp: nearly to the camera, grep THE LAMP'S SHADOWS). */
+float shadowed(ivec2 c, float Lc, vec3 rdC, vec3 n, vec3 Ldir, float seed, float reach){
     const int STEPS = 20;
     float px = uFovScale / uRes.y;
     float jit = fract(ign(vec2(c) + 31.0 + seed) + float(uSampleN) * 0.61803399);
@@ -2004,7 +2067,7 @@ float shadowed(ivec2 c, float Lc, vec3 rdC, vec3 n, vec3 Ldir, float seed){
     vec3 t1 = normalize(cross(Ldir, abs(Ldir.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
     vec3 t2 = cross(Ldir, t1);
     vec3 L = normalize(Ldir + uLookC.y * sqrt(a2) * (cos(a1) * t1 + sin(a1) * t2));
-    float s0 = 1.5 * px, ratio = pow(uLookC.z / s0, 1.0 / float(STEPS));
+    float s0 = 1.5 * px, ratio = pow(reach / s0, 1.0 / float(STEPS));
     float s = s0 * pow(ratio, jit);
     vec3 P0 = rdC + n * (1.5 * px);                               // start a pixel and a half off the surface
     ivec2 gmax = textureSize(uG, 0);
@@ -2081,7 +2144,7 @@ void main(){
             vec3 v = -rd, L = uLightDir;
             if (uLookA.x > 0.0) open = clamp(1.0 - uLookA.x * occlusion(c, g.x, rd, n), 0.03, 1.0);
             ndl = max(dot(n, L), 0.0);
-            if (uLookA.z > 0.0 && ndl > 0.0 && uLightMode != 1) lit = mix(1.0, shadowed(c, g.x, rd, n, L, 0.0), uLookA.z);
+            if (uLookA.z > 0.0 && ndl > 0.0 && uLightMode != 1) lit = mix(1.0, shadowed(c, g.x, rd, n, L, 0.0, uLookC.z), uLookA.z);
             /* GMT's Direct shading, Blinn-Phong variant (stable/engine-gmt/shaders/chunks/lighting:
                grep calculatePBRContribution, calculateShading), and the rig of its fresh Mandelbulb
                scene: a white key, an orange fill a sixth as strong, a blue kicker from under the
@@ -2093,24 +2156,38 @@ void main(){
             vec3 F0 = mix(vec3(0.04), alb, uMat.y);
             vec3 F = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - max(dot(n, v), 0.0), 5.0);
             col = (vec3(1.0) - F) * (1.0 - uMat.y) * alb * uMat.w * skyDome(0.5 + 0.5 * dot(n, uPlaneN)) * uLookB.y;
+            vec3 difL = col;                                 // the DIFFUSE light leaving this point, the sky's share first: what the bounce's stage 1 writes
             col += skyDome(0.5 + 0.5 * dot(reflect(rd, n), uPlaneN)) * uLookB.y * F * uMat.z;
             if (uLightMode != 1) {
                 col += (dif + spc * pow(max(dot(n, normalize(L + v)), 0.0), shin)) * (uLookB.x * ndl * lit);
                 float nf = max(dot(n, uFillDir), 0.0), nk = max(dot(n, uKickDir), 0.0);
-                if (uLookA.z > 0.0 && nf > 0.0) nf *= mix(1.0, shadowed(c, g.x, rd, n, uFillDir, 113.0), uLookA.z);
+                if (uLookA.z > 0.0 && nf > 0.0) nf *= mix(1.0, shadowed(c, g.x, rd, n, uFillDir, 113.0, uLookC.z), uLookA.z);
                 col += (dif + spc * pow(max(dot(n, normalize(uFillDir + v)), 0.0), shin)) * uFillCol * nf;
                 col += (dif + spc * pow(max(dot(n, normalize(uKickDir + v)), 0.0), shin)) * uKickCol * nk;
+                difL += dif * (vec3(uLookB.x * ndl * lit) + uFillCol * nf + uKickCol * nk);
             }
             if (uLightMode != 0) {                           // the headlamp, with the classic look's distance falloff
                 float a = g.x < -1e29 ? 0.0 : exp2(min(g.x - uFalloffRel, 60.0));
-                vec3 lh = normalize(-rd + 0.22*uUp + 0.12*uRight);
-                col += (dif + spc * pow(max(dot(n, normalize(lh + v)), 0.0), shin)) * (uLookB.x * max(dot(n, lh), 0.0) / (1.0 + a*a));
+                vec3 lh = normalize(-rd + uLookD.w*0.22*uUp + uLookD.w*0.12*uRight);   // uLookD.w: how far off the eye the lamp is held (1 = where it always was)
+                float nl = max(dot(n, lh), 0.0);
+                /* THE LAMP'S SHADOWS (2026-10-13; an experiment: look.lampShadow, off at 0). The lamp stands beside
+                   the eye, so what stands between it and a point is in the picture, close to that point's own ray:
+                   the depth buffer is nearly the lamp's own shadow map, where for the key it holds only the casters
+                   that happen to be on screen. The walk goes nearly to the camera (0.95 of the depth): a thing
+                   close to the eye shadows the wall far behind it. Held further off the eye (uLookD.w) the
+                   shadows grow, and more of their casters fall outside the picture. */
+                if (uLookD.z > 0.0 && nl > 0.0) nl *= mix(1.0, shadowed(c, g.x, rd, n, lh, 227.0, 0.95), uLookD.z);
+                col += (dif + spc * pow(max(dot(n, normalize(lh + v)), 0.0), shin)) * (uLookB.x * nl / (1.0 + a*a));
+                difL += dif * (uLookB.x * nl / (1.0 + a*a));
             }
             col *= open;                                     // as GMT: the occlusion multiplies the whole shaded colour
+            if (uStage == 1) { o = vec4(difL * open, 1.0); return; }   // BOUNCE FROM DEPTH (grep), stage 1: this point's light, as it is
+            if (uLookD.x > 0.0) col += dif * bounce(c, g.x, rd, n) * uLookD.x;   // stage 0: what the neighbours send, reflected (not occluded again: it comes from the occluders)
             col = mix(col, uHaze, uLookA.w * (1.0 - exp(-0.9 * max(fz, 0.0) * max(fz, 0.0))));
         } else if (kind == 3.0) {
             col = uHaze * 0.5;
         }
+        if (uStage == 1) { o = vec4(0.0, 0.0, 0.0, 1.0); return; }   // no surface here: nothing leaves it
         col *= uLookC.w;
         if (uView == 2) { col = n * 0.5 + 0.5; raw = true; }
         else if (uView == 3) { col = vec3(1.0 - clamp(0.1 + 0.8 * fz, 0.0, 1.0)); raw = true; }
@@ -2512,7 +2589,8 @@ const us = (g => ({ g:g('uG'), origin:g('uOrigin'), res:g('uRes'), right:g('uRig
   useGradient:g('uUseGradient'), lightMode:g('uLightMode'), falloffRel:g('uFalloffRel'), guideTex:g('uGuideTex'),
   look:g('uLook'), view:g('uView'), sampleN:g('uSampleN'), planeN:g('uPlaneN'), depthRange:g('uDepthRange'), splitX:g('uSplitX'),
   compare:g('uCompare'), farLook:g('uFarLook'), lookA:g('uLookA'), lookB:g('uLookB'), lookC:g('uLookC'), haze:g('uHaze'),
-  mat:g('uMat'), fillDir:g('uFillDir'), kickDir:g('uKickDir'), fillCol:g('uFillCol'), kickCol:g('uKickCol'), nrmTap:g('uNrmTap'), aoTaps:g('uAoTaps') }))(n => gl.getUniformLocation(shadeProg, n));
+  mat:g('uMat'), fillDir:g('uFillDir'), kickDir:g('uKickDir'), fillCol:g('uFillCol'), kickCol:g('uKickCol'), nrmTap:g('uNrmTap'), aoTaps:g('uAoTaps'),
+  stage:g('uStage'), lit:g('uLit'), lookD:g('uLookD') }))(n => gl.getUniformLocation(shadeProg, n));
 /* ════════ THE NEW LOOK ════════
    look.mode 1: GMT's lighting on the G-buffer, with the lights hung off the surface in view.
    look.mode 0 is the classic shading (one camera-fixed light, no shadows), kept as it was.
@@ -2563,7 +2641,7 @@ const look = { mode: 1, view: 0, compare: 0, split: 0.5,
   ao: 1.0, aoRadius: 0.12, aoTaps: 10, shadow: 1.0, soft: 0.05, shadowLen: 0.6, haze: 0.0, hazeCol: [0.03, 0.05, 0.07],
   key: 3.0, sky: 0.3, rough: 0.75, metal: 0.2, refl: 0.6, diffuse: 1.0, sat: 1.0, exposure: 1.0,
   keyElev: 40, keyTurn: 0, keyAz: 152, fillAz: -40, fillElev: 21,
-  fill: 0.5, fillCol: [1.0, 0.246, 0.0], kick: 0.25, kickCol: [0.0, 0.246, 1.0], tint: 0.5, nrmTap: 1 };   // tint: 1 = GMT's light colours, 0 = all lights white · nrmTap: how many pixels away normals-from-depth read their neighbours · aoRadius, aoTaps: grep OCCLUSION FROM DEPTH
+  fill: 0.5, fillCol: [1.0, 0.246, 0.0], kick: 0.25, kickCol: [0.0, 0.246, 1.0], tint: 0.5, nrmTap: 1, bounce: 0, bounceRadius: 0.4, lampShadow: 0, lampOffset: 1 };   // tint: 1 = GMT's light colours, 0 = all lights white · nrmTap: how many pixels away normals-from-depth read their neighbours · aoRadius, aoTaps: grep OCCLUSION FROM DEPTH
 api.look = look;
 api.setLook = (o)=>{ Object.assign(look, o); accumReset = true; };
 const RIG_N = 32, rigPx = new Float32Array(RIG_N * RIG_N * 4);
@@ -2729,6 +2807,23 @@ function ensureGbuf(w, h){
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gbufW = w; gbufH = h;
 }
+/* the bounce's light buffer (grep BOUNCE FROM DEPTH): what pass S's stage 1 writes and its stage 0 gathers. The size of the
+   G-buffer; made the first time a picture is drawn with look.bounce above 0, so a renderer that never asks pays nothing. */
+let litFbo = null, litTex = null, litW = 0, litH = 0;
+function ensureLit(w, h){
+  if (litW === w && litH === h && litTex) return;
+  if (litTex){ gl.deleteTexture(litTex); gl.deleteFramebuffer(litFbo); }
+  gl.activeTexture(gl.TEXTURE7);
+  litTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, litTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
+  litFbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, litFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, litTex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  litW = w; litH = h;
+}
 /* Draw the rectangle (vx, vy, vw, vh) of a W×H picture into framebuffer `dst`. The caller has made
    D.p current and set its uniforms (uRes = W×H, jitter, …) and has called ensureGbuf. S carries
    what pass S needs: { W, H, jx, jy, fwd, right, up, light } plus, optionally,
@@ -2776,6 +2871,9 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
     else trackRig(measureRig(S.W, S.H, S.fwd, S.right, S.up, S.rig === 'alone'), 1);
   }
   const newLook = look.mode === 1 && !!rig.n;
+  /* BOUNCE FROM DEPTH (grep): only with the whole picture in the G-buffer, texel for pixel, which is how the new look is always drawn */
+  const bounceOn = newLook && look.bounce > 0 && !ox && !oy && gbufW >= S.W && gbufH >= S.H;
+  if (bounceOn) ensureLit(gbufW, gbufH);
   gl.useProgram(shadeProg);
   gl.enableVertexAttribArray(shadeLoc); gl.vertexAttribPointer(shadeLoc, 2, gl.FLOAT, false, 0, 0);
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, gbufTex); gl.uniform1i(us.g, 5);
@@ -2805,6 +2903,14 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
       gl.uniform3fv(us.kickDir, k); }
     gl.uniform3fv(us.fillCol, look.fillCol.map(c => (1 + (c - 1) * look.tint) * look.fill)); gl.uniform3fv(us.kickCol, look.kickCol.map(c => (1 + (c - 1) * look.tint) * look.kick));
   }
+  gl.uniform1i(us.stage, 0); gl.uniform1i(us.lit, 6); gl.uniform4f(us.lookD, 0, look.bounceRadius, look.lampShadow, look.lampOffset);
+  if (bounceOn) {                                 // stage 1: the light leaving every point of the rectangle, into the light buffer; the draw below gathers it
+    gl.uniform1i(us.stage, 1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, litFbo); gl.viewport(vx, vy, vw, vh);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.uniform1i(us.stage, 0); gl.uniform4f(us.lookD, look.bounce, look.bounceRadius, look.lampShadow, look.lampOffset);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, litTex);
+  }
   if (S.alpha) { gl.enable(gl.BLEND); gl.blendColor(0, 0, 0, S.alpha); gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA); }
   gl.bindFramebuffer(gl.FRAMEBUFFER, dst); gl.viewport(vx, vy, vw, vh);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -2820,6 +2926,7 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst);
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, null);
   }
+  if (bounceOn) { gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, null); }
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
   gl.useProgram(D.p);
 }

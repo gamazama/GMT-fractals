@@ -12,8 +12,8 @@
  *   `dzLight` is what lights the picture until stage L lands (BUILD-PLAN package L5). At L5 five
  *   keys leave this feature for the shared light list (feature `lighting`, key `lights`) through
  *   one scene migration: `lightType`, `lampFalloff`, `keyElevation`, `keyTurn`, `lightTint`.
- *   `shading`, `shadows`, `occlusion`, `occlusionRadius`, `occlusionSamples`, `sky`, `roughness` and
- *   `haze` stay. So: ADD NO DEPENDENT ON
+ *   `shading`, `shadows`, `occlusion`, `occlusionRadius`, `occlusionSamples`, `bounce`, `sky`,
+ *   `roughness` and `haze` stay. So: ADD NO DEPENDENT ON
  *   THOSE FIVE KEYS — no condition in another feature, no bridge, no shortcut, no saved-location
  *   field that names them. The two light-type indices below are deliberately not exported.
  *
@@ -25,6 +25,8 @@
  *     shading        api.setLook({ mode })         mode = shadingToRenderer(index): 0 classic, 1 new
  *     lightType      api.setLight(m, falloff)      m = lightTypeToRenderer(index): 0, 1, 2. ALWAYS
  *     lampFalloff    api.setLight(m, falloff)        both arguments: see pitfalls
+ *     lampShadows    api.setLook({ lampShadow })   0 = none (an experiment of 2026-10-13: grep THE
+ *     lampOffset     api.setLook({ lampOffset })     LAMP'S SHADOWS in core.js); 1 = where it was
  *     keyElevation   api.setLook({ keyElev })      degrees
  *     keyTurn        api.setLook({ keyTurn })      degrees
  *     lightTint      api.setLook({ tint })
@@ -32,12 +34,15 @@
  *     occlusion      api.setLook({ ao })
  *     occlusionRadius   api.setLook({ aoRadius })  a share of the picture's height
  *     occlusionSamples  api.setLook({ aoTaps })    taps a pixel; the shader takes 1 to 32
+ *     bounce         api.setLook({ bounce })       0 = none (an experiment of 2026-10-13: grep BOUNCE
+ *                                                  FROM DEPTH in core.js; its radius, look.bounceRadius,
+ *                                                  has no row)
  *     sky            api.setLook({ sky })
  *     roughness      api.setLook({ rough })
  *     haze           api.setLook({ haze })
  *   `api.setLook(o)` is `Object.assign(look, o)`: one call may carry several keys, and a key it
  *   does not know is stored and ignored. Read-back: `api.dz.settings()` gives `lookMode`, `light`
- *   and `falloff`; the other ten are on `api.look` under the names above.
+ *   and `falloff`; the other thirteen are on `api.look` under the names above.
  *   ENUMS. `shading` and `lightType` are floats holding the option's INDEX
  *   (`engine/defineEnumParam.ts`). Each exports `X_OPTIONS` (option names, dropdown order),
  *   `X_RENDERER_VALUES` (the renderer's value for each option, same order — use `indexOf` on it to
@@ -54,9 +59,10 @@
  *   (grep `if (uLook == 1)`, `uLightMode != 1`, `uLightMode != 0` in core.js):
  *     shading, lightType                              always
  *     lampFalloff                                     lightType is Lamp or Both
+ *     lampShadows, lampOffset                         shading is New AND lightType is Lamp or Both
  *     keyElevation, keyTurn, lightTint, shadows       shading is New AND lightType is not Lamp
  *     occlusion, occlusionRadius, occlusionSamples,
- *     sky, roughness, haze                            shading is New
+ *     bounce, sky, roughness, haze                    shading is New
  *   This departs from BLUEPRINT section 3, which shows `lightType` and `lampFalloff` under the
  *   Classic shading only. The New shading reads the light type too: Lamp switches the key, the
  *   fill, the kicker and every shadow OFF and lights with the camera lamp and the sky alone; Both
@@ -171,6 +177,7 @@ const LIGHT_TYPE_LAMP_INDEX = LIGHT_TYPE_OPTIONS.indexOf('lamp');
 const NEW_SHADING = { param: 'shading', eq: SHADING_NEW_INDEX };
 /** Shown while the key, fill and kicker are lit: New shading, and the light type is not Lamp. */
 const NEW_SHADING_KEY_LIT = [NEW_SHADING, { param: 'lightType', neq: LIGHT_TYPE_LAMP_INDEX }];
+const NEW_SHADING_LAMP_LIT = [NEW_SHADING, { param: 'lightType', neq: LIGHT_TYPE_DIRECT_INDEX }];
 
 const degrees = (v: number) => `${Math.round(v)}°`;
 
@@ -194,7 +201,7 @@ export const DzLightFeature = {
         lightType: {
             ...lightTypeParam.config,
             type: 'float',
-            description: 'Direct: light from a set direction. Under the New shading that is the key, the fill and the kicker. Lamp: one light at the camera that fades with distance, and no shadows. Both: the two together.',
+            description: 'Direct: light from a set direction. Under the New shading that is the key, the fill and the kicker. Lamp: one light at the camera that fades with distance (its shadows are a row of its own, off at 0). Both: the two together.',
         },
         lampFalloff: {
             type: 'float',
@@ -202,6 +209,22 @@ export const DzLightFeature = {
             label: 'Lamp falloff',
             condition: { param: 'lightType', neq: LIGHT_TYPE_DIRECT_INDEX },
             description: 'How far the lamp reaches, as a multiple of the distance to the surface. At that distance the lamp is at half strength.',
+        },
+        // ── The lamp's shadows and its offset: experiments of 2026-10-13 (grep THE LAMP'S SHADOWS in core.js). They are
+        //    the lamp's, so at L5 they go where `lampFalloff` goes.
+        lampShadows: {
+            type: 'float',
+            default: 0, min: 0, max: 1, step: 0.05,
+            label: 'Lamp shadows',
+            condition: NEW_SHADING_LAMP_LIT,
+            description: 'Strength of the shadows the lamp casts. The lamp stands beside the eye, so nearly everything that could shadow a point is in the picture. 0: none, as the lamp always was.',
+        },
+        lampOffset: {
+            type: 'float',
+            default: 1, min: 0, max: 6, step: 0.1,
+            label: 'Lamp offset',
+            condition: NEW_SHADING_LAMP_LIT,
+            description: 'How far off the eye the lamp is held, up and to the right. 1: where it always was. Larger: longer shadows and stronger modelling. 0: at the eye, where its shadows hide behind what casts them.',
         },
         keyElevation: {
             type: 'float',
@@ -255,6 +278,13 @@ export const DzLightFeature = {
             label: 'Occlusion samples',
             condition: NEW_SHADING,
             description: 'More samples: less grain in a moving frame, and more time. A gathered still looks the same.',
+        },
+        bounce: {
+            type: 'float',
+            default: 0, min: 0, max: 4, step: 0.05,
+            label: 'Bounce',
+            condition: NEW_SHADING,
+            description: 'Light that surfaces in the picture send on to their neighbours: a lit wall colours the shadow beside it. 0: none. 1: what those surfaces would send. Only what is in the picture sends any. Grainy in a moving frame; Occlusion samples sets its sample count too.',
         },
         sky: {
             type: 'float',
