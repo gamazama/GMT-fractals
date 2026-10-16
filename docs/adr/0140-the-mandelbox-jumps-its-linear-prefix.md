@@ -1,5 +1,20 @@
 # ADR-0140: The Mandelbox jumps the linear prefix of its orbit
 
+> **Update 2026-10-16 (later the same day; the jump also in the navigation's CPU rays, the Mandelbulb's
+> included, on the owner's yes; the GPU decisions below unchanged):** On the bulb the picture gains little
+> from a jump, since its ray march resumes orbits along each ray. The navigation's rays did not: each of their
+> steps ran a whole orbit on the CPU, every frame of a flight or a dive. The seven-ray bundle cost 2.9 to
+> 3.9 ms at deep places and 42 ms at the power-4 starter's floor (3.4e-76). `rayFreeJS` now passes `jump` (grep
+> `THE NAVIGATION'S JUMP` in `deep-zoom/renderer/core.js`): the box takes its GPU rows' numbers in f64, and the
+> bulb builds its own table once per orbit and power. That table is M_k from the triplex Jacobian, the delta of
+> dr as a row, and the old skip table's radius rule, kept off the pole axis. The jet starts as M_k·rd, and the
+> gradient's pass back over the jumped iterates is M_kᵀ·w. The bundle now costs 0.4 to 1.1 ms at the deep
+> places and 4.0 ms at the floor. Over 1,584 rays at 11 views no ray changes between hit and open, and 3 end
+> more than 5 % apart: two hits that read shorter, one open ray's lower bound that reads longer. The referees
+> (the gate, the direct proof's twin, the harness dive, `estimateAt`) still run whole orbits. Guard:
+> `npm run check:deep-zoom-ray-probe` (two breaks red; its header has them). The study's tools:
+> `debug/scratch/box-depth/nav-ab.mts`, `bulb-*.mts`.
+
 - **Status:** Accepted
 - **Date:** 2026-10-16
 - **Supersedes:** in ADR-0135's decision 3, "the skip table" among what the Mandelbox does not use. The box

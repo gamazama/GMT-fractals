@@ -41,6 +41,11 @@
  *   - `api.dz.setView`: `Math.min(itersMax(), v.iters|0)` -> `Math.min(boxOn() ? BOX_ITER_MAX : 160, v.iters|0)`
  *     (as it was until that day)                                            -> 1 red ("iterations: under the ray march ...": 300,400,160,160,4)
  *   The ray-bits-0 line and the Mandelbox line passed in that run too and were not broken on purpose.
+ * 2026-10-16, THE NAVIGATION'S JUMP (grep it in core.js: each orbit of the ray starts where its delta stops mapping
+ * linearly; the referee's orbits are whole), two breaks, restored byte for byte (sha-256):
+ *   - `BULB_JUMP_TAU` 1e-5 -> 1 (every jump far too long)                  -> 1 red ("ray: no ray ends past the surface ...": 7 rays, the worst at 1.27)
+ *   - the jet at the jump left as rd (`jet = mv3(M, rd)` -> `jet = rd.slice()`) -> 8 red ("jet: and with a phase ...", the pole-axis
+ *                                                                              gradient line, "ray: no ray ends past ...": 39 rays, the worst at 16.3)
  */
 import { readFileSync } from 'node:fs';
 import { PLACES } from '../../deep-zoom/data/places.ts';

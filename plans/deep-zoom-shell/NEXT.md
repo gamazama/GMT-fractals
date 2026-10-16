@@ -241,6 +241,9 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
 - The rays cost up to 10.5 ms a frame at the deepest starter. Levers: a skip table in the CPU probe
   (the renderer's own went with the page's program in `ROUTES.md` R7; its build is in the history
   of `core.js` before `f9f01e1a`, grep `blaBuild`), or reading the picture's own depth. Routes lean on the same rays (the clip warning, the trail cut).
+  - DONE 2026-10-16, the first lever, as a jump rather than a table (ADR-0140's update; grep `THE NAVIGATION'S
+    JUMP` in `core.js`): the seven-ray bundle 42 -> 4.0 ms at the power-4 floor, 2.9-3.9 -> 0.4-1.1 ms at the
+    deep kept places; no ray changes between hit and open over 1,584 rays.
 - Inside the solid: he wants GMT's overlay for it, "camera undo must be ready first". A flight is one
   undo step since ADR-0134; check whether that is the camera undo he meant before starting.
 - Roll is no longer here: it is `ROUTES.md` R1.

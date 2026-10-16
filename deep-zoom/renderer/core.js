@@ -3559,8 +3559,10 @@ function boxJumpRows(O, p, put) {
   let M = [1, 0, 0, 0, 1, 0, 0, 0, 1], Rmin = Infinity, trap = 1e30, ke = len - 2;
   for (let k = 0; k < len; k++) if (O.Rk[k] > BOX_ESC) { ke = k; break; }
   O.jumpMax = Math.max(0, Math.min(ke, len - 2));
+  const tab = O.jump = { max: O.jumpMax, M: [], R: new Float64Array(len), T: new Float64Array(len) };   // the same in f64, for the navigation's CPU ray (grep navJump)
   for (let k = 0; k < len; k++) {
     if (k > 0) trap = Math.min(trap, O.Rk[k] * O.Rk[k]);
+    tab.M.push(M); tab.R[k] = Rmin; tab.T[k] = trap;
     let mx = 0, fro = 0; for (const v of M) { mx = Math.max(mx, Math.abs(v)); fro += v * v; }
     const eM = mx > 0 && isFinite(mx) ? Math.floor(Math.log2(mx)) : 0, sc = Math.pow(2, -eM);
     const r = Rmin === Infinity ? { m: 1, e: 2000 } : Rmin > 0 ? hdrSplit(Rmin) : { m: 1, e: -2000 }, dr = hdrSplit(O.DRk[k]);
@@ -3926,11 +3928,13 @@ function boxFoldJS(gh, gl, d, L2){
   const cd = rr === 0 ? (pr === 0 ? d : pr === 1 ? -gh : -gl) : rr === 1 ? (pr === 1 ? 0 : pr === 0 ? ph : -L2) : (pr === -1 ? 0 : pr === 0 ? pl : L2);
   return 2 * cd - d;
 }
-function boxOrbitJS(O, dc, maxIter, fixed){
+function boxOrbitJS(O, dc, maxIter, fixed, jump){
   const p = O.box, S = p.scale, aS = Math.abs(S), m2 = p.m2, F2 = p.F2, kA = p.kA, L2 = 2 * p.fold, R = p.hasRot ? p.R : null;
   const V0 = O.Vf[0], GH = O.GH, GL = O.GL, cx = O.julia ? 0 : dc[0], cy = O.julia ? 0 : dc[1], cz = O.julia ? 0 : dc[2];   // JULIA MODE (grep): nothing is added after the start
   let dx = dc[0], dy = dc[1], dz = dc[2], m = 0, it = 0, dr = 1, escaped = false, trap2 = Infinity;
-  let zx = V0[0] + dx, zy = V0[1] + dy, zz = V0[2] + dz;
+  const k0 = jump ? navJumpAt(O.jump, len3(dc), maxIter) : 0;   // THE NAVIGATION'S JUMP (grep): the referees never pass `jump`
+  if (k0 > 0) { const M = O.jump.M[k0]; [dx, dy, dz] = mv3(M, dc); dr = O.DRk[k0]; trap2 = O.jump.T[k0]; m = it = k0; }
+  let zx = O.Vf[m][0] + dx, zy = O.Vf[m][1] + dy, zz = O.Vf[m][2] + dz;
   while (it < maxIter) {
     if (R) { const a = R[0][0]*dx + R[0][1]*dy + R[0][2]*dz, b = R[1][0]*dx + R[1][1]*dy + R[1][2]*dz, c = R[2][0]*dx + R[2][1]*dy + R[2][2]*dz; dx = a; dy = b; dz = c; }
     let ex, ey, ez;
@@ -3956,10 +3960,12 @@ function boxOrbitJS(O, dc, maxIter, fixed){
   const r = Math.hypot(zx, zy, zz);
   return { de: (r - 1) / dr, escaped, r, it, dr, trap: Math.sqrt(trap2), z: [zx, zy, zz] };
 }
-function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter iterations, no escape test (neighbours that must stop together)
-  if (O.box) return boxOrbitJS(O, dc, maxIter, fixed);
+function pertOrbitJS(O, dc, maxIter, fixed, jump){     // fixed: run exactly maxIter iterations, no escape test (neighbours that must stop together); jump: THE NAVIGATION'S JUMP (grep)
+  if (O.box) return boxOrbitJS(O, dc, maxIter, fixed, jump);
   let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0;
-  for(let k=0;k<maxIter;k++){
+  const tab = jump ? navJump(O) : null, k0 = navJumpAt(tab, len3(dc), maxIter);
+  if (k0 > 0) { d = mv3(tab.M[k0], dc); Ddr = dot3(tab.G[k0], dc); m = it = k0; }
+  for(let k=k0;k<maxIter;k++){
     let V=O.Vf[m], R=O.Rk[m];
     if(O.burn!==undefined){                      // BURNING (grep): the fold's own delta by cases, then the power's at the folded reference
       d=[burnDeltaJS(V[0],d[0],O.burn), burnDeltaJS(V[1],d[1],O.burn), burnDeltaJS(V[2],d[2],O.burn)]; V=O.Af[m]; R=O.RAk[m];
@@ -3981,6 +3987,62 @@ function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter i
   return { de: 0.5*r2*Math.log(Math.max(r2,1e-300))/(O.DRk[m]+Ddr), escaped, r: r2, it };
 }
 
+/* ════════ THE NAVIGATION'S JUMP (2026-10-16; @see docs/adr/0140-the-mandelbox-jumps-its-linear-prefix.md) ════════
+   THE PREFIX JUMP (grep) on the CPU, for the navigation's rays only (rayFreeJS passes `jump`; the referees - the
+   gate, the direct proof's twin, the harness dive, estimateAt - never do, and run whole orbits as before). Every
+   step of a ray ran its orbit from iteration 0, with the bulb's jet and every iterate kept for the gradient's pass
+   back: the seven rays of a bundle cost 3.2 to 3.6 ms a frame at the deep kept places and 42 ms at the power-4
+   starter's floor (3.4e-76; debug/scratch/box-depth/bulb-nav.mts, git-ignored).
+   Over the prefix where a delta maps linearly, δ_k = M_k·δc, and so do what rides with it: the jet is M_k·rd (it
+   starts as rd and gains + rd a step, as δ gains + δc), dr's delta is G_k·δc, and the gradient's pass back over
+   the iterates jumped is M_kᵀ·w in one step (the sum of the pulls that M_k's terms are the products of).
+   THE BOX'S table is its GPU rows' own numbers in f64 (boxJumpRows: O.jump). THE BULB'S is built here, once per
+   orbit and power, the first time a ray asks: M_k from the triplex Jacobian (the skip table's, removed with the
+   page's program in ADR-0137: grep blaBuild in the history of this file), G_k from the linear part of the
+   kernel's Ddr step, and the radius of each step its rule: BULB_JUMP_TAU · R · min(1, |sin Nθ / sin θ|) / N,
+   nothing where R > 1.5, and never across the pole axis (half the distance to it: a θ phase breaks the power
+   there). Burning has none: its fold is not in this table. */
+const BULB_JUMP_TAU = 1e-5;
+const mv3 = (M, v) => [M[0]*v[0] + M[1]*v[1] + M[2]*v[2], M[3]*v[0] + M[4]*v[1] + M[5]*v[2], M[6]*v[0] + M[7]*v[1] + M[8]*v[2]];
+const mtv3 = (M, v) => [M[0]*v[0] + M[3]*v[1] + M[6]*v[2], M[1]*v[0] + M[4]*v[1] + M[7]*v[2], M[2]*v[0] + M[5]*v[1] + M[8]*v[2]];
+/* the largest index whose radius |δc| is under (R never rises with the index), under maxIter; 0 = none */
+function navJumpAt(tab, c, maxIter){
+  if (!tab) return 0;
+  let lo = 0, hi = Math.min(tab.max, maxIter - 1);
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (c < tab.R[mid]) lo = mid; else hi = mid - 1; }
+  return lo;
+}
+function navJump(O){
+  if (O.box) return O.jump || null;
+  if (O.burn !== undefined) return null;
+  const key = nPower + ',' + phaseTheta + ',' + phasePhi;
+  if (O.jump && O.jump.key === key) return O.jump;
+  const N = nPower, len = O.len, addC = O.julia ? 0 : 1;
+  let ke = len - 2; for (let k = 0; k < len; k++) if (O.Rk[k] > 2) { ke = k; break; }
+  const max = Math.max(0, Math.min(ke, len - 2)), tab = O.jump = { key, max, M: [], G: [], R: new Float64Array(max + 1) };
+  let M = [1, 0, 0, 0, 1, 0, 0, 0, 1], G = [0, 0, 0], Rmin = Infinity;
+  for (let k = 0; k <= tab.max; k++) {
+    tab.M.push(M); tab.G.push(G); tab.R[k] = Rmin;
+    const V = O.Vf[k], R = O.Rk[k], rho = Math.hypot(V[0], V[1]), cth = V[2] / R, sth = rho / R;
+    const cp = rho > 1e-300 ? V[0] / rho : 1, sp = rho > 1e-300 ? V[1] / rho : 0;
+    const a = N * Math.acos(Math.max(-1, Math.min(1, cth))) + phaseTheta, b = N * Math.atan2(V[1], V[0]) + phasePhi;
+    const sa = Math.sin(a), ca = Math.cos(a), sb = Math.sin(b), cb = Math.cos(b);
+    let s = 1; if (N > 1) { let u0 = 1, u1 = 2 * cth; for (let j = 2; j < N; j++) { const u2 = 2 * cth * u1 - u0; u0 = u1; u1 = u2; } s = u1; }   // sin Nθ / sin θ = U_(N-1)(cos θ)
+    const rh = [sth*cp, sth*sp, cth], th = [cth*cp, cth*sp, -sth], ph = [-sp, cp, 0], rhp = [sa*cb, sa*sb, ca], thp = [ca*cb, ca*sb, -sa], php = [-sb, cb, 0];
+    const Rp = Math.pow(R, N - 1), gJ = N * Rp, A = [];
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) A.push(gJ * (rhp[i]*rh[j] + thp[i]*th[j] + s*php[i]*ph[j]));
+    let fro = 0; for (const v of M) fro += v * v;
+    const rk = R > 1.5 ? 0 : Math.min(BULB_JUMP_TAU * R * Math.min(1, Math.abs(s)) / N, 0.5 * rho);
+    Rmin = Math.min(Rmin, rk / Math.sqrt(fro));
+    const MV = mtv3(M, V), gk = N * (N - 1) * Math.pow(R, N - 3) * O.DRk[k];
+    G = [gJ * G[0] + gk * MV[0], gJ * G[1] + gk * MV[1], gJ * G[2] + gk * MV[2]];
+    const MN = new Array(9);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) MN[i*3+j] = A[i*3] * M[j] + A[i*3+1] * M[3+j] + A[i*3+2] * M[6+j];
+    MN[0] += addC; MN[4] += addC; MN[8] += addC;
+    M = MN;
+  }
+  return tab;
+}
 /* ════════ THE FREE DISTANCE ALONG A RAY (2026-10-09) — what a host's navigation flies by ════════
    The fly speed used to follow the distance estimate at the camera itself (grep "distance probe"). That number is
    wrong for flying in two ways, both measured on the kept places (the study and its logs: H:/tmp/dz-nav-study):
@@ -4093,17 +4155,20 @@ function pullGradJS(z, w){
    E is THE RAY ESTIMATE at the iterate the orbit ended on; grad is the gradient of that iterate's radius with the
    point (one pass back over the iterates), G the estimate by it; ray is the larger of E and G - what a ray steps by.
    fixed: exactly maxIter iterations, no escape test. */
-function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
+function pertOrbitJetJS(O, dc, rd, maxIter, fixed, jump){
   if (O.box) {
     /* THE FORMULA SEAM: the box carries no jet. Its map stretches space alike on all three axes (widest over
        narrowest 1.2 to 1.8 from 1e-3 to 1e-40, the bulb's 40 to 100: debug/scratch/formula-study/dz-shape-check.mjs),
        so the ray estimate says what the scalar one says, and a ray steps by the scalar estimate: the WHOLE of it
        since 2026-10-12 (rayFreeJS; grep THE MANDELBOX STEPS BY THE WHOLE ESTIMATE). */
-    const o = boxOrbitJS(O, dc, maxIter, fixed);
+    const o = boxOrbitJS(O, dc, maxIter, fixed, jump);
     return { de: o.de, escaped: o.escaped, r: o.r, it: o.it, z: o.z, jet: [0,0,0], E: o.de, grad: [0,0,0], G: o.de, ray: o.de };
   }
-  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(), z=add3(O.Vf[0],d); const zs=[], sides=[];
-  for(let k=0;k<maxIter;k++){
+  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(); const zs=[], sides=[];
+  const tab = jump ? navJump(O) : null, k0 = navJumpAt(tab, len3(dc), maxIter);
+  if (k0 > 0) { const M = tab.M[k0]; d = mv3(M, dc); Ddr = dot3(tab.G[k0], dc); jet = mv3(M, rd); m = it = k0; }   // THE NAVIGATION'S JUMP (grep): jet_k = M_k rd there
+  let z=add3(O.Vf[m],d);
+  for(let k=k0;k<maxIter;k++){
     let V=O.Vf[m], R=O.Rk[m];
     if(O.burn!==undefined){                      // BURNING (grep): as pertOrbitJS; the jet and the point it is pushed at take the pixel's own side
       const s=burnSideJS(z,O.burn); sides.push(s);
@@ -4128,7 +4193,7 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
   let w=r>0 ? [z[0]/r,z[1]/r,z[2]/r] : [0,0,0], grad=[0,0,0];
   for(let k=zs.length-1;k>=0;k--){ if(!O.julia) grad=add3(grad,w); w=pullGradJS(zs[k],w);       // z_(k+1) = f(z_k) + c, z_0 = c (JULIA MODE: c is no part of the point, so only the pull back to z_0 counts)
     if(O.burn!==undefined){ const s=sides[k]; w=[w[0]*s[0],w[1]*s[1],w[2]*s[2]]; } }             // BURNING (grep): and back through the fold
-  grad=add3(grad,w);
+  grad=add3(grad, k0 > 0 ? mtv3(tab.M[k0], w) : w);   // THE NAVIGATION'S JUMP: back over the jumped iterates in one step, M_k0ᵀ w (its identity term is the plain line's w)
   const slope=len3(grad), E=speed>0 ? g/speed : de, G=slope>0 ? g/slope : de;
   return { de, escaped, r, it, z, jet, E, grad, G, ray: Math.max(E, G) };
 }
@@ -4138,12 +4203,12 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
 function rayFreeJS(O, rd, maxIter, tol, maxSteps, t0, prev0){
   let t=t0>0?t0:0, tPrev=prev0>0?prev0:0, steps=0; const far=senseFar();
   for(; steps<maxSteps; steps++){
-    const o=pertOrbitJetJS(O, scl3(rd,t), rd, maxIter);
+    const o=pertOrbitJetJS(O, scl3(rd,t), rd, maxIter, false, true);   // THE NAVIGATION'S JUMP (grep), here and in the halving below
     if(!o.escaped || !(o.de>0)){
       if(t===0) return { t:0, prev:0, kind:2, steps };
       let lo=tPrev, hi=t;                           // lo: the last sample outside; hi: this one, inside
       for(let b=0; b<40 && (hi-lo)>tol*0.25*hi; b++){
-        const tm=0.5*(lo+hi), om=pertOrbitJS(O, scl3(rd,tm), maxIter); steps++;
+        const tm=0.5*(lo+hi), om=pertOrbitJS(O, scl3(rd,tm), maxIter, false, true); steps++;
         if(!om.escaped || !(om.de>0)) hi=tm; else lo=tm;
       }
       return { t:lo, prev:lo, kind:1, steps };
