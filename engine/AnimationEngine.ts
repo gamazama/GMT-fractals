@@ -442,18 +442,62 @@ export class AnimationEngine {
         return this.evaluateCurveInternal(keys, frame, isRotation, isLog);
     }
 
+    /**
+     * The value at `frame` from the two keys around it: the FIRST pair (i, i + 1) with
+     * keys[i].frame <= frame <= keys[i + 1].frame, the last key's value when none holds it. On a
+     * key's own frame that is the pair that ENDS there.
+     *
+     * Keys in frame order are found by a binary search (a deep-zoom route's clock has thousands:
+     * measured 2026-10-16, 2,033 keys, a path built and every frame placed, 1.6 s by the scan,
+     * 77 ms by the search). Keys out of order - a hand-made scene loaded as it is - are scanned
+     * from the start, as they always were. Which of the two an array gets is worked out once per
+     * array (`keysInOrder`).
+     *
+     * @invariant The same pair as the scan from the start, so the same value to the bit, on every
+     *   track - proven by: npm run check:deep-zoom-route ("engine: the key lookup is a binary
+     *   search: the same values to the bit as the scan ..."). Falsified 2026-10-16: the search
+     *   made to take the pair that STARTS on a key's frame (`>` for `>=`) -> that line red, 360
+     *   of 28,534 values differ.
+     * @assumption A key array the engine has evaluated is never reordered, nor a key's frame
+     *   changed, in place: the store builds a new array for every edit (grep `replaceKeyframes` in
+     *   store/animation/sequenceSlice.ts). An array changed in place after its first evaluation
+     *   keeps the order it was found in.
+     */
     private evaluateCurveInternal(keys: Keyframe[], frame: number, isRotation: boolean, isLog: boolean = false): number {
-        for (let i = 0; i < keys.length - 1; i++) {
-            const k1 = keys[i];
-            const k2 = keys[i+1];
+        const last = keys.length - 1;
+        if (!keysInOrder(keys)) {
+            for (let i = 0; i < last; i++) {
+                const k1 = keys[i];
+                const k2 = keys[i+1];
 
-            if (frame >= k1.frame && frame <= k2.frame) {
-                return AnimationMath.interpolate(frame, k1, k2, isRotation, isLog);
+                if (frame >= k1.frame && frame <= k2.frame) {
+                    return AnimationMath.interpolate(frame, k1, k2, isRotation, isLog);
+                }
             }
+            return keys[last].value;
         }
-        return keys[keys.length - 1].value;
+        // In order, the scan's pair is (j - 1, j) for the first j >= 1 with keys[j].frame >= frame.
+        if (last < 1 || !(keys[0].frame <= frame && frame <= keys[last].frame)) return keys[last].value;
+        let lo = 0, hi = last;
+        while (hi - lo > 1) {
+            const mid = (lo + hi) >> 1;
+            if (keys[mid].frame >= frame) hi = mid; else lo = mid;
+        }
+        return AnimationMath.interpolate(frame, keys[hi - 1], keys[hi], isRotation, isLog);
     }
 
+}
+
+/** Per key array: are its frames in order (each no earlier than the one before)? Worked out once. */
+const inOrder = new WeakMap<readonly Keyframe[], boolean>();
+function keysInOrder(keys: readonly Keyframe[]): boolean {
+    let known = inOrder.get(keys);
+    if (known === undefined) {
+        known = true;
+        for (let i = 1; i < keys.length && known; i++) known = keys[i - 1].frame <= keys[i].frame;
+        inOrder.set(keys, known);
+    }
+    return known;
 }
 
 export const animationEngine = new AnimationEngine();

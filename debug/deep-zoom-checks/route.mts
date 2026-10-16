@@ -48,6 +48,9 @@
  *            other way round with their ids, views and negated headings; the view, the depth curve, the count and the
  *            look at mirrored frames as they were; the playhead mirrored and the picture kept; reversed twice is the
  *            route to the digit; a look key past the route dropped, an iteration key past it kept
+
+ *   engine   (2026-10-16, stage S1 of plans/deep-zoom-shell/SMOOTHING.md) the engine's key lookup, a binary search now,
+ *            against the scan it replaced, on random tracks: the same values to the bit
  *
  * FALSIFICATION RECORD, 2026-10-11, one break per run in deep-zoom/route.ts, the file put back
  * byte for byte after each. The break, then what went red:
@@ -141,6 +144,9 @@
  *     NOT FALSIFIED, green only: the one undo step, reversed twice, each step undone, the count and the look at mirrored
  *     frames, the playhead on a keyframe, the camera the user holds, the keys outside the span, and nothing while a route
  *     renders or with one keyframe.
+ *   - engine (2026-10-16, stage S1 of SMOOTHING.md): engine/AnimationEngine.ts, the search taking the pair that STARTS on a
+ *     key's frame (`>` for `>=`), the file put back byte for byte -> 1 red: "engine: the key lookup is a binary search ..."
+ *     (360 of 28,534 values differ)
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -163,7 +169,8 @@ import {
     stopRoutePlayback, useRoute,
 } from '../../deep-zoom/route';
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
-import type { Keyframe } from '../../types';
+import { AnimationMath } from '../../engine/math/AnimationMath';
+import type { Keyframe, Track } from '../../types';
 
 let failed = 0;
 function check(ok: boolean, label: string, detail = ''): void {
@@ -1018,6 +1025,64 @@ ball = null;
     check(rendered && JSON.stringify(anim().sequence) === oneKey && anim().undoStack.length === heldSteps + 1,
         'reverse: while the route is rendered, and with one keyframe, it changes nothing and leaves no step', `rendered ${rendered}, ${anim().undoStack.length - heldSteps} steps`);
     anim().undo();
+}
+
+// ── engine (2026-10-16, stage S1 of plans/deep-zoom-shell/SMOOTHING.md) ──────────────────────────
+// The engine finds a track's key by a binary search now (`evaluateCurveInternal`). Against the scan it
+// replaced, written out here as it was: the FIRST pair of keys about the frame.
+{
+    let seed = 20261016;
+    const rand = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; };
+    const scanned = (track: Track, frame: number): number => {
+        const ks = track.keyframes;
+        if (ks.length === 0) return 0;
+        const isRotation = track.id.startsWith('camera.rotation') || track.id.includes('rot') || track.id.includes('phase') || track.id.includes('twist');
+        const isLog = isLogTrack(track.id), last = ks[ks.length - 1];
+        if (frame > last.frame) return last.value;                        // Hold
+        if (frame < ks[0].frame) return ks[0].value;
+        for (let i = 0; i < ks.length - 1; i++) if (frame >= ks[i].frame && frame <= ks[i + 1].frame) return AnimationMath.interpolate(frame, ks[i], ks[i + 1], isRotation, isLog);
+        return last.value;
+    };
+    const made = (id: string, n: number, log: boolean): Track => {
+        const keys: Keyframe[] = [];
+        let frame = rand() * 10;
+        for (let i = 0; i < n; i++) {
+            frame += rand() < 0.15 ? 0 : rand() < 0.5 ? Math.ceil(rand() * 20) : rand() * 20;   // keys that share a frame, whole and fractional frames
+            const kind = rand(), value = log ? 10 ** (-rand() * 30) : (rand() - 0.5) * 7;
+            keys.push({ id: `${id}-${i}`, frame, value, interpolation: kind < 0.6 ? 'Bezier' : kind < 0.85 ? 'Linear' : 'Step', autoTangent: false, brokenTangents: true,
+                leftTangent: { x: -rand() * 6, y: (rand() - 0.5) * 3 }, rightTangent: { x: rand() * 6, y: (rand() - 0.5) * 3 } });
+        }
+        return { id, type: 'float', label: id, keyframes: keys } as Track;
+    };
+    const tracks = [made(ROUTE_TRACK, 300, true), made('dzFormula.power', 300, false), made('demo.rotY', 200, false), made(ROUTE_TRACK, 2, true), made('dzFormula.power', 1, false)];
+    const shuffled = made('dzFormula.power', 60, false);
+    shuffled.keyframes = shuffled.keyframes.map((k) => ({ k, r: rand() })).sort((x, y) => x.r - y.r).map((x) => x.k);   // out of order: scanned, as before
+    tracks.push(shuffled);
+    let evaluated = 0, differ = 0, worst = '';
+    for (const t of tracks) {
+        const ks = t.keyframes, lo = Math.min(...ks.map((k) => k.frame)), hi = Math.max(...ks.map((k) => k.frame));
+        const frames = [...ks.map((k) => k.frame), ...ks.map((k) => k.frame + 0.5), lo - 1, hi + 1, -0, NaN, ...Array.from({ length: 400 }, () => lo + (hi - lo) * rand())];
+        for (const f of frames) {
+            evaluated++;
+            const a = animationEngine.evaluateTrack(t, f), b = scanned(t, f);
+            if (!Object.is(a, b)) { differ++; worst ||= `${t.id} at ${f}: ${a} against ${b}`; }
+        }
+    }
+    // What it costs: a clock of 2,033 keys (as the study's scenes held the owner's route), a quarter frame at a time.
+    const clockKeys: Keyframe[] = Array.from({ length: 2033 }, (_, i) => ({ id: `c${i}`, frame: i * 3, value: 10 ** (-i * 78 / 2033), interpolation: 'Bezier', autoTangent: true, brokenTangents: false }));
+    clockKeys.forEach((k, i) => { const { l, r } = AnimationMath.calculateTangents(k, clockKeys[i - 1], clockKeys[i + 1], 'Auto', true); k.leftTangent = l; k.rightTangent = r; });
+    const clock = { id: ROUTE_TRACK, type: 'float', label: 'clock', keyframes: clockKeys } as Track, count = 4 * 6096;
+    const searched = new Float64Array(count), scans = new Float64Array(count);
+    let t0 = performance.now();
+    for (let i = 0; i < count; i++) searched[i] = animationEngine.evaluateTrack(clock, i / 4);
+    const searchMs = performance.now() - t0;
+    t0 = performance.now();
+    for (let i = 0; i < count; i++) scans[i] = scanned(clock, i / 4);
+    const scanMs = performance.now() - t0;
+    for (let i = 0; i < count; i++) { evaluated++; if (!Object.is(searched[i], scans[i])) { differ++; worst ||= `the clock at ${i / 4}`; } }
+    check(differ === 0,
+        `engine: the key lookup is a binary search: the same values to the bit as the scan from the start it replaced (${evaluated} frames on ${tracks.length + 1} tracks - exponential, plain, an angle; keys sharing a frame; on a key, between, outside, NaN; keys out of order scanned as before); a clock of 2,033 keys a quarter frame at a time: ${searchMs.toFixed(0)} ms, the scan ${scanMs.toFixed(0)} ms`,
+        `${differ} differ: ${worst}`);
 }
 
 stopSync();
