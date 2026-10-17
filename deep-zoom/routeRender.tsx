@@ -27,7 +27,7 @@
  *     width and a height typed); the bitrate; the frame step; GMT's Internal Scale
  *     (`InternalScaleField`, this file's `extra`); and the opt-ins `draft` (Quality = [Draft | Final])
  *     and `rangeInSeconds`. Its first default (F11, stage 7 of the streamline): a Video MP4,
- *     1280 x 720, 8 samples; after that it opens on what it was left on (the dialog's own memory,
+ *     1280 wide at the canvas's shape (`canvasAspect`; 720p until 2026-10-17), 8 samples; after that it opens on what it was left on (the dialog's own memory,
  *     `DZ_RENDER_STORAGE_KEY`). The dialog opens from the timeline toolbar's Render button and from
  *     the Route tab's (`openRenderPopup()` in engine/animation/renderPopupRegistry.ts).
  *   - ONE LOOP, TWO SINKS. `runRouteRender` is the one frame loop: the set-up, THE WAIT, the hold
@@ -78,9 +78,13 @@
  *     is written: one decode more a frame, and into a folder an encode too (`frameFile`). The samples
  *     already smooth the edges; the scale sharpens fine detail, at about its square in time.
  *   - THE STEP (GMT's frame step) renders every Nth timeline frame. A video plays them at the
- *     timeline's rate over the step. A folder's files keep their timeline frame's number, so with a
- *     step above 1 their numbers have gaps - and ffmpeg's numbered input stops at the first gap: the
- *     ffmpeg line then reads them by name (`-pattern_type glob`), which ffmpeg's Windows builds lack.
+ *     timeline's rate over the step. A folder's files are numbered WITHOUT GAPS (the owner,
+ *     2026-10-17): at a step above 1 a frame is file floor(frame / step) - 0, 1, 2... from frame 0,
+ *     consecutive for any start - and the file name carries the step ("..._step_2_00004.png"), so
+ *     frames of two steps never share a name. ffmpeg's numbered input reads them; until then their
+ *     numbers had gaps and the ffmpeg line read them by name (a glob), which its Windows builds lack.
+ *     Continue finds them the same way. Two runs at one step whose starts differ by less than the
+ *     step name different frames alike (frames 10, 12 and 11, 13 are both files 5, 6).
  *   - THE FILES are named after the project when somebody named it (not "Untitled", and not the
  *     formula's id that `loadPreset` gives a scene called "Untitled"), otherwise after the route's
  *     depth span ("deep zoom 2e0 to 1e-3"; the place's depth with no route): `renderName`, made safe
@@ -281,12 +285,13 @@
  *   the Fixed size first in Fixed mode (1920 x 1080, picked), 900 x 1400 in a window that tall; a WebM
  *   of 16 frames (0.52 MB) and 16 JPG frames (640 x 360, JPEG bytes, the ffmpeg line reading .jpg)
  *   finished; the same JPG folder at 1280 x 720 offered no Continue and said both sizes, and at
- *   640 x 360 continued (3 written, 7 already there); a step of 2 wrote frames 0, 2, 4, 6, 8 and gave
- *   the glob line at 15 a second; internal scale 1.5 wrote PNGs at the size set; no estimate before
+ *   640 x 360 continued (3 written, 7 already there); a step of 2 wrote frames 0, 2, 4, 6, 8 (and, renamed
+ *   later that day, files ..._step_2_00000 to 00004 with a numbered ffmpeg line at 15 a second); internal scale 1.5 wrote PNGs at the size set; no estimate before
  *   the first run, "about 1s" after it at the same size and samples (also for the JPG folder), none at
  *   another scale; Remaining said "about 1 s" in a short run and "about 5 min" after one frame of a
  *   331-frame 4K run (then Interrupt and Discard: no video). NOT driven: an H.265 or AV1 file played
- *   back; the glob line run in a real ffmpeg; Firefox and Safari.
+ *   back; the ffmpeg line run in a real ffmpeg; Firefox and Safari. The first size at the canvas's shape:
+ *   1280 x 968 for a picture area of 1248 x 944 (2026-10-17, debug/scratch/streamline/first-size.mjs).
  */
 import React from 'react';
 import { useAnimationStore } from '../store/animationStore';
@@ -312,8 +317,16 @@ import { flushHostSync, holdAutoIterations } from './useHostSync';
 export const DZ_PREVIEW_SHORT_EDGE = 320;
 /** Where the dialog keeps what and how to render (the engine's render dialog, `storageKey`). */
 export const DZ_RENDER_STORAGE_KEY = 'deep-zoom.render-dialog';
-/** The size the dialog first opens on (F11: 1280, GMT's 720p). */
-const DEFAULT_SIZE = { width: 1280, height: 720 };
+/** The width the dialog first opens on (F11: "MP4 at 1280 wide"), at the canvas's shape (`canvasAspect`). */
+const DEFAULT_WIDTH = 1280;
+
+/** The canvas's shape: the Fixed size in Fixed mode, otherwise the picture's area as the viewport frame measured it
+ *  (`canvasPixelSize`); 16:9 before it is measured. The owner, 2026-10-17: the first size follows the canvas, not 720p. */
+function canvasAspect(): number {
+    const st = useEngineStore.getState();
+    const [w, h] = st.resolutionMode === 'Fixed' ? st.fixedResolution : st.canvasPixelSize;
+    return w > 0 && h > 0 ? w / h : 16 / 9;
+}
 const DEFAULT_SAMPLES = 8;
 /** `VIDEO_FORMATS`' H.264 MP4: "Video MP4", the format the dialog first opens on. */
 const MP4_FORMAT_INDEX = VIDEO_FORMATS.findIndex((f) => f.codec === 'avc');
@@ -363,7 +376,7 @@ async function frameFile(png: Blob, mime: string, size: { w: number; h: number }
     }
 }
 
-/** What the dialog opens with while it keeps nothing: a Video MP4, 1280 x 720, 8 samples, no internal scale; the range
+/** What the dialog opens with while it keeps nothing: a Video MP4 1280 wide at the canvas's shape, 8 samples, no internal scale; the range
  *  is the route's own span, or the whole timeline when there is no route (once the dialog has been open, the range it
  *  was left on, while that span is the same: the dialog's own memory). */
 function defaults(): Partial<RenderDialogConfig> & { extra: DzRenderExtra } {
@@ -371,7 +384,8 @@ function defaults(): Partial<RenderDialogConfig> & { extra: DzRenderExtra } {
     return {
         formatIndex: MP4_FORMAT_INDEX,
         samplesPerFrame: DEFAULT_SAMPLES,
-        ...DEFAULT_SIZE,
+        width: DEFAULT_WIDTH,
+        height: 2 * Math.max(1, Math.round(DEFAULT_WIDTH / canvasAspect() / 2)),   // even, as an encoder wants
         extra: { internalScale: 1 },
         ...(keys.length > 1 ? { startFrame: Math.floor(keys[0].frame), endFrame: Math.ceil(keys[keys.length - 1].frame) } : {}),
     };
@@ -482,13 +496,10 @@ interface FrameSink {
     report(sum: RunSummary): { where: string[]; command?: { say: string; line: string } };
 }
 
-/** The ffmpeg line that makes a video of the frames (run in their folder). ffmpeg looks for the
- *  first file among numbers 0 to 4 only, so a sequence that starts later says where; with a step
- *  above 1 the numbers have gaps, where its numbered input stops, so it reads them by name (THE STEP). */
+/** The ffmpeg line that makes a video of the frames (run in their folder; `first` is the first FILE's
+ *  number). ffmpeg looks for the first file among numbers 0 to 4 only, so a sequence that starts later says where. */
 const ffmpegLine = (folder: FrameFolder, fps: number, first: number, step: number, ext: string): string =>
-    `ffmpeg -framerate ${+(fps / step).toFixed(3)} ${step > 1
-        ? `-pattern_type glob -i "${folder.name}_*.${ext}"`
-        : `${first > 0 ? `-start_number ${first} ` : ''}-i ${folder.name}_%05d.${ext}`} -c:v libx264 -pix_fmt yuv420p -crf 16 ${folder.name}.mp4`;
+    `ffmpeg -framerate ${+(fps / step).toFixed(3)} ${first > 0 ? `-start_number ${first} ` : ''}-i ${folder.name}_%05d.${ext} -c:v libx264 -pix_fmt yuv420p -crf 16 ${folder.name}.mp4`;
 
 /**
  * One picture a frame (a PNG, or a JPG: `format`), into a folder the user picks. Null: backed out of the picker. THE
@@ -497,8 +508,10 @@ const ffmpegLine = (folder: FrameFolder, fps: number, first: number, step: numbe
  * anything is rendered - Overwrite, Continue or Cancel: see the header, FRAMES ALREADY IN THE FOLDER.
  */
 async function openFolderSink(project: string, fps: number, step: number, format: typeof VIDEO_FORMATS[number]): Promise<FrameSink | null> {
-    const folder = await pickFrameFolder(project, format.ext);
+    // At a step above 1 a frame is file floor(frame / step), under a name that carries the step (THE STEP).
+    const folder = await pickFrameFolder(step > 1 ? `${project} step ${step}` : project, format.ext);
     if (!folder) return null;
+    const fileOf = (frame: number): number => (step > 1 ? Math.floor(frame / step) : frame);
     /** The frames of this render that were in the folder before the run; how many of those it has replaced so far. */
     const old = new Set<number>();
     let overwriting = false, replaced = 0;
@@ -508,7 +521,7 @@ async function openFolderSink(project: string, fps: number, step: number, format
         name: folder.folder,
         closing: null,
         async begin({ frames, longEdge, aspect, stop, ask }) {
-            const look = await lookForFrames(folder, frames, stop);
+            const look = await lookForFrames(folder, frames.map(fileOf), stop);
             if (stop()) return null;                                     // cancelled while it looked
             if (look.count === 0) return { there: [], aspect };          // nothing of this render is there: nothing is asked
             const total = frames.length, missing = total - look.count, want = renderSize(longEdge, aspect);
@@ -543,7 +556,7 @@ async function openFolderSink(project: string, fps: number, step: number, format
         async put(frame, png, size) {
             const file = await frameFile(png, format.mime, size);
             try {
-                await folder.write(frame, file);
+                await folder.write(fileOf(frame), file);
             } catch (err) {
                 // The browser showed the folder picker and will not let the page write into it (see the header).
                 if (err instanceof Error && err.name === 'NotAllowedError') {
@@ -566,9 +579,7 @@ async function openFolderSink(project: string, fps: number, step: number, format
                 if (left > 0) line += ` ${left} from before ${left === 1 ? 'is' : 'are'} still there, not replaced.`;
             }
             return inFolder(sum) > 0
-                ? { where: [line], command: { say: step > 1
-                    ? `To make a video of them with ffmpeg, run this in that folder (their numbers go up by ${step}: it reads them by name, which ffmpeg's Windows builds cannot):`
-                    : 'To make a video of them with ffmpeg, run this in that folder:', line: ffmpegLine(folder, fps, firstFrame, step, format.ext) } }
+                ? { where: [line], command: { say: 'To make a video of them with ffmpeg, run this in that folder:', line: ffmpegLine(folder, fps, fileOf(firstFrame), step, format.ext) } }
                 : { where: [line] };
         },
     };
