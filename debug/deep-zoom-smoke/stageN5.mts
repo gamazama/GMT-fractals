@@ -354,11 +354,15 @@ export const stage: DzStage = {
                 // is the only thing that could change the strings. (With one key held the camera
                 // moves on after a recall and the two cases look alike: seen 2026-10-08, the step
                 // stayed green with the `when` removed.)
+                // The camera is read once both keys are down AND it has stopped: a frame can run between
+                // the two key-downs and fly W alone, so it is not where S left it (1 run in 6 failed on
+                // that, 2026-10-17, with no recall at all).
                 await ctx.page.keyboard.down('w');
                 await ctx.page.keyboard.down('s');
-                let held: string[] = [];
+                let still: string[] = [], held: string[] = [];
                 try {
-                    await ctx.sleep(200);
+                    still = await cam(ctx);
+                    for (let t = 0; t < 15; t++) { await ctx.sleep(100); const now = await cam(ctx); if (same(now, still)) break; still = now; }
                     await ctx.page.keyboard.press('1');
                     await ctx.sleep(300);
                     held = await cam(ctx);
@@ -366,7 +370,7 @@ export const stage: DzStage = {
                     await ctx.page.keyboard.up('s');
                     await ctx.page.keyboard.up('w');
                 }
-                ctx.check(same(held, away), 'with W and S held, 1 left the camera where it was');
+                ctx.check(!same(still, saved) && same(held, still), 'with W and S held, 1 left the camera where it was');
                 await ctx.sleep(300);
                 await ctx.page.keyboard.press('1');
                 await ctx.sleep(400);
