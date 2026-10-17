@@ -531,7 +531,7 @@ struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bo
       iterate taken as heading straight at the set at the speed it has here), its worst samples
       read 1.5 to 2.5 times the distance left in three views, and on the CPU it put 1 to 2 of
       5,733 rays through a solid (power 4, 3e-76). zdot is ONE vector carried with the orbit,
-          zdot' = A·zdot + v ,   A = n·r^(n−1)·( E_r·e_rᵀ + E_θ·e_θᵀ + κ·E_φ·e_φᵀ ) ,   κ = sin(nθ)/sin θ
+          zdot' = A·zdot + v ,   A = n·r^(n−1)·( E_r·e_rᵀ + E_θ·e_θᵀ + κ·E_φ·e_φᵀ ) ,   κ = sin(nθ + θ-phase)/sin θ (grep THE PHASE AND THE JET)
       (e = the unit frame of z's spherical angles, E = the frame of the output angles nθ, nφ: one
       triplex power step stretches by n·r^(n−1) along r and along the polar angle, and by κ times
       that around the azimuth), as jv·2^ev - three numbers, where the whole derivative J is nine.
@@ -591,7 +591,18 @@ int   gRunPrev = 0;              // kernel passes the previous orbit ran
 /* one iteration z → zⁿ (+ c) applied to zdot = jv·2^ev, and Q (as Qm·2^ev) gathered on the way.
    (sA, cA), (sB, cB): sin / cos of the OUTPUT angles of this pixel's z; scale = n·|z|^(n−1);
    jvs = 2^-ev, kept beside ev. The mantissa is renormalised only when it leaves 2^±20, so most
-   passes pay no log2 / exp2 here. */
+   passes pay no log2 / exp2 here.
+   THE PHASE AND THE JET (2026-10-17). The azimuth stretches by κ = sin(nθ + θ-phase) / sin θ. With no theta phase
+   that lies in [−n, n] and the clamp below is kept, so nothing moves (measured: pass G of two samples and a 4-sample
+   still hash for hash at three phase-0 views; the direct proof's lines to the character). WITH one it
+   is unbounded toward the pole axis (about sin(phase) / θ), and it used to be clamped at n there too: the jet came
+   out wrong, a resumed orbit slid its checkpoint along a wrong derivative, its de read low, and rays stopped in
+   empty space. On the owner's scene "ghosting past e14" (power 4, theta phase −0.58), share of a 720 x 720 frame's
+   rays a full march left more than 4 display pixels off any surface (the referee pertOrbitJS / hpDirectDE): 0.3 %
+   at 2.6e-13, 23 % at 2.5e-14, 35 % at 1.4e-16 clamped; 0.0 % at all three as it is now. A still there is 12 to
+   21 % faster (its guided samples no longer start in front of false hits), one full march 2 to 4 % slower (it goes
+   on to the surface); 2.6e-13 and phase 0 unchanged. The CPU twin, pushJetJS, never clamped. The measuring tools
+   are debug/scratch/ghost/ of the worktree that found it (git-ignored). */
 void jetStep(inout vec3 jv, inout float ev, inout float jvs, inout float Qm, vec3 z, float sA, float cA, float sB, float cB, float scale) {
   float rz = length(z), rho = length(z.xy), irho = 1.0 / max(rho, 1e-30);
   Qm += length(jv) * (uPower - 1.0) * irho;
@@ -599,7 +610,8 @@ void jetStep(inout vec3 jv, inout float ev, inout float jvs, inout float Qm, vec
   if (rz > 0.0) {
     float irz = 1.0 / rz, sth = rho * irz, cth = z.z * irz;
     float cph = rho > 0.0 ? z.x * irho : 1.0, sph = rho > 0.0 ? z.y * irho : 0.0;
-    float kap = sth > 1e-12 ? clamp(sA / sth, -uPower, uPower) : uPower;
+    float kmax = uPhase.x == 0.0 ? uPower : 1e30;               // THE PHASE AND THE JET (above)
+    float kap = sth > 1e-12 ? clamp(sA / sth, -kmax, kmax) : uPower;
     nj = dot(jv, vec3(sth * cph, sth * sph, cth)) * vec3(sA * cB, sA * sB, cA)
        + dot(jv, vec3(cth * cph, cth * sph, -sth)) * vec3(cA * cB, cA * sB, -sA)
        + kap * dot(jv, vec3(-sph, cph, 0.0)) * vec3(-sB, cB, 0.0);
@@ -1177,7 +1189,7 @@ uniform float uPower;            // Mandelbulb power n (float, for the ×n multi
 uniform int   uPowerI;           // power n (int, for the binomial Horner loop bound)
 uniform float uBinomN[17];       // C(n,1..n)   — (1+u)^n − 1
 uniform float uBinomN1[17];      // C(n-1,1..n-1) — (1+u)^(n-1) − 1
-uniform vec2  uPhase;            // lobe-twist phase (θ, φ) — used by the f32 far-field DE only
+uniform vec2  uPhase;            // lobe-twist phase (θ, φ) — the f32 far-field DE, the rebase to the origin, and the jet's azimuth stretch (grep THE PHASE AND THE JET)
 uniform int   uColorMode;        // 0 = plain | 1 = iteration (escape time) | 2 = orbit trap (origin)
 uniform int       uNormalIters;  // PERF LEVER: >0 caps pertOrbit iters on the normal taps (0 = full uIters)
 uniform int       uBisectIters;  // PERF LEVER: >0 caps pertOrbit iters on the bisection midpoint evals (0 = full uIters)
