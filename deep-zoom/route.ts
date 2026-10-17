@@ -1435,7 +1435,9 @@ export function routeFromTrail(previous = false): number {
  * when it did not come from one). Otherwise the even pace, `ROUTE_PACE` decades a second on
  * screen, which any route can be given: a leg of a route cut from a trail takes the length of the
  * way that was flown, a leg of any other the length of the straight line between its keyframes.
- * One animation-undo step; none when no key moves.
+ * A SMOOTHING PASS'S PACE TRACK GOES: it is a timing too, and As flown or Even replaces it (the
+ * owner, 2026-10-17; until then Even kept it and neither timing lit on the Route tab).
+ * One animation-undo step; none when no key moves and there is no Pace track to drop.
  */
 export function retimeRoute(flown: boolean): void {
     const r = route(), keys = r.keys, from = routeSource();
@@ -1443,7 +1445,7 @@ export function retimeRoute(flown: boolean): void {
     stopAt = null;
     if (anim().isPlaying) anim().pause();
     const was = keys.map((k) => k.frame);
-    moveKeyframes(r, was, timedFrames(r, from, flown, was));
+    moveKeyframes(r, was, timedFrames(r, from, flown, was), true);
 }
 
 /** The key times `retimeRoute(flown)` gives the route `r` (`from`: what it was cut from), its first keyframe where it is. */
@@ -1542,13 +1544,15 @@ function movedKeys(track: Track, to: (f: number) => number): Keyframe[] {
 /** The route's keyframes go from the frames `was` to the frames `now`, with everything keyed on
  *  its two tracks between them, and the Pace track's keys in proportion (a clock is not put on whole
  *  frames: two of its keys would meet). One animation-undo step; none when no key moves. */
-function moveKeyframes(r: Built, was: readonly number[], now: readonly number[]): void {
-    if (!r.depth || now.every((f, i) => f === was[i])) return;
+function moveKeyframes(r: Built, was: readonly number[], now: readonly number[], dropPace = false): void {
+    const paced = !!r.pace && r.pace.keyframes.length > 0;
+    if (!r.depth || (now.every((f, i) => f === was[i]) && !(dropPace && paced))) return;
     const warp = legWarp(was, now, true);
     anim().snapshot();
+    if (dropPace) dropTrack(ROUTE_PACE_TRACK);                      // a retime is a timing of its own (`retimeRoute`)
     anim().replaceKeyframes([
         ...[r.depth, r.iters].filter((t): t is Track => !!t).map((t) => ({ trackId: t.id, newKeys: movedKeys(t, warp) })),
-        ...(r.pace && r.pace.keyframes.length > 0 ? [{ trackId: ROUTE_PACE_TRACK, newKeys: movedKeys(r.pace, legWarp(was, now, false)) }] : []),
+        ...(paced && !dropPace ? [{ trackId: ROUTE_PACE_TRACK, newKeys: movedKeys(r.pace!, legWarp(was, now, false)) }] : []),
     ]);
     const end = now[now.length - 1], at = warp(anim().currentFrame);
     if (end > anim().durationFrames) anim().setDuration(end);

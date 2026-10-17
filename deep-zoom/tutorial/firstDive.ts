@@ -60,8 +60,10 @@
  *   - HINTS GO OFF WHILE A LESSON IS UP AND COME BACK AS THEY WERE WHEN IT ENDS: the engine's
  *     `startTutorial` keeps them and `skipTutorial` / `completeTutorial` put them back (store/slices/
  *     uiSlice.ts, `hintsBeforeLesson`; STREAMLINE.md A6, 2026-10-17 - until then they came back on,
- *     whatever they had been, in GMT's lessons too). On a first visit that is ON: the stored choice
- *     is unset and reads true.
+ *     whatever they had been, in GMT's lessons too). On a first visit that is OFF: this app starts
+ *     with hints off while the stored choice is unset (deep-zoom/setup.ts), and when a lesson ends
+ *     with them off a toast offers them, "Press H" (the owner, 2026-10-17: "offer hints at end of
+ *     lesson").
  *   - THE FIRST CARD'S DIVE IS THE STARTER "Surface", whose start view is the Start view a fresh
  *     start opens on (deep-zoom/locations.ts, `startAtStartView`): the button's jump moves nothing
  *     and the dive takes off at once. Its toast said "Stopped at 2.11e-5" though it arrived, until
@@ -78,6 +80,7 @@
 import { installTutorial, registerLessons } from '../../engine/plugins/Tutorial';
 import type { TutorialLesson } from '../../engine/plugins/Tutorial';
 import { useEngineStore } from '../../store/engineStore';
+import { showToast } from '../../engine/store/toastStore';
 import { getTelemetry, subscribeTelemetry } from '../host/telemetry';
 import { DZ_ACTION, installHostEvents } from './hostEvents';
 import { DZ_STEP_DIVE, registerDeepZoomStepKinds } from './steps';
@@ -171,8 +174,12 @@ export function installFirstDive(opts: { preempted?: boolean } = {}): void {
     registerLessons([firstDiveLesson]);
     installHostEvents();
 
-    // Ended, finished or skipped: it does not show by itself again.
-    useEngineStore.subscribe((s) => s.tutorialActive, (active, was) => { if (was && !active) remember(); });
+    // Ended, finished or skipped: it does not show by itself again, and hints still off are offered.
+    useEngineStore.subscribe((s) => s.tutorialActive, (active, was) => {
+        if (!was || active) return;
+        remember();
+        if (!useEngineStore.getState().showHints) showToast('Hints are off. Press H to show what each row does.', 'info', 6000);
+    });
 
     if (opts.preempted || seen()) return;
     // The first visit: at the first telemetry sample that says the deep renderer is ready.

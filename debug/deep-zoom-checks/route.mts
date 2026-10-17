@@ -1201,10 +1201,13 @@ const places = (from: number, to: number): string[] => { const out: string[] = [
     const typed = paceKeys().map((k) => k.frame).join();
     check(typed === '0,120,240,240.5,390,480,570', 'pace: a typed leg takes the pace keys with the keyframes: those of its leg in proportion (not rounded: a clock\'s keys would meet), those after it by its frames',
         typed);
+    // Even is a timing of its own: it drops a smoothing pass's Pace track, in its one step (the owner, 2026-10-17).
+    const beforeEven = anim().undoStack.length;
     retimeRoute(false);
-    check(paceKeys().map((k) => k.frame).join() === keyed.map((k) => k.frame).join() && routeKeys().map((k) => k.frame).join() === '0,240,540,720',
-        'pace: and Even takes them back with the keyframes, to where they were', paceKeys().map((k) => k.frame).join());
+    check(!anim().sequence.tracks[ROUTE_PACE_TRACK] && routeKeys().map((k) => k.frame).join() === '0,240,540,720' && anim().undoStack.length === beforeEven + 1,
+        'pace: and Even drops the Pace track and times the keyframes evenly, in one step', `${paceKeys().length} pace keys; ${routeKeys().map((k) => k.frame).join()}`);
     anim().undo();
+    check(paceKeys().map((k) => k.frame).join() === typed, 'pace: and its undo brings the Pace track back as it was', paceKeys().map((k) => k.frame).join());
     anim().undo();
     // Reverse: the Pace track mirrored, the camera where it was at every mirrored frame.
     const before = Array.from({ length: 1441 }, (_, i) => routeViewAt(i / 2) as { cam: string[] });

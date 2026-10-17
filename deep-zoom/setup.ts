@@ -68,6 +68,10 @@ export const setupDeepZoom = () => {
     // F2: folded on a first visit, then as it was left (see the header for why not `setDockCollapsed`).
     useEngineStore.setState({ isRightDockCollapsed: safeLocalGet(DZ_RIGHT_DOCK_KEY) !== '1' });
     useEngineStore.subscribe((s) => s.isRightDockCollapsed, (folded) => { safeLocalSet(DZ_RIGHT_DOCK_KEY, folded ? '0' : '1'); });
+    // Hints OFF until somebody turns them on (the owner, 2026-10-17: "offer hints at end of lesson";
+    // the first lesson's end offers them, tutorial/firstDive.ts). The store alone: the stored choice
+    // (`gmt.showHints`) is shared with GMT on this origin, and is written only by H or the Help menu.
+    if (safeLocalGet('gmt.showHints') === null) useEngineStore.setState({ showHints: false });
     // This app always flies. `cameraMode` is the field the timeline's Space binding tests so
     // that Space stays fly-up (grep `toggle-play` in components/TimelineHost.tsx); with the
     // pointer over the timeline Space still plays. The engine's store type does not declare the

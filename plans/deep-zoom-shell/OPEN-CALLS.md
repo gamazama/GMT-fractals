@@ -479,12 +479,6 @@ was open then; one since ("S0, a section's edges"): after a section grows, keys 
 section."** Nothing is open. S1 is with a builder (session started 2026-10-16).
 
 ## J. The streamline (`STREAMLINE.md`, built from 2026-10-17)
-Delete a line when he answers.
-- F14, the light rig's readback flood (your kernel): reading the buffer before deleting the fence (`pollRig`, the one change as written) left it as it was: 256 "READ-usage buffer" warnings in a dive to 1e-9, then "too many errors" (`debug/scratch/streamline/rig-warnings.mjs` in the deep-zoom worktree, headless on the GPU, before and after). `requestRig` already re-arms only once the fence is gone, so the warning comes from something else. Reverted; what do you want to try?
-- A6: a lesson now puts the hints back as they were, but on a first visit they are ON before it (the stored choice is unset), so the first lesson still ends with every right-dock row doubled. Should the deep zoomer start with hints off?
-- F6: the "Whole bulb · 1e-3" card now jumps to a close view at 1e-3 (every card jumps), not to the whole bulb: what should it be called?
-- Smooth still says "Pace along the route", "Even pace" (the far end of Strength) and "Frames off pace": they measure on-screen motion, and the glossary keeps "pace" for decades a second. Change them to "motion"?
-- After a smoothing pass, Even keeps the pass's Pace track, so neither As flown nor Even lights on the Timing row. Should Even drop that track?
-- The render dialog's estimate before Start is far off: Draft "about 4 s", took 23 s (342 frames: a frame costs more than its pixels); Final "about 9 s", took 4 s. It reads the frame time from the fps, which is held between 20 and the screen's rate. Should core.js report a real frame time, or should the estimate wait for the first rendered frames?
-- Deep Zoom's What offers only H.264 MP4: a browser without that encoder can only save frames. Fall back to WebM or AV1 there?
-- At the Window shape a tall browser window makes tall frames (3840 wide gives 6400 tall). Cap the long edge?
+Delete a line when he answers. His answers of 2026-10-17 to the first eight are in the commits of that day.
+- F14, the light rig's readback flood (your kernel), measured as you asked: in a dive to 1e-9, 733 asks, 559 turned away while a read was pending, 174 writes, 174 reads, 0 failures, and 175 Chrome warnings. Every write is read once before the next, so the protocol is right and Chrome warns on every readback anyway. Ask less often (the warnings fall in proportion), accept them, or measure synchronously every N frames?
+- Starter places: yours. You generate proper ones and review them; the cards take them when they come (2026-10-17: "the place/zooms are generally random").
