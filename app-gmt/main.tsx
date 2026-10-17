@@ -466,6 +466,8 @@ registerCameraKeyTracks([
 installRenderDialog<AppGmtExtra>({
     runner:              runVideoExport,
     title:               'Render Sequence',
+    // What and how to render is kept here between opens and reloads (the dialog's own memory).
+    storageKey:          'gmt.renderDialog',
     showSamplesPerFrame: true,
     formatFilter:        () => true, // keep image-sequence formats in the dropdown
     canEncode:           appGmtCanEncode,

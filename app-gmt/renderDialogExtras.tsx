@@ -60,9 +60,9 @@ export const appGmtResolutionPresets = (): RenderDialogResolutionPreset[] => {
 export const appGmtStartLabel = ({ cfg, isDiskMode }: RenderDialogStartContext<AppGmtExtra>): string => {
     const fmt = VIDEO_FORMATS[cfg.formatIndex];
     if (fmt.imageSequence) {
-        return isDiskMode ? 'Select Output Folder…' : 'Image Sequence Requires Chrome';
+        return isDiskMode ? 'Save to a folder…' : 'Frames need Chrome or Edge';
     }
-    return isDiskMode ? 'Select Output File…' : 'Start RAM Render';
+    return isDiskMode ? 'Save to a file…' : 'Render, then download';
 };
 
 // Disable start when no passes are selected, or when image-sequence
@@ -105,7 +105,7 @@ export const AppGmtExtraWarning: React.FC<{ cfg: RenderDialogConfig; extra: AppG
     if (!tripped) return null;
     return (
         <WarningNote className="mx-1 mb-2 px-2 py-1 text-[9px] text-warn/90 leading-tight">
-            Firefox caps H.264 output at ~31 Mbps regardless of this setting.
+            Firefox makes this video at about 31 Mbps at most, whatever the bitrate says.
         </WarningNote>
     );
 };
@@ -291,7 +291,7 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                 )}
                 {showImageSeqHint && (
                     <WarningNote className="px-2 py-1 mb-1 text-[9px] text-warn/90 leading-tight">
-                        Image sequences need the File System Access API (directory picker), available in Chrome / Edge.
+                        Saving frames into a folder needs Chrome or Edge.
                     </WarningNote>
                 )}
             </div>

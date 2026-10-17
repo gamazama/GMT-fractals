@@ -49,6 +49,7 @@ Every GMT release, newest first.
 ## Unreleased
 > Not shipped yet. Entries collect here and are reviewed at release.
 
+- **The Render dialog remembers what you set**, also after a reload, and Escape closes it. Its formats are named in plain words: Video MP4, Frames (PNG folder).
 - **Deep Zoom, a new app.** Fly into a Mandelbulb, a Mandelbox or a KaliBox down to 1e-77, and render the flight. System ▸ Open Deep Zoom.
 - **Direct mode keeps its colours.** Highlights now follow the same model as the path tracer, so surfaces no longer wash out to white. Scenes you saved before load with the look they had.
 - **Built-in formulas relit to match.** Their default scenes keep their brightness; a few glossy ones read more matte.
@@ -60,7 +61,7 @@ Every GMT release, newest first.
 - **Gradient Studio.** The pop-out button in a gradient editor's header opens the gradient in a floating window with Curves, Adjust and Paint.
 - **Image sequences ask before replacing frames.** If the folder already holds frames of this render: Overwrite, Continue (render only the missing ones) or Cancel.
 - **A video rendered into a picked file is written to disk as it goes**, not held in memory until the end, and every video has a keyframe each second so players can seek in it.
-- **H.265 and AV1 are at the bottom of the format list.** Windows needs its HEVC and AV1 video extensions to play them.
+- **"Video MP4, higher quality" and "best quality" are at the bottom of the format list.** They are H.265 and AV1, and Windows needs its HEVC and AV1 video extensions to play them.
 - **Undo covers the timeline's length**, and a saved scene remembers its frame rate.
 - **Fixed:** H.265, AV1 and WebM video exports no longer fail with "Unsupported codec type".
 - **Fixed:** a failed export no longer blocks the next one with "Export already in progress".

@@ -58,11 +58,13 @@ export const VIDEO_CONFIG = {
 // after the others. H.265 and AV1 are the two: a Windows machine without the HEVC / AV1 video
 // extensions makes no thumbnail of such a file and Windows Media Player does not play it
 // (seen 2026-10-11 on the owner's machine: the H.264 files played, these did not).
+// THE LABEL IS WHAT A USER READS, in plain words with no codec's name (the streamline's words
+// pass, 2026-10-17): the codec is `codec`, and "newer players" is the warning above.
 export const VIDEO_FORMATS = [
-    { label: 'MP4 (H.264) - Universal', container: 'mp4', codec: 'avc', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: false },
-    { label: 'MP4 (H.265/HEVC) - High Quality', container: 'mp4', codec: 'hevc', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: true },
-    { label: 'MP4 (AV1) - Best Compression', container: 'mp4', codec: 'av1', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: true },
-    { label: 'WebM (VP9) - Web Standard', container: 'webm', codec: 'vp9', ext: 'webm', mime: 'video/webm', imageSequence: false, listLast: false },
-    { label: 'PNG Sequence (RGBA)', container: 'png', codec: 'png', ext: 'png', mime: 'image/png', imageSequence: true, listLast: false },
-    { label: 'JPG Sequence (per pass)', container: 'jpg', codec: 'jpg', ext: 'jpg', mime: 'image/jpeg', imageSequence: true, listLast: false },
+    { label: 'Video MP4', container: 'mp4', codec: 'avc', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: false },
+    { label: 'Video MP4, higher quality (newer players)', container: 'mp4', codec: 'hevc', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: true },
+    { label: 'Video MP4, best quality (newest players)', container: 'mp4', codec: 'av1', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: true },
+    { label: 'Video WebM', container: 'webm', codec: 'vp9', ext: 'webm', mime: 'video/webm', imageSequence: false, listLast: false },
+    { label: 'Frames (PNG folder)', container: 'png', codec: 'png', ext: 'png', mime: 'image/png', imageSequence: true, listLast: false },
+    { label: 'Frames (JPG folder)', container: 'jpg', codec: 'jpg', ext: 'jpg', mime: 'image/jpeg', imageSequence: true, listLast: false },
 ];

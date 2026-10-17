@@ -485,3 +485,6 @@ Delete a line when he answers.
 - F6: the "Whole bulb · 1e-3" card now jumps to a close view at 1e-3 (every card jumps), not to the whole bulb: what should it be called?
 - Smooth still says "Pace along the route", "Even pace" (the far end of Strength) and "Frames off pace": they measure on-screen motion, and the glossary keeps "pace" for decades a second. Change them to "motion"?
 - After a smoothing pass, Even keeps the pass's Pace track, so neither As flown nor Even lights on the Timing row. Should Even drop that track?
+- The render dialog's estimate before Start is far off: Draft "about 4 s", took 23 s (342 frames: a frame costs more than its pixels); Final "about 9 s", took 4 s. It reads the frame time from the fps, which is held between 20 and the screen's rate. Should core.js report a real frame time, or should the estimate wait for the first rendered frames?
+- Deep Zoom's What offers only H.264 MP4: a browser without that encoder can only save frames. Fall back to WebM or AV1 there?
+- At the Window shape a tall browser window makes tall frames (3840 wide gives 6400 tall). Cap the long edge?

@@ -1,7 +1,8 @@
 // Public types for the @engine/render-dialog plugin. Apps install
 // the plugin once and provide an app-specific `runner` that handles
 // the per-frame pump + encoder lifecycle. The plugin owns the dialog
-// UI, capability check, disk-mode detection, flag/state plumbing.
+// UI, capability check, disk-mode detection, flag/state plumbing, and
+// what it remembers between two opens (`storageKey`, index.tsx).
 
 import type { MutableRefObject, ReactNode } from 'react';
 import type { VIDEO_FORMATS } from '../../../data/constants';
@@ -108,16 +109,26 @@ export interface RenderDialogResolutionPreset {
 export type RenderDialogDefaults<TExtra = Record<string, unknown>> =
     Partial<RenderDialogConfig> & { extra?: TExtra };
 
-/** One named set of form values: a button above the form that patches
- *  it (the install option `presets`). */
+/** One named set of form values (the install option `draft`). */
 export interface RenderDialogPreset {
-    /** The button's text. */
+    /** The option's word ("Draft"). */
     label:  string;
     /** Its tooltip: what it sets, in a line. */
     title?: string;
-    /** The fields to change, given the form as it stands. Called on the
-     *  click, so it may read live state (the sizes on offer now). */
+    /** The fields to change, given the form as it stands. Called when it
+     *  is chosen, so it may read live state; under `shapes` the height
+     *  then follows the width. */
     apply:  (cfg: RenderDialogConfig) => Partial<RenderDialogConfig>;
+}
+
+/** One shape of the frame (the install option `shapes`). */
+export interface RenderDialogShape {
+    /** The segment's word ("16:9", "Window"). */
+    label:  string;
+    title?: string;
+    /** Width over height; a function for a shape of live state (the
+     *  app's own picture), asked each time the form draws. */
+    aspect: number | (() => number);
 }
 
 export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
@@ -138,9 +149,9 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     /** OPT-IN, for an app whose runner makes every frame itself and
      *  writes one file a frame into a folder the user picks
      *  (`engine/export/frameFolder.ts`). It adds the format
-     *  "PNG sequence (folder)" to the dropdown - `VIDEO_FORMATS`' PNG
-     *  sequence under that name - and, while that format is selected:
-     *  the start label "Select output folder…", one Cancel button during
+     *  "Frames (PNG folder)" - `VIDEO_FORMATS`' PNG sequence - and, while
+     *  that format is selected:
+     *  the start label "Save to a folder…", one Cancel button during
      *  the run instead of Interrupt / Resume / Finish / Discard, and no
      *  encoder probe (the format is available exactly where the browser
      *  can write into a folder; the dialog says so in one line where it
@@ -149,25 +160,39 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
      *  frames found there are a question for `status.ask`, not a box on
      *  the form.
      *  Without this option nothing above exists: the dialog is what it
-     *  was. To offer ONLY that format, also pass a `formatFilter`;
+     *  was. To offer ONLY that format, or it and one video format, also
+     *  pass a `formatFilter` (three formats or fewer are drawn as one
+     *  segmented row instead of a dropdown);
      *  without one the video formats are listed beside it, and for those
      *  the dialog is the video dialog (the encoder probe, the bitrate,
      *  Interrupt / Resume / Finish / Discard) - the runner serves both. */
     frameFolder?: boolean;
 
-    /** Default false. True: the size is one of `resolutionPresets` and
-     *  nothing else - no Width / Height fields and no "Custom" entry;
-     *  a size that is not in the list (the presets changed under it)
-     *  snaps to the preset with the nearest long edge. For an app whose
-     *  picture has a shape of its own, where a width and a height typed
-     *  apart could not both be honoured. */
-    fixedSizes?: boolean;
+    /** The localStorage key under which the dialog keeps what and how to
+     *  render between two opens and across reloads: the format, the size,
+     *  the shape, Draft or Final, the samples, the bitrate, the frame step
+     *  and the `extra` bag (the range is kept apart, for the session: see
+     *  index.tsx). One key per installed dialog. Default
+     *  `render-dialog:<the page's path>`. */
+    storageKey?: string;
 
-    /** OPT-IN: named sets of form values, each a small button in a row
-     *  above the form ("Draft": a small size and one sample, for a quick
-     *  look before the real render). A click patches the form with what
-     *  `apply` returns and starts nothing. Absent or empty: no row. */
-    presets?: RenderDialogPreset[];
+    /** OPT-IN: the size is a WIDTH and a SHAPE. The shapes are one
+     *  segmented row ("Shape"); the size list offers widths (the `w` of
+     *  `resolutionPresets`, under their labels), the height follows from
+     *  the shape, made even, and there are no Width / Height fields.
+     *  Absent: a width and a height, as always. */
+    shapes?: RenderDialogShape[];
+
+    /** OPT-IN: a "Quality" row, [Draft | Final]. Choosing Draft applies
+     *  this preset (a small size and one sample, for a quick look before
+     *  the real render) and keeps the values it replaced; Final puts them
+     *  back. Changing one of those fields by hand while in Draft is Final
+     *  with that change. Absent: no row. */
+    draft?: RenderDialogPreset;
+
+    /** Default false. True: the range's Start and End are shown and
+     *  typed in seconds of the timeline (the config stays in frames). */
+    rangeInSeconds?: boolean;
 
     /** Standard form-control visibility. Apps that don't have TSAA
      *  set `showSamplesPerFrame: false`; apps that don't want frame-
@@ -179,8 +204,8 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
 
     /** Force-disable disk mode even when `showSaveFilePicker` is
      *  available. Use when the runner only ever saves via downloadBlob
-     *  (RAM-only) — the badge then correctly says RAM and the start
-     *  button label doesn't promise a file picker that won't appear. */
+     *  (in memory only) — the form then says the video is saved as a
+     *  download, and the start button doesn't promise a file picker. */
     disableDiskMode?: boolean;
 
     /** Filter / extend the format dropdown. Defaults to all non-image-
@@ -203,12 +228,13 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     /** Resolution preset list. Pass a function for reactive presets
      *  that depend on live store / window state (e.g. app-gmt's
      *  `Viewport (WxH)` and `Screen (WxH)` entries) — the form calls
-     *  it on each render so values stay current. */
+     *  it on each render so values stay current. Under `shapes` only
+     *  each preset's `w` counts: the list is of widths. */
     resolutionPresets?: RenderDialogResolutionPreset[] | (() => RenderDialogResolutionPreset[]);
 
     /** Override the Start button label. Default reads from disk-mode:
-     *  "Select Output File…" / "Start RAM Render". App-gmt uses this
-     *  to show "Select Output Folder…" for image-sequence formats. */
+     *  "Save to a file…" / "Render, then download". App-gmt uses this
+     *  to show "Save to a folder…" for image-sequence formats. */
     startLabel?: (ctx: RenderDialogStartContext<TExtra>) => string;
 
     /** Extra disabled-state check on top of the built-in

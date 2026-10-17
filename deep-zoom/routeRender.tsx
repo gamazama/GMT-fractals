@@ -11,16 +11,21 @@
  *   video from the frames, and the dialog prints the line for it. A VIDEO FILE (stage R6b,
  *   2026-10-11): the same frames handed to the engine's encoder and written into an MP4 or a WebM
  *   the user picks, as the run goes. A video cannot be resumed. THERE IS NO PREVIEW FEATURE: a
- *   preview is this dialog at a small size and one sample, and its "Draft" button sets both - the
- *   size is 320p (a short edge of 320 px: the owner, 2026-10-16, "for previews, we can use a lowres
- *   like 320p for faster output"), for checking a route's pacing, a smoothing pass's above all.
+ *   preview is this dialog at a small size and one sample, its Quality row's "Draft" - 320p (a short
+ *   edge of 320 px: the owner, 2026-10-16, "for previews, we can use a lowres like 320p for faster
+ *   output") - for checking a route's pacing, a smoothing pass's above all; "Final" puts back the
+ *   size and the samples that were set before.
  *
  * THE SEAM
  *   - `installRouteRender()` once, from main.tsx: the engine's generic render dialog
- *     (`engine/plugins/RenderDialog`) with this file's runner and the opt-ins `frameFolder` (with
- *     no `formatFilter`, so the video formats are listed beside the folder), `fixedSizes` and
- *     `presets` (the one "Draft"). The dialog opens from the timeline toolbar's Render button and
- *     from the Route tab's (`openRenderPopup()` in engine/animation/renderPopupRegistry.ts).
+ *     (`engine/plugins/RenderDialog`) with this file's runner and the opt-ins `frameFolder` with a
+ *     `formatFilter` of two (What = [Video MP4 | Frames (PNG folder)], one segmented row), `shapes`
+ *     (a width and [Window | 16:9 | 1:1]), `draft` (Quality = [Draft | Final]) and
+ *     `rangeInSeconds`. Its first default (F11, stage 7 of the streamline, 2026-10-17): a Video MP4,
+ *     1280 wide, at the Window's shape, 8 samples; after that it opens on what it was left on (the
+ *     dialog's own memory, `DZ_RENDER_STORAGE_KEY`). The dialog opens from the timeline toolbar's
+ *     Render button and from the Route tab's (`openRenderPopup()` in
+ *     engine/animation/renderPopupRegistry.ts).
  *   - ONE LOOP, TWO SINKS. `runRouteRender` is the one frame loop: the set-up, THE WAIT, the hold
  *     on the live picture, the render, the checks, the clock, the estimate, the restore at the end.
  *     Where a finished frame GOES is a `FrameSink`: `openFolderSink` (a file a frame) or
@@ -55,14 +60,19 @@
  * WHAT IS RENDERED
  *   - THE RANGE the dialog shows, BOTH ENDS INCLUDED - the count it shows is the count rendered.
  *     It opens on the route's first to last keyframe, on the whole timeline when there is no route.
- *   - THE SIZE is 320p (`DZ_PREVIEW_SHORT_EDGE`, the draft's: the long edge that gives the picture's
- *     short edge 320 px, 568 x 320 at 16:9) or a long edge (`DZ_RENDER_LONG_EDGES`: 640 to 3840), at the
- *     picture's own shape AS THE RUN STARTS, and that shape is handed to every frame: a window
- *     resized halfway changes nothing. A run that CONTINUES takes the shape of the frames already
- *     in the folder; frames of another long edge, or of more than one size, cannot be continued.
- *   - THE FILES of a folder are `<project name>_<timeline frame, five digits>.png` - the frame's
- *     own number, not a count, so a frame keeps its file whatever range is rendered the next time.
- *     A video is offered as `<project name>.mp4` (or `.webm`); the picker lets the user rename it.
+ *   - THE SIZE is a width (`DZ_RENDER_WIDTHS`: 640 to 3840) at a shape: the Window's (the picture's
+ *     own, `pictureAspect`), 16:9 or 1:1; the dialog makes the height, and the run renders the size
+ *     the dialog shows (its long edge and its shape), handed to every frame: a window resized halfway
+ *     changes nothing. Draft is 320p (`DZ_PREVIEW_SHORT_EDGE`: a short edge of 320 px, 568 x 320 at
+ *     16:9). A run that CONTINUES takes the shape of the frames already in the folder; frames of
+ *     another long edge, or of more than one size, cannot be continued.
+ *   - THE FILES are named after the project when somebody named it (not "Untitled", and not the
+ *     formula's id that `loadPreset` gives a scene called "Untitled"), otherwise after the route's
+ *     depth span ("deep zoom 2e0 to 1e-3"; the place's depth with no route): `renderName`, made safe
+ *     (`safeFrameName`: deep_zoom_2e0_to_1e-3). A folder's files are `<name>_<timeline frame, five
+ *     digits>.png` - the frame's own number, not a count, so a frame keeps its file whatever range is
+ *     rendered the next time; a video is offered as `<name>.mp4`, and the picker lets the user rename
+ *     it. A route edited to another span is another name: its frames are not this render's.
  *   - ITERATIONS are the count the route keys for the frame. With no iteration keys they are the
  *     count in force when the run starts, for every frame: the renderer's rule only ever raises
  *     the count, so with it running a frame's count would depend on the frames before it.
@@ -96,10 +106,11 @@
  *     works while it asks) is the answer Cancel, with no toast: nothing had started.
  *
  * A VIDEO FILE
- *   - THE FORMATS are the four video entries of `VIDEO_FORMATS`: MP4 with H.264, H.265 or AV1, and
- *     WebM with VP9, through `engine/export/videoEncoder.ts`. The dialog's own probe says which can
+ *   - THE FORMAT is "Video MP4", `VIDEO_FORMATS`' H.264 (F11, 2026-10-17: the other three video
+ *     entries, MP4 with H.265 or AV1 and WebM, are no longer offered here; this sink still writes any
+ *     of them), through `engine/export/videoEncoder.ts`. The dialog's own probe says whether it can
  *     start at the size chosen, and why not (this machine, a picture of 1.28 to 1: at 3840 x 3000
- *     H.264 and H.265 are refused, AV1 and VP9 run; at 2560 x 2000 all four run). The frame rate
+ *     H.264 and H.265 were refused, AV1 and VP9 ran; at 2560 x 2000 all four ran). The frame rate
  *     is the timeline's, the bitrate the dialog's (it follows the size: 40 Mbps at 1920 x 1080, by
  *     area), and a keyframe is forced every second (left to itself the codec makes ONE for the
  *     whole video: 300 frames measured, one keyframe).
@@ -119,8 +130,8 @@
  *     held. A run stopped by a PROBLEM (the renderer restarted, a frame of another size) keeps
  *     its frames as Finish does.
  *   - NO FILE PICKER (Firefox, Safari), or the picker refused: the video is made in memory, index
- *     first, and saved as a download at the end - what fluid-toy's runner does. The dialog's badge
- *     says RAM, and the result says "saved as a download".
+ *     first, and saved as a download at the end - what fluid-toy's runner does. The dialog says
+ *     "Saved as a download" beside the format, and so does the result.
  *   - A PICKED FILE THE BROWSER WILL NOT LET THE PAGE WRITE (`createWritable` refused with
  *     NotAllowedError; seen 2026-10-17 by the owner in the Claude app's built-in browser, which shows
  *     the picker and then refuses the write): the same, in memory and a download at the end under the
@@ -154,9 +165,16 @@
  *     that frame, and a playhead dragged then moves the camera under it.
  *   - The gradient reaches the renderer through a React effect (GradientSync.tsx), not inside the
  *     scrub: a gradient keyed on the timeline would arrive a frame late. Nothing keys it today.
- *   - The estimate shown before a run is the cost of the frames rendered EARLIER IN THIS SESSION,
- *     by pixel and by sample. There is none until a frame has been rendered, and a deeper route
- *     costs more than it says.
+ *   - THE ESTIMATE shown before a run is "about" a time, from the live picture's own last frame that
+ *     drew a sample (the telemetry's fps and drawn size, one sample a frame: `liveUnit`), scaled by
+ *     pixels, samples and frames - or, at the size and samples of a run EARLIER IN THIS SESSION, the
+ *     seconds that run's frames took. (Not that run's cost scaled to another size: a frame's PNG and
+ *     orbit cost the same at one sample as at eight, so a Draft's cost said 1 min 33 s for a Final
+ *     that took 4 s; measured 2026-10-17, debug/scratch/streamline/stage7-try.mjs.) The live frame's
+ *     time is the window's frame interval, so it reads no faster than the display's refresh and no
+ *     slower than 20 a second (the renderer's own clamp: grep `Math.min(0.05` in renderer/core.js):
+ *     measured headless, it said 4 s for a Draft of 341 frames that took 26 s, and 5 min 24 s for a
+ *     Final of 341 whose first 31 frames took 0.13 s each. A deeper route costs more than it says.
  *   - The waits of a frame need no animation frame, so a run goes on with the window minimised or
  *     behind another - slower: measured, a frame of half a second took 3.7 s minimised (a second
  *     of it the PNG, the rest a few hundredths of a second a row of tiles). The clock and the bar
@@ -238,7 +256,7 @@ import { useAnimationStore } from '../store/animationStore';
 import { useEngineStore } from '../store/engineStore';
 import { VIDEO_FORMATS } from '../data/constants';
 import { FRAME_FOLDER_FORMAT_INDEX, installRenderDialog } from '../engine/plugins/RenderDialog';
-import type { RenderDialogConfig, RenderDialogPreset, RenderDialogQuestion, RenderDialogResolutionPreset, RenderDialogRunner } from '../engine/plugins/RenderDialog';
+import type { RenderDialogConfig, RenderDialogPreset, RenderDialogQuestion, RenderDialogResolutionPreset, RenderDialogRunner, RenderDialogShape } from '../engine/plugins/RenderDialog';
 import { lookForFrames, pickFrameFolder, safeFrameName } from '../engine/export/frameFolder';
 import type { FrameFolder } from '../engine/export/frameFolder';
 import { MainThreadEncoder } from '../engine/export/videoEncoder';
@@ -247,16 +265,23 @@ import type { SaveFileHandle, SaveFilePicker } from '../engine/export/pickedFile
 import { calcEtaRange, formatTimeWithUnits } from '../components/timeline/exportHelpers';
 import { showToast } from '../engine/store/toastStore';
 import { getHost } from './host/current';
+import { subscribeTelemetry } from './host/telemetry';
 import type { DzView } from './host/DeepZoomHost';
+import { formatDepthCompact } from './components/depthFormat';
+import { depthNow } from './depthNow';
 import { routeKeys, routeRendering, scrubRouteTo, setRouteRendering } from './route';
 import { flushHostSync, holdAutoIterations } from './useHostSync';
 
-/** The sizes offered: the frame's long edge in pixels. The other edge follows the picture's shape. */
-export const DZ_RENDER_LONG_EDGES = [640, 1280, 1920, 2560, 3840] as const;
-/** The preview's size, offered first and set by "Draft": the picture's SHORT edge, in pixels (320p). */
+/** The widths offered. The height follows the shape the dialog's Shape row gives. */
+export const DZ_RENDER_WIDTHS = [640, 1280, 1920, 2560, 3840] as const;
+/** The draft's size, set by Quality = Draft: the frame's SHORT edge, in pixels (320p). */
 export const DZ_PREVIEW_SHORT_EDGE = 320;
-const DEFAULT_LONG_EDGE = 1920;
+/** Where the dialog keeps what and how to render (the engine's render dialog, `storageKey`). */
+export const DZ_RENDER_STORAGE_KEY = 'deep-zoom.render-dialog';
+const DEFAULT_WIDTH = 1280;
 const DEFAULT_SAMPLES = 8;
+/** `VIDEO_FORMATS`' H.264 MP4: "Video MP4", the one video format offered. */
+const MP4_FORMAT_INDEX = VIDEO_FORMATS.findIndex((f) => f.codec === 'avc');
 /** How often the run looks for a cancel and moves the clock and the bar. */
 const TICK_MS = 250;
 /** How often THE WAIT asks whether the shader is there (and an interrupted run whether it may go on), and what the dialog says meanwhile. */
@@ -283,55 +308,78 @@ function renderSize(longEdge: number, aspect: number): { w: number; h: number } 
     return aspect >= 1 ? { w: even(longEdge), h: even(longEdge / aspect) } : { w: even(longEdge * aspect), h: even(longEdge) };
 }
 
-/** The long edge that gives the picture's short edge `short` pixels at `aspect`. */
-const longEdgeFor = (short: number, aspect: number): number => short * Math.max(aspect, 1 / aspect);
+/** The Width row: the widths offered (under `shapes` only a preset's width counts). */
+const WIDTHS: RenderDialogResolutionPreset[] = DZ_RENDER_WIDTHS.map((w) => ({ label: `${w} px`, w, h: 0 }));
 
-const sizes = (): RenderDialogResolutionPreset[] => {
-    const aspect = pictureAspect();
-    return [
-        { label: `${DZ_PREVIEW_SHORT_EDGE}p (preview)`, ...renderSize(longEdgeFor(DZ_PREVIEW_SHORT_EDGE, aspect), aspect) },
-        ...DZ_RENDER_LONG_EDGES.map((edge) => ({ label: `${edge} px`, ...renderSize(edge, aspect) })),
-    ];
-};
+/** The Shape row. Window: the picture's own shape, asked each time the dialog draws. */
+const SHAPES: RenderDialogShape[] = [
+    { label: 'Window', title: 'The shape of the picture on the screen', aspect: pictureAspect },
+    { label: '16:9', title: 'Wide, as a video player shows it', aspect: 16 / 9 },
+    { label: '1:1', title: 'Square', aspect: 1 },
+];
 
-/** What the dialog opens with: the route's own span, or the whole timeline when there is no route. */
+/** What the dialog opens with while it keeps nothing: a Video MP4, 1280 wide, 8 samples; the range is the route's own
+ *  span, or the whole timeline when there is no route (once the dialog has been open, the range it was left on, while
+ *  that span is the same: the dialog's own memory). */
 function defaults(): Partial<RenderDialogConfig> {
-    const keys = routeKeys(), size = renderSize(DEFAULT_LONG_EDGE, pictureAspect());
+    const keys = routeKeys();
     return {
-        formatIndex: FRAME_FOLDER_FORMAT_INDEX,
+        formatIndex: MP4_FORMAT_INDEX,
         samplesPerFrame: DEFAULT_SAMPLES,
-        width: size.w,
-        height: size.h,
+        width: DEFAULT_WIDTH,
         ...(keys.length > 1 ? { startFrame: Math.floor(keys[0].frame), endFrame: Math.ceil(keys[keys.length - 1].frame) } : {}),
     };
 }
 
-/** The dialog's "Draft" button: 320p (the smallest size) and one sample a pixel. It leaves the format alone. */
+/** Quality = Draft: 320p at the shape set, and one sample a pixel. Final puts back what it replaced (the dialog does). */
 const DRAFT: RenderDialogPreset = {
     label: 'Draft',
     title: '320p and 1 sample: a quick look at the whole route, and at its pacing, before the real render',
-    apply: () => { const smallest = sizes()[0]; return { width: smallest.w, height: smallest.h, samplesPerFrame: 1 }; },
+    // The width whose height at this shape is 320 (the dialog makes the height: the nearest even number).
+    apply: (cfg) => {
+        const aspect = cfg.width / cfg.height;
+        return { width: aspect >= 1 ? 2 * Math.round(DZ_PREVIEW_SHORT_EDGE * aspect / 2) : DZ_PREVIEW_SHORT_EDGE, samplesPerFrame: 1 };
+    },
 };
 
-/** Seconds one megapixel-sample cost in the last run of this session. Null: no frame rendered yet. */
-let unitCost: number | null = null;
+/** The last run of this session: its size, its samples and the seconds a frame took. Null: no frame rendered yet. */
+let lastRun: { width: number; height: number; samples: number; each: number } | null = null;
+/** Seconds one megapixel-sample cost the LIVE picture, at its last frame that drew a sample. Null: none seen yet. */
+let liveUnit: number | null = null;
 
-/** The dialog's "Estimate" row. Nothing until a frame has been rendered in this session. */
+/** The dialog's "Estimate" row: at the size and samples of this session's last run, the seconds its frames took;
+ *  otherwise from the live picture, by pixel and by sample. Nothing before either (see the header, THE ESTIMATE). */
 const EstimateRow: React.FC<{ cfg: RenderDialogConfig }> = ({ cfg }) => {
-    if (unitCost === null) return null;
+    const measured = lastRun && lastRun.width === cfg.width && lastRun.height === cfg.height && lastRun.samples === cfg.samplesPerFrame ? lastRun.each : null;
+    const each = measured ?? (liveUnit === null ? null : liveUnit * megapixelSamples(cfg.width, cfg.height, cfg.samplesPerFrame));
+    if (each === null) return null;
     const frames = Math.floor((cfg.endFrame - cfg.startFrame) / Math.max(1, cfg.frameStep)) + 1;
-    const seconds = unitCost * megapixelSamples(cfg.width, cfg.height, cfg.samplesPerFrame) * frames;
+    const seconds = each * frames;
     return (
         <div
             data-dz-render-estimate
             className="flex justify-between"
-            title="From the frames rendered earlier in this session, by pixel and by sample. A deeper route takes longer."
+            title={measured !== null
+                ? 'From the frames rendered earlier in this session at this size and these samples. A deeper route takes longer.'
+                : 'From the live picture\'s last frame, by pixel and by sample. A rendered frame costs more besides, and a deeper route takes longer.'}
         >
             <span className="text-fg-muted">Estimate</span>
             <span className="font-mono text-fg-secondary">about {formatTimeWithUnits(seconds)}</span>
         </div>
     );
 };
+
+/** What the files are named after (see the header, THE FILES): the project's name when somebody gave it one,
+ *  otherwise the route's depth span, or the place's depth when there is no route. */
+function renderName(): string {
+    const state = useEngineStore.getState() as { projectSettings?: { name?: string }; formula?: string };
+    const name = state.projectSettings?.name?.trim();
+    if (name && name !== 'Untitled' && name !== state.formula) return name;
+    const keys = routeKeys();
+    return keys.length > 1
+        ? `deep zoom ${formatDepthCompact(keys[0].depth)} to ${formatDepthCompact(keys[keys.length - 1].depth)}`
+        : `deep zoom ${formatDepthCompact(depthNow())}`;
+}
 
 /** A run is in flight, from its picker's answer to its result (the sink closed). */
 let running = false;
@@ -573,7 +621,7 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, isDiskMo
     if (!ready?.renderFrameBlob || !ready.bootParams()) { showToast('The renderer is not ready yet', 'warning'); return; }
     let sink: FrameSink | null;
     try {
-        const project = (useEngineStore.getState() as { projectSettings?: { name?: string } }).projectSettings?.name || 'deep-zoom';
+        const project = renderName();
         // THE FIRST AWAIT, inside the click: the folder picker, or the file picker.
         sink = cfg.formatIndex === FRAME_FOLDER_FORMAT_INDEX
             ? await openFolderSink(project, cfg.fps)
@@ -612,8 +660,8 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, isDiskMo
     const elapsed = (): number => (performance.now() - started) / 1000;
     /** Frames handed to the sink by this run; frames found already there; frames this run has to make. */
     let written = 0, already = 0, toRender = frames.length;
-    /** How far the frame in flight is (0..1), the seconds the written frames took, and their megapixel-samples. */
-    let fraction = 0, cost = 0, units = 0;
+    /** How far the frame in flight is (0..1), the seconds the written frames took, and their size. */
+    let fraction = 0, cost = 0, size = { w: 0, h: 0 };
     let problem = '', touched = false;
     /** The user backed out at the sink's own question (frames already in the folder: Cancel): no run. */
     let backedOut = false;
@@ -628,7 +676,7 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, isDiskMo
     const offProgress = ready.on('progress', (p) => { fraction = p?.fraction ?? 0; });
 
     try {
-        const begun = await sink.begin({ frames, longEdge, aspect: pictureAspect(), stop, ask: status.ask });
+        const begun = await sink.begin({ frames, longEdge, aspect: cfg.width / cfg.height, stop, ask: status.ask });
         backedOut = !begun;
         started = performance.now();                                     // the clock: not while the folder was looked into, or a question stood open
         const there = begun?.there ?? [], aspect = begun?.aspect ?? 1;
@@ -681,7 +729,7 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, isDiskMo
             fraction = 0;
             const seconds = (performance.now() - t0) / 1000;
             cost += seconds;
-            units += megapixelSamples(r.width, r.height, samples);
+            size = { w: r.width, h: r.height };
             status.setLastFrameTime(seconds);
             status.setProgress(written / toRender);
             status.setEtaRange(calcEtaRange(cost, written, toRender));
@@ -700,7 +748,7 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, isDiskMo
             const host = getHost();
             if (host && !sameCamera(host.getView(), savedView)) host.setView(savedView);
         }
-        if (units > 0) unitCost = cost / units;
+        if (written > 0) lastRun = { width: size.w, height: size.h, samples, each: cost / written };
         setRouteRendering(false);
     }
 
@@ -747,13 +795,21 @@ export function installRouteRender(): void {
     installRenderDialog({
         runner: runRouteRender,
         title: 'Render',
-        frameFolder: true,                                               // and no `formatFilter`: the folder, and the video formats beside it
-        fixedSizes: true,
-        resolutionPresets: sizes,
-        presets: [DRAFT],
+        storageKey: DZ_RENDER_STORAGE_KEY,
+        frameFolder: true,
+        formatFilter: (_format, index) => index === MP4_FORMAT_INDEX || index === FRAME_FOLDER_FORMAT_INDEX,
+        resolutionPresets: WIDTHS,
+        shapes: SHAPES,
+        draft: DRAFT,
+        rangeInSeconds: true,
         defaults,
         showFrameStep: false,
         extraInfoRows: EstimateRow,
+        baseSize: { width: 320, height: 540 },                           // tall enough that the estimate shows above Start
         onMount: () => () => { if (running) dialogClosed = true; },
+    });
+    // A frame of the live picture draws one sample a pixel at the drawn size, until its still has all its samples.
+    subscribeTelemetry((t) => {
+        if (t.live && !t.exporting && t.fps > 0 && t.frameW > 0 && t.frameH > 0 && t.accumN < t.accumMax) liveUnit = 1 / t.fps / megapixelSamples(t.frameW, t.frameH, 1);
     });
 }

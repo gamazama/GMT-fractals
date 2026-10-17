@@ -179,16 +179,18 @@ While a route plays in Fly mode, a drag on the picture or \`Q\` \`E\` turns the 
         parentId: DZ_TOPIC.flying,
         title: 'Rendering',
         content: `
-**Render**, on the Route tab and on the timeline (and Render route in the File menu), makes the route into pictures: one for every frame from the first keyframe to the last. With no route it renders the timeline as it is.
+**Render**, on the Route tab and on the timeline (and Render route in the File menu), makes the route into pictures: one for every frame from the first keyframe to the last. With no route it renders the timeline as it is. The dialog opens on what you set the last time, and Escape closes it.
 
-## Frames or video
-- **PNG sequence (folder)** writes one PNG a frame into a folder you pick. A render you stop loses nothing: the frames written stay, and a later run can go on from them. At the end the dialog gives the ffmpeg line that makes a video of them.
-- **MP4** or **WebM** writes one video file as the render goes. **Interrupt Render** holds it; then **Resume**, **Finish** to keep what is made so far, or **Discard**. A video cannot be continued later.
+## Video or frames
+- **Video MP4** writes one video file as the render goes. **Interrupt Render** holds it; then **Resume**, **Finish** to keep what is made so far, or **Discard**. A video cannot be continued later.
+- **Frames (PNG folder)** writes one PNG a frame into a folder you pick. A render you stop loses nothing: the frames written stay, and a later run can go on from them. At the end the dialog gives the ffmpeg line that makes a video of them.
+- The files are named after the project, or after the route's depths, such as deep_zoom_2e0_to_1e-3.
 
-## Size and samples
-- The size is the long edge, 640 to 3840 px, at the shape of the picture.
+## Size and quality
+- **Width**, 640 to 3840 px, at a **Shape**: Window (the picture's own), 16:9 or 1:1.
+- **Draft** is 320p and 1 sample, for a quick look at the whole route before the real render. **Final** puts back the size and the samples you had.
 - **Samples / Frame**: more samples are cleaner and slower.
-- **Draft** sets the smallest size and 1 sample, for a quick look at the whole route before the real render.
+- Start and End are in seconds. Under them, the estimate says about how long the render will take.
 
 ## When frames are already in the folder
 The dialog counts them and asks.

@@ -32,7 +32,8 @@ export interface DraggableWindowProps {
     disableClose?: boolean;
     /** Escape closes the window (through `onClose`, via FloatingPanel's `useDismiss` — the
      *  scope-aware registry, topmost surface first). Default false: only for a window that
-     *  holds nothing Escape could lose (the Help browser), never a form. */
+     *  holds nothing Escape could lose (the Help browser), or a form that keeps what it holds
+     *  (the render dialog), never a form that would lose its fields. */
     dismissOnEscape?: boolean;
     zIndex?: number;
 

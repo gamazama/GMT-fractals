@@ -71,13 +71,13 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
                     </span>
                 </div>
                 <div className="flex flex-col pt-2 border-t border-line/5">
-                    <span className="t-label-sm text-fg-dim mb-0.5">Last Frame</span>
+                    <span className="t-label-sm text-fg-dim mb-0.5">Last frame</span>
                     <span className={`font-mono text-xs ${lastFrameTime > 2.0 ? 'text-warn' : 'text-fg-tertiary'}`}>
                         {lastFrameTime.toFixed(2)}s
                     </span>
                 </div>
                 <div className="flex flex-col text-right pt-2 border-t border-line/5">
-                    <span className="t-label-sm text-fg-dim mb-0.5">Est. Total</span>
+                    <span className="t-label-sm text-fg-dim mb-0.5">Total, about</span>
                     <span className="font-mono text-xs text-fg-tertiary">
                         {elapsedTime > 0 && progress > 0 ? formatTimeWithUnits(elapsedTime / (progress / 100)) : '--'}
                     </span>
@@ -85,8 +85,8 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
             </div>
 
             <div className="text-[9px] text-fg-dim grid grid-cols-2 gap-y-1 border-t border-line/5 pt-3">
-                <span>Resolution: <span className="text-fg-tertiary">{cfg.width}x{cfg.height}</span></span>
-                <span>Format: <span className="text-fg-tertiary">{fmt?.label.split(' ')[0] ?? '?'}</span></span>
+                <span>Size: <span className="text-fg-tertiary">{cfg.width} x {cfg.height}</span></span>
+                <span>What: <span className="text-fg-tertiary">{fmt?.label ?? '?'}</span></span>
                 {showSamplesPerFrame && (
                     <span>Samples: <span className="text-fg-tertiary">{cfg.samplesPerFrame}</span></span>
                 )}

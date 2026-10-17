@@ -19,22 +19,20 @@
 // the summary block). App-gmt uses these for image-sequence /
 // multi-pass / internal-scale / depth-range controls.
 //
-// THREE OPT-INS added 2026-10-11, each off unless asked for (an app
-// that passes none of them gets the dialog as it always was):
+// OPT-INS added 2026-10-11, each off unless asked for (an app that
+// passes none of them gets the dialog as it always was; two more of
+// that day, `fixedSizes` and `presets`, went on 2026-10-17, below):
 //   - `frameFolder`: for a runner that makes every frame itself. The
-//     format "PNG sequence (folder)" and one Cancel button during the
+//     format "Frames (PNG folder)" and one Cancel button during the
 //     run. The frames go through `engine/export/frameFolder.ts`; the
 //     RUNNER asks for the folder, and looks into it.
-//   - `fixedSizes`: the size is one of the presets, nothing typed.
 //   - `status.setResult(...)`: what to show when the run has ended (a
 //     few lines, a command with a Copy button) instead of the form.
 // And `defaults` may be a function, called each time the dialog opens.
-// A fourth the same day: `presets`, a row of named buttons that patch
-// the form (a "Draft": small and one sample). And an app that opts into
-// `frameFolder` WITHOUT a `formatFilter` lists the video formats beside
-// the folder: its runner then serves both, and the dialog is the folder
-// dialog or the video dialog by the format selected (no bitrate and no
-// encoder probe for the folder).
+// An app that opts into `frameFolder` WITHOUT a `formatFilter` lists the
+// video formats beside the folder: its runner then serves both, and the
+// dialog is the folder dialog or the video dialog by the format selected
+// (no bitrate and no encoder probe for the folder).
 // A QUESTION, since stage R6c the same day: `status.ask({ lines,
 // options, cancel })` shows a few lines and a button an option in place
 // of the form or the progress (QuestionView.tsx) and resolves with the
@@ -44,16 +42,43 @@
 // the folder asks what to do with them.) Nobody asks, nothing changes.
 // The dialog can also be opened from outside the timeline toolbar:
 // `openRenderPopup()` in engine/animation/renderPopupRegistry.ts.
+//
+// THE RENDER RECIPE (2026-10-17, the deep zoomer's streamline stage 7;
+// every app gains the first two):
+//   - IT REMEMBERS. What and how to render - the format, the size, the
+//     shape, Draft or Final, the samples, the bitrate, the frame step,
+//     the `extra` bag - is kept under `storageKey` (localStorage, one
+//     key per installed dialog) from the first change by hand, and the
+//     dialog opens on it again, also after a reload. An app's `defaults`
+//     apply only while nothing is kept. A kept format the form no longer
+//     offers is the default's. THE RANGE IS KEPT APART, for the session
+//     (in this install's closure): the dialog opens on the range it was
+//     left on while the span it opens on (`defaults`' start and end, or
+//     the whole timeline) is the same; a new span opens on the new span.
+//   - ESCAPE CLOSES IT, but not while a run lasts (the window's X does
+//     not either); while a question is open, Escape closes it as the X
+//     does, and the question is answered with its `cancel`.
+//   - `shapes`: the size is a width and a shape, the height follows.
+//   - `draft`: a Quality row, [Draft | Final], Final putting back the
+//     values Draft replaced (it replaced the one-way `presets` buttons).
+//   - `rangeInSeconds`: Start and End in seconds.
+//   - Three formats or fewer are one segmented row, not a dropdown.
+//   (`fixedSizes`, the sizes-from-a-list-only option, went with
+//   `presets`: its one user, the deep zoomer, takes `shapes` now.)
+// The words are plain (no "RAM", "DISK" or codec names), and the bitrate
+// follows the size: a new size proposes its own (40 Mbps at 1920 x 1080,
+// by area) unless the same change sets one.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import DraggableWindow from '../../../components/DraggableWindow';
 import { z } from '../../../components/ui';
 import { useAnimationStore } from '../../../store/animationStore';
+import { safeLocalGet, safeLocalSet } from '../../../store/safeLocalStorage';
 import { VIDEO_CONFIG } from '../../../data/constants';
 import { canEncodeFormat } from '../../export/videoEncoder';
 import { FRAME_FOLDER_UNSUPPORTED, canPickFrameFolder } from '../../export/frameFolder';
 import { registerRenderPopup } from '../../animation/renderPopupRegistry';
-import { ConfigForm, isFrameFolderFormat } from './ConfigForm';
+import { ConfigForm, isFrameFolderFormat, shownFormats } from './ConfigForm';
 import { RenderingView } from './RenderingView';
 import { ResultView } from './ResultView';
 import { QuestionView } from './QuestionView';
@@ -61,6 +86,7 @@ import type {
     InstallRenderDialogOptions,
     RenderDialogConfig,
     RenderDialogFlags,
+    RenderDialogPreset,
     RenderDialogStatus,
     RenderDialogDeps,
     RenderDialogQuestion,
@@ -79,12 +105,62 @@ export type {
     RenderDialogExtraFieldsProps,
     RenderDialogPreset,
     RenderDialogResolutionPreset,
+    RenderDialogShape,
     RenderDialogStartContext,
     InstallRenderDialogOptions,
 } from './types';
 
 const BASE_WIDTH  = 320;
 const BASE_HEIGHT = 460;
+
+/** The fields kept across reloads (`storageKey`): what and how to render. Not the range, not the fps. */
+const KEPT = ['width', 'height', 'formatIndex', 'bitrate', 'samplesPerFrame', 'frameStep'] as const;
+type Kept = Partial<Pick<RenderDialogConfig, typeof KEPT[number]>>;
+
+/** The kept fields of `from` that hold a number. */
+const keptOf = (from: unknown): Kept => {
+    const s = (from && typeof from === 'object' ? from : {}) as Record<string, unknown>;
+    return Object.fromEntries(KEPT.filter((k) => typeof s[k] === 'number').map((k) => [k, s[k]])) as Kept;
+};
+
+/** `base`, each field taken from `stored` where that holds a value of the same type (the `extra` bag kept). */
+const sameTyped = <T,>(base: T, stored: unknown): T => {
+    const s = (stored && typeof stored === 'object' ? stored : {}) as Record<string, unknown>;
+    const out = { ...base } as Record<string, unknown>;
+    for (const k of Object.keys(out)) if (typeof s[k] === typeof out[k]) out[k] = s[k];
+    return out as T;
+};
+
+/** The bitrate a size is given: 40 Mbps at 1920 x 1080, by area. */
+const bitrateFor = (w: number, h: number): number => Math.max(1, Math.round(40 * (w * h) / (1920 * 1080)));
+
+/** The height a width gives at a shape (width over height): the nearest even number. */
+const heightAt = (width: number, aspect: number): number => Math.max(2, 2 * Math.round(width / aspect / 2));
+
+/**
+ * The next form from a change: under `shapes` (`aspect` not null) the height follows the width; a new size is given
+ * its own bitrate unless the change sets one.
+ *
+ * @assumption A bitrate typed by hand lasts until the next change of size (the Draft / Final switch puts its own
+ *   back). Read off this function; no try typed a bitrate, and no check stands behind it.
+ */
+function settle(c: RenderDialogConfig, patch: Partial<RenderDialogConfig>, aspect: number | null): RenderDialogConfig {
+    const next = { ...c, ...patch };
+    if (aspect !== null) next.height = heightAt(next.width, aspect);
+    if ((next.width !== c.width || next.height !== c.height) && patch.bitrate === undefined) next.bitrate = bitrateFor(next.width, next.height);
+    return next;
+}
+
+/** The form at a shape: the height follows; in Draft the draft is applied again, at that shape. */
+const reshape = (c: RenderDialogConfig, aspect: number | null, draft: RenderDialogPreset | null): RenderDialogConfig => {
+    const next = settle(c, {}, aspect);
+    return draft ? settle(next, draft.apply(next), aspect) : next;
+};
+
+/** What one installed dialog keeps between two opens in this session: the range, and the span it was left on. */
+interface DialogMemory {
+    range: { span: { start: number; end: number }; startFrame: number; endFrame: number } | null;
+}
 
 /**
  * @assumption Installs via `registerRenderPopup`, NOT topbar or menu —
@@ -94,8 +170,9 @@ const BASE_HEIGHT = 460;
 export const installRenderDialog = <TExtra = Record<string, unknown>>(
     options: InstallRenderDialogOptions<TExtra>,
 ): void => {
+    const memory: DialogMemory = { range: null };
     const RenderDialog: React.FC<{ onClose: () => void }> = ({ onClose }) => (
-        <RenderDialogShell options={options} onClose={onClose} />
+        <RenderDialogShell options={options} memory={memory} onClose={onClose} />
     );
     registerRenderPopup(RenderDialog);
 };
@@ -104,11 +181,29 @@ export const installRenderDialog = <TExtra = Record<string, unknown>>(
 
 interface ShellProps<TExtra> {
     options: InstallRenderDialogOptions<TExtra>;
+    memory:  DialogMemory;
     onClose: () => void;
 }
 
+/** What is kept under `storageKey`. Read back field by field: anything else in it is ignored. */
+interface Stored<TExtra> {
+    cfg:         Kept;
+    extra:       TExtra;
+    shape:       number;
+    beforeDraft: Kept | null;
+}
+
+/**
+ * @assumption Reopened, the dialog shows what it was left on and, while the span is the same, the range; after a
+ *   reload all of that but the range; Escape closes it, but not during a run. Driven 2026-10-17 headless on the GPU
+ *   (debug/scratch/streamline/stage7-try.mjs, git-ignored): in the deep zoomer the format, the width, the shape, Draft
+ *   and Final, the samples and the range in seconds, through a close and a reload, Escape during a Final MP4; in GMT
+ *   the format, the samples and the End frame, through a close and a reload, Escape during a WebM. NOT driven: the
+ *   frame step, a typed bitrate, the `extra` bag kept (GMT's passes), Escape on an open question. No standing check:
+ *   the render dialog has no smoke of its own.
+ */
 function RenderDialogShell<TExtra>(
-    { options, onClose }: ShellProps<TExtra>,
+    { options, memory, onClose }: ShellProps<TExtra>,
 ): React.ReactElement {
     const animStore = useAnimationStore();
 
@@ -117,32 +212,102 @@ function RenderDialogShell<TExtra>(
     const showBitrate         = options.showBitrate         ?? true;
     const baseSize     = options.baseSize     ?? { width: BASE_WIDTH, height: BASE_HEIGHT };
     const expandedSize = options.expandedSize ?? baseSize;
+    const storageKey   = options.storageKey   ?? `render-dialog:${window.location.pathname}`;
+    const shapes       = options.shapes;
+    const aspectOf = (i: number): number | null => {
+        const a = shapes?.[i]?.aspect;
+        return a === undefined ? null : typeof a === 'function' ? a() : a;
+    };
 
-    // ─── Form config ───────────────────────────────────────────────
-    // Defaults as an object, or a function asked once per open dialog.
-    const defaults = useMemo(
-        () => (typeof options.defaults === 'function' ? options.defaults() : options.defaults),
-        [],
-    );
-    const [cfg, setCfgState] = useState<RenderDialogConfig>(() => ({
-        width:           defaults?.width           ?? 1280,
-        height:          defaults?.height          ?? 720,
-        formatIndex:     defaults?.formatIndex     ?? 0,
-        bitrate:         defaults?.bitrate         ?? VIDEO_CONFIG.DEFAULT_BITRATE,
-        samplesPerFrame: defaults?.samplesPerFrame ?? VIDEO_CONFIG.DEFAULT_SAMPLES,
-        startFrame:      defaults?.startFrame      ?? 0,
-        endFrame:        defaults?.endFrame        ?? animStore.durationFrames,
-        frameStep:       defaults?.frameStep       ?? 1,
-        fps:             defaults?.fps             ?? animStore.fps,
-    }));
-    const setCfg = (patch: Partial<RenderDialogConfig>) => setCfgState((c) => ({ ...c, ...patch }));
+    // ─── The form as it opens ──────────────────────────────────────
+    // The defaults (an object, or a function asked once per open), then what is kept over them, then the range.
+    const opened = useMemo(() => {
+        const d = typeof options.defaults === 'function' ? options.defaults() : options.defaults;
+        const span = { start: d?.startFrame ?? 0, end: d?.endFrame ?? animStore.durationFrames };
+        const width = d?.width ?? 1280, height = d?.height ?? 720;
+        const base: RenderDialogConfig = {
+            width, height,
+            formatIndex:     d?.formatIndex     ?? 0,
+            bitrate:         d?.bitrate         ?? bitrateFor(width, height),
+            samplesPerFrame: d?.samplesPerFrame ?? VIDEO_CONFIG.DEFAULT_SAMPLES,
+            startFrame:      span.start,
+            endFrame:        span.end,
+            frameStep:       d?.frameStep       ?? 1,
+            fps:             d?.fps             ?? animStore.fps,
+        };
+        let stored: Partial<Stored<TExtra>> | null = null;
+        try { stored = JSON.parse(safeLocalGet(storageKey) ?? 'null'); } catch { /* not the dialog's: nothing kept */ }
+        let cfg: RenderDialogConfig = { ...base, ...keptOf(stored?.cfg) };
+        if (!shownFormats(options.formatFilter, !!options.frameFolder).includes(cfg.formatIndex)) cfg.formatIndex = base.formatIndex;
+        const kept = memory.range;
+        if (kept && kept.span.start === span.start && kept.span.end === span.end) cfg = { ...cfg, startFrame: kept.startFrame, endFrame: kept.endFrame };
+        const s = stored?.shape;
+        const shape = shapes && typeof s === 'number' && Number.isInteger(s) && s >= 0 && s < shapes.length ? s : 0;
+        const beforeDraft = options.draft && stored?.beforeDraft ? keptOf(stored.beforeDraft) : null;
+        if (shapes) cfg = reshape(cfg, aspectOf(shape), beforeDraft && options.draft ? options.draft : null);
+        return { span, cfg, shape, beforeDraft, extra: sameTyped((d?.extra ?? {}) as TExtra, stored?.extra), fps: d?.fps };
+    }, []);
 
-    // ─── Extra config (app-specific bag) ───────────────────────────
-    const [extra, setExtraState] = useState<TExtra>(
-        () => ((defaults?.extra ?? {}) as TExtra),
-    );
-    const patchExtra = (patch: Partial<TExtra>) =>
+    const [cfg, setCfgState]          = useState<RenderDialogConfig>(opened.cfg);
+    const [extra, setExtraState]      = useState<TExtra>(opened.extra);
+    const [shape, setShapeState]      = useState(opened.shape);
+    /** In Draft: the values Draft replaced, for Final to put back. Null: Final. */
+    const [beforeDraft, setBeforeDraft] = useState<Kept | null>(opened.beforeDraft);
+    const draftNow = beforeDraft && options.draft ? options.draft : null;
+    /** Set by the first change by hand: nothing is kept for a dialog that was only looked at. */
+    const changed = useRef(false);
+
+    // A change by hand. In Draft, a change to a field Draft set (the bitrate aside: it follows the size) is Final
+    // with that change - and Final's bitrate with it, unless the change is to the size.
+    const setCfg = (patch: Partial<RenderDialogConfig>) => {
+        changed.current = true;
+        let next = patch;
+        if (beforeDraft && Object.keys(patch).some((k) => k !== 'bitrate' && k in beforeDraft)) {
+            const { bitrate, ...rest } = beforeDraft;
+            next = { ...rest, ...('width' in patch || 'height' in patch || bitrate === undefined ? {} : { bitrate }), ...patch };
+            setBeforeDraft(null);
+        }
+        setCfgState((c) => settle(c, next, aspectOf(shape)));
+    };
+    const patchExtra = (patch: Partial<TExtra>) => {
+        changed.current = true;
         setExtraState((e) => ({ ...e, ...patch }));
+    };
+    const setShape = (i: number) => {
+        changed.current = true;
+        setShapeState(i);
+        setCfgState((c) => reshape(c, aspectOf(i), draftNow));
+    };
+    const setDraft = (on: boolean) => {
+        if (!options.draft || on === !!beforeDraft) return;
+        changed.current = true;
+        if (on) {
+            // Kept for Final: the fields Draft sets, and the size and the bitrate, which follow them.
+            const patch = options.draft.apply(cfg);
+            const keys = new Set(['width', 'height', 'bitrate', ...Object.keys(patch)]);
+            setBeforeDraft(keptOf(Object.fromEntries([...keys].map((k) => [k, cfg[k as keyof RenderDialogConfig]]))));
+            setCfgState((c) => settle(c, patch, aspectOf(shape)));
+        } else {
+            setCfgState((c) => settle(c, beforeDraft ?? {}, aspectOf(shape)));
+            setBeforeDraft(null);
+        }
+    };
+
+    // Kept: what and how, from the first change by hand (storageKey); the range, for the session (the closure).
+    useEffect(() => {
+        if (!changed.current) return;
+        const stored: Stored<TExtra> = { cfg: keptOf(cfg), extra, shape, beforeDraft };
+        safeLocalSet(storageKey, JSON.stringify(stored));
+    }, [cfg, extra, shape, beforeDraft]);
+    useEffect(() => {
+        memory.range = { span: opened.span, startFrame: cfg.startFrame, endFrame: cfg.endFrame };
+    }, [cfg.startFrame, cfg.endFrame]);
+
+    // `shapes`: a shape of live state (the app's picture) may have changed since the last draw.
+    useEffect(() => {
+        const aspect = aspectOf(shape);
+        if (aspect !== null && heightAt(cfg.width, aspect) !== cfg.height) setCfgState((c) => reshape(c, aspect, draftNow));
+    });
 
     // Re-clamp the frame range when the timeline duration changes. The
     // dialog is a non-modal DraggableWindow, so the user can shrink the
@@ -150,7 +315,8 @@ function RenderDialogShell<TExtra>(
     // (e.g. 300) stays above the new max (e.g. 100) until the End field
     // is touched, and the render would emit frames past the timeline.
     // Only shrinks — growing the duration leaves the range for the user
-    // to extend. Also catches an out-of-range `defaults.endFrame`.
+    // to extend. Also catches an out-of-range `defaults.endFrame`, or a
+    // range kept from a longer timeline.
     useEffect(() => {
         setCfgState((c) => {
             const endFrame   = Math.min(c.endFrame, animStore.durationFrames);
@@ -166,36 +332,9 @@ function RenderDialogShell<TExtra>(
     // current store value and follows it until the user touches the
     // dialog.
     useEffect(() => {
-        if (defaults?.fps !== undefined) return;
+        if (opened.fps !== undefined) return;
         setCfgState((c) => (c.fps === animStore.fps ? c : { ...c, fps: animStore.fps }));
-    }, [animStore.fps, defaults?.fps]);
-
-    // `fixedSizes`: the size is always one of the presets. The list may be a function of
-    // live state (the shape of the app's picture), so it is asked again after every render;
-    // a size no longer in it snaps to the preset with the nearest long edge.
-    useEffect(() => {
-        if (!options.fixedSizes) return;
-        const presets = typeof options.resolutionPresets === 'function' ? options.resolutionPresets() : options.resolutionPresets;
-        if (!presets?.length || presets.some((p) => p.w === cfg.width && p.h === cfg.height)) return;
-        const long = Math.max(cfg.width, cfg.height), off = (p: { w: number; h: number }) => Math.abs(Math.max(p.w, p.h) - long);
-        const nearest = presets.reduce((a, b) => (off(b) < off(a) ? b : a));
-        setCfg({ width: nearest.w, height: nearest.h });
-    });
-
-    // Auto-recommend bitrate on resolution change (40 Mbps @ 1080p,
-    // scale linearly). Apps that override `defaults.bitrate` keep
-    // their default until the user resizes — same behaviour as
-    // fluid-toy / app-gmt.
-    //
-    // @assumption Bitrate auto-recommend overwrites user input on every
-    //   `cfg.width`/`cfg.height` change — `Math.round(40 * (w*h) /
-    //   (1920*1080))` Mbps. A user edit to bitrate survives only until
-    //   the next resolution edit.
-    useEffect(() => {
-        const target = cfg.width * cfg.height;
-        const ref    = 1920 * 1080;
-        setCfgState((c) => ({ ...c, bitrate: Math.max(1, Math.round(40 * (target / ref))) }));
-    }, [cfg.width, cfg.height]);
+    }, [animStore.fps]);
 
     // ─── Run-time state ────────────────────────────────────────────
     const [progress, setProgress]               = useState(0);  // 0..100 (percent)
@@ -340,6 +479,7 @@ function RenderDialogShell<TExtra>(
             size={winSize}
             onSizeChange={setWinSize}
             disableClose={isRendering && !question}
+            dismissOnEscape
             zIndex={z('tool')}
         >
             {question ? (
@@ -377,8 +517,13 @@ function RenderDialogShell<TExtra>(
                     showBitrate={showBitrate}
                     formatFilter={options.formatFilter}
                     frameFolder={!!options.frameFolder}
-                    fixedSizes={!!options.fixedSizes}
-                    formPresets={options.presets}
+                    rangeInSeconds={!!options.rangeInSeconds}
+                    shapes={shapes}
+                    shape={shape}
+                    setShape={setShape}
+                    draft={options.draft}
+                    isDraft={!!beforeDraft}
+                    setDraft={setDraft}
                     resolutionPresets={options.resolutionPresets}
                     ExtraFormFields={options.extraFormFields}
                     ExtraInfoRows={options.extraInfoRows}
