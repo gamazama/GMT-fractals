@@ -6,29 +6,35 @@
  * and the rules are, or into `deep-zoom/trail.ts` (the trail: what the app remembers of how the
  * camera was flown). From the top:
  *   - "Add keyframe" (the K key), Play / Pause (to the last keyframe, then stop; the timeline's
- *     own Play is the engine's and loops as the timeline is set to), and "Render", which opens
- *     the render dialog (`deep-zoom/routeRender.tsx`; it also brings the timeline up, whose child
- *     the dialog is). WHILE A RENDER RUNS everything on this tab but that button is off: the
- *     route's own functions do nothing then (`setRouteRendering` in route.ts), and the tab shows it.
- *   - The trail: its record button (lit while it records) with one line beside it, how deep and
- *     how long the trail is. "Route to here" makes the route from the trail, replacing the one
- *     there; when a jump has ended a deep trail, "Route from the previous trail" is beside it.
- *     A route that holds keyframes set by hand is asked for first (the engine's `Modal`: Escape or
- *     Cancel leaves the route alone, a click outside does nothing).
- *   - Smoothing, while the route came from a trail: how closely it follows what was flown. It cuts
- *     the route again when the hand lets go, not while it drags.
- *   - "As flown" and "Even pace": the route's timing, key times only. Beside them "Reverse"
- *     (`reverseRoute`): a new route that plays this one the other way, one undo step; and
- *     "Smooth...", which opens the smoothing pass's dialog (`SmoothDialog.tsx`; the pass is
- *     route.ts's `smoothRoute`) with the rows selected here as its "Selected legs".
- *   - One line of count, length and depths, and the pace at the playhead; under them, for a route
- *     that can play, one line on FREE LOOK (turning the view while the route plays: route.ts,
- *     FREE LOOK). Pause here is `pauseRoute`: the camera stays the route's, and a free look that
- *     was not recorded returns to it.
+ *     own Play is the engine's and loops as the timeline is set to), and "Render", which opens the
+ *     render dialog (`deep-zoom/routeRender.tsx`; it also brings the timeline up, whose child the
+ *     dialog is). WHILE A RENDER RUNS everything on this tab but that button is off: the route's
+ *     own functions do nothing then (`setRouteRendering` in route.ts), and the tab shows it.
+ *   - The trail, one line: its record button (lit while it records), how deep and how long the
+ *     trail is, "Route to here", which makes the route from the trail, replacing the one there,
+ *     and `⋯`, THE TAB'S MENU: the engine's `AnchoredMenu` with the engine's menu rows
+ *     (`MenuItemList`), as the Places tab's File... is. In it "Route from the previous trail" (off
+ *     until a jump has ended a deep trail), "Delete selected" and "Clear route" (`clearRoute`: every
+ *     keyframe and a recorded free look, the playhead back at the start, one undo step; no question
+ *     is asked, undo covers it). A route that holds keyframes set by hand is asked for before a
+ *     route from either trail replaces it (the engine's `Modal`: Escape or Cancel leaves the route
+ *     alone, a click outside does nothing). The `⋯` is on this line, not the first: beside the
+ *     three buttons there it wrapped "Replace keyframe 11 (K)" onto two lines (seen 2026-10-17).
+ *   - TIMING, one row (two keyframes or more): the engine's `Segmented` [As flown | Even | Smooth...]
+ *     and "Reverse" beside it. As flown and Even are `retimeRoute`, key times only, one undo step
+ *     each; the one the route is in is lit (`routeTiming`: neither after a typed leg, a key moved on
+ *     the timeline or a smoothing pass). As flown is for a route cut from the trail. Smooth... opens
+ *     the smoothing pass's dialog (`SmoothDialog.tsx`; the pass is route.ts's `smoothRoute`) with
+ *     the rows selected here as its "Selected legs". Reverse (`reverseRoute`): a new route that
+ *     plays this one the other way, one undo step. (The Smoothing slider that cut a route from the
+ *     trail again went on 2026-10-17, STREAMLINE.md stage 6: Smooth... is the one smoothing.)
+ *   - One line: the count, the length, the first and the last depth, and the route's PACE - the
+ *     decades between those two depths over its length (the one meaning of the word in this app:
+ *     decades a second). Under it, for a route that can play, one line on FREE LOOK (turning the
+ *     view while the route plays: route.ts, FREE LOOK). Pause here is `pauseRoute`: the camera
+ *     stays the route's, and a free look that was not recorded returns to it.
  *   - Only while a free look is recorded (one of the three look tracks holds a key): one line that
  *     says so, with "Clear" (`clearLook`: the three tracks go, one animation-undo step).
- * Above the list, "Delete selected" and "Clear route" (`clearRoute`: every keyframe and a recorded
- * free look, the playhead back at the start, one undo step; no question is asked, undo covers it).
  * Then one row a keyframe, in the look of a saved location's row: its picture (taken when it was
  * set, or a moment after the route was cut from the trail; this session only - a keyframe from a
  * loaded scene shows its number), its depth, its time and, from the second row on, a SECONDS FIELD:
@@ -46,8 +52,8 @@
  * button then reads "Replace keyframe N (K)", and that row says "K replaces" beside its times.
  * SELECTING ROWS: a click selects one - it moves neither the playhead nor the camera (the owner,
  * F3, 2026-10-17: the play button parks) - Ctrl / Cmd-click adds or removes one, Shift-click takes
- * the range from the row clicked last. "Delete selected", or the Delete key while the list has the
- * focus (a click on a row gives it), removes them in one undo step (`deleteKeyframes`). The
+ * the range from the row clicked last. "Delete selected" in the menu, or the Delete key while the
+ * list has the focus (a click on a row gives it), removes them in one undo step (`deleteKeyframes`). The
  * selection is this panel's own state: ids that are no longer keyframes (a delete, an undo, a route
  * cut again) drop out of it by themselves.
  * When the camera is not where the playhead says, one line says so and "Return" puts it back.
@@ -82,7 +88,12 @@
  *     route's) when something that could change the answer happens - the playhead moved by hand a
  *     whole frame, the route changing, the camera changing hands (`useRoute`'s `rev`), a flight
  *     landing - and never while the timeline plays.
- *   - The smoothing slider's value is its own while it is held; the route's again on release.
+ *   - THE TIMING ROW IS THE ENGINE'S `Segmented`, at this tab's size: its buttons are made the size
+ *     of the tab's own from outside (`[&>button]:...`, which outranks its `h-7 text-[13px]`). Should
+ *     Segmented's buttons stop being its direct children, the row is simply larger.
+ *   - THE MENU IS IN A PORTAL (the layer host), outside the tab: the pointer over it is not over the
+ *     tab, so Ctrl+Z there undoes the app's own stack. It closes on a choice, so the next Ctrl+Z is
+ *     over the tab again.
  *   - THE DELETE KEY IS THE LIST'S ONLY WHILE IT HAS THE FOCUS, and it stops there: the timeline's
  *     own Delete (a window listener that removes the keys selected ON THE TIMELINE) must not run
  *     for the same press. Backspace is not taken: it is "back to the view before the last jump".
@@ -102,8 +113,8 @@
  *
  * @assumption The selection (click, Ctrl / Cmd-click, Shift-click, the Delete key and its not
  *   reaching the timeline), the seconds field setting its length on Enter and when it is left, and
- *   the two buttons above the list are wiring no node check reaches (the functions they call have
- *   lines in check:deep-zoom-route). Driven once in the real app, 2026-10-12
+ *   the two buttons that stood above the list (Delete selected, Clear route) are wiring no node
+ *   check reaches (the functions they call have lines in check:deep-zoom-route). Driven once in the real app, 2026-10-12
  *   (debug/scratch/route-fixes/app-six.mts, git-ignored). The row's pin (one undo step a click, shown
  *   while on) and "Smooth..." with the rows selected as its legs: driven once in the real app on the
  *   GPU, 2026-10-17, on the owner's route (debug/scratch/s2/app-smooth.mts, git-ignored).
@@ -111,6 +122,14 @@
  *   nothing, the play button that parks (row 1 included) and the "Replace keyframe N (K)" label with
  *   its row's mark: tried once in the real app, 2026-10-17 (the browser pane, by hand). No standing
  *   guard reaches them.
+ * @assumption The timing row (the timing the route is in lit; As flown, Even and Reverse one undo
+ *   step each, which Ctrl+Z over the tab takes back; As flown off on a route set by hand), the `⋯`
+ *   menu's three rows (Delete selected with two rows selected, Clear route, Route from the previous
+ *   trail after a jump ended a dive of 3.6 decades; each closes the menu, each undone by Ctrl+Z over
+ *   the tab), the summary line, and "Replace keyframe 11 (K)" on one line: driven once in the real
+ *   app on the GPU, 2026-10-17 (debug/scratch/streamline/stage6-try.mjs and stage6-try2.mjs,
+ *   git-ignored; headless Chrome, 1600 x 1000). No standing guard reaches the wiring; `routeTiming`
+ *   itself has lines in check:deep-zoom-trail.
  * @assumption The last row ends clear of the toggle with the timeline closed, and with it open
  *   the list ends where it did before - measured once, 2026-10-11, in the app at 1280 x 800 with
  *   14 keyframes (debug/scratch/r7c/animate.mts, git-ignored; before the room was there its
@@ -121,16 +140,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
 import { CheckeredFlagIcon, PauseIcon, PinIcon, PlayIcon, PlusIcon, SaveIcon, TrashIcon } from '../../components/Icons';
 import { closeRenderPopup, isRenderPopupOpen, openRenderPopup, subscribeRenderPopup } from '../../engine/animation/renderPopupRegistry';
-import { BaseSlider } from '../../components/Slider';
-import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
+import { AnchoredMenu } from '../../components/ui/AnchoredMenu';
 import { Modal } from '../../components/ui/Modal';
+import { Segmented } from '../../components/ui/Segmented';
+import { MenuItemList } from '../../engine/plugins/Menu';
+import type { MenuItem } from '../../engine/plugins/Menu';
 import { useShortcutScope } from '../../engine/plugins/Shortcuts';
 import { useEngineStore } from '../../store/engineStore';
 import { useDzNavigation } from '../navigationState';
 import {
-    ROUTE_SMOOTHING, ROUTE_TRACK, ROUTE_TYPED_LEG_SECONDS, cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, lookKeyed, pauseRoute, pinKeyframe,
-    playLeg, playRoute, replaceKeyframe, retimeRoute, returnToRoute, reverseRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource,
-    setKeyframe, setLegSeconds, setRouteSmoothing, unpinKeyframe, useRoute,
+    ROUTE_TRACK, ROUTE_TYPED_LEG_SECONDS, cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, lookKeyed, pauseRoute, pinKeyframe,
+    playLeg, playRoute, replaceKeyframe, retimeRoute, returnToRoute, reverseRoute, routeFromTrail, routeHandSet, routeKeys, routeSource, routeTiming,
+    setKeyframe, setLegSeconds, unpinKeyframe, useRoute,
 } from '../route';
 import type { RouteKey } from '../route';
 import { SmoothDialog } from './SmoothDialog';
@@ -140,11 +161,12 @@ import { formatDepth, formatDepthCompact } from './depthFormat';
 const rowButton = 'p-1 text-fg-faint opacity-0 group-hover:opacity-100';
 const topButton = 'rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1 border';
 const plainButton = `${topButton} border-line/20 text-fg-secondary hover:text-fg hover:border-line/40 disabled:opacity-40`;
-/** The smoothing's track: even steps are even ratios, 0.01 at the left and 0.5 at the right. */
-const SMOOTHING_SCALE = createLogMapping(ROUTE_SMOOTHING.min, ROUTE_SMOOTHING.max, { reserveZero: false });
+/** The engine's Segmented at the size of this tab's buttons (THE TIMING ROW in the header). */
+const timingRow = 'flex-1 [&>button]:flex-1 [&>button]:h-auto [&>button]:py-1 [&>button]:text-[9px] [&>button]:font-bold';
+type Timing = 'flown' | 'even' | 'smooth' | 'none';
 
-/** The record button and its line. */
-const TrailRow: React.FC = () => {
+/** The trail's line: the record button, how deep and how long the trail is, "Route to here", and the tab's menu (`children`). */
+const TrailRow: React.FC<{ onRoute: () => void; children: React.ReactNode }> = ({ onRoute, children }) => {
     const on = useTrail((s) => s.on);
     const line = useTrail((s) => s.line);
     return (
@@ -159,40 +181,18 @@ const TrailRow: React.FC = () => {
             >
                 <span className={`w-2 h-2 rounded-full ${on ? 'bg-danger' : 'border border-fg-faint'}`} /> Trail
             </button>
-            <span data-dz-trail-line className="min-w-0 truncate text-[10px] text-fg-tertiary">{line || (on ? 'Nothing flown yet' : 'Off')}</span>
-        </div>
-    );
-};
-
-/** The smoothing of a route cut from the trail. */
-const Smoothing: React.FC<{ value: number }> = ({ value }) => {
-    const [held, setHeld] = useState<number | null>(null);
-    // The value the hand is on: the release reads it here, before the render that follows the last move.
-    const latest = useRef<number | null>(null);
-    const shown = held ?? value;
-    const release = (): void => {
-        const asked = latest.current;
-        latest.current = null;
-        setHeld(null);
-        if (asked !== null) setRouteSmoothing(asked);
-    };
-    return (
-        <div
-            data-dz-route-smoothing
-            className="px-2 pt-2"
-            title="How far the route may lie from what was flown, as a share of the depth there: 0.01 follows closely, 0.5 is a smooth glide with few keyframes. The route is cut again when you let go."
-        >
-            <BaseSlider
-                label="Smoothing"
-                value={shown}
-                min={ROUTE_SMOOTHING.min}
-                max={ROUTE_SMOOTHING.max}
-                step={1}
-                mapping={SMOOTHING_SCALE}
-                overrideText={shown.toFixed(3)}
-                onChange={(v) => { latest.current = v; setHeld(v); }}
-                onDragEnd={release}
-            />
+            <span data-dz-trail-line className="flex-1 min-w-0 truncate text-[10px] text-fg-tertiary">{line || (on ? 'Nothing flown yet' : 'Off')}</span>
+            <button
+                type="button"
+                data-dz-route-here
+                disabled={!line}
+                onClick={onRoute}
+                title="Make the route from the trail: from where it began to this view, without its dead ends. It replaces the route."
+                className={`${plainButton} px-2 shrink-0`}
+            >
+                Route to here
+            </button>
+            {children}
         </div>
     );
 };
@@ -242,7 +242,6 @@ export const RoutePanel: React.FC = () => {
     // The playhead: a whole frame while it is moved by hand, nothing while the timeline plays.
     useAnimationStore((s) => (s.isPlaying ? -1 : Math.round(s.currentFrame)));
     const under = useAnimationStore((s) => routeKeys().findIndex((k) => Math.abs(k.frame - s.currentFrame) < 0.5));
-    const pace = useAnimationStore((s) => routePaceAt(s.currentFrame, s.fps).toFixed(2));
     // A free look is recorded: one of its three tracks holds a key (asked again at every change of the store; a boolean).
     const looked = useAnimationStore(() => lookKeyed());
     const thumbnails = useRoute((s) => s.thumbnails);
@@ -250,7 +249,6 @@ export const RoutePanel: React.FC = () => {
     const rendering = useRoute((s) => s.rendering);
     useRoute((s) => s.rev);
     useDzNavigation((s) => s.flying);
-    const flown = useTrail((s) => s.line !== '');
     const previous = useTrail((s) => s.previous);
     /** The trail a route is asked for from (true: the previous one), while the question stands. */
     const [asking, setAsking] = useState<boolean | null>(null);
@@ -260,6 +258,8 @@ export const RoutePanel: React.FC = () => {
     /** The Smooth... dialog is open. One dialog at a time: the render dialog opening closes it, and it closes that. */
     const [smoothing, setSmoothing] = useState(false);
     useEffect(() => subscribeRenderPopup(() => { if (isRenderPopupOpen()) setSmoothing(false); }), []);
+    /** Where the tab's menu is open (the corner it hangs from), or null. */
+    const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
     /** The pointer is over the tab: it counts as over the timeline (THE POINTER OVER THE TAB in the header). */
     const [hovered, setHovered] = useState(false);
     useShortcutScope('timeline-hover', hovered);
@@ -286,6 +286,9 @@ export const RoutePanel: React.FC = () => {
     const selected = picked.filter((id) => keys.some((k) => k.id === id));
     const source = routeSource();
     const seconds = (frames: number): string => (fps > 0 ? frames / fps : 0).toFixed(1);
+    const length = keys.length > 0 ? keys[keys.length - 1].frame - keys[0].frame : 0;
+    // The pace: the decades between the first and the last depth over the route's length.
+    const pace = length > 0 && fps > 0 ? (Math.abs(Math.log10(keys[0].depth / keys[keys.length - 1].depth)) / (length / fps)).toFixed(2) : '0.00';
     const off = !playing && keys.length > 0 && !cameraOnRoute();
     const act = (run: (id: string) => void, id: string) => (e: React.MouseEvent): void => { e.stopPropagation(); run(id); };
     const make = (fromPrevious: boolean): void => { if (routeHandSet()) setAsking(fromPrevious); else routeFromTrail(fromPrevious); };
@@ -302,6 +305,22 @@ export const RoutePanel: React.FC = () => {
         setPicked([key.id]);
     };
     const removeSelected = (): void => { if (selected.length > 0) deleteKeyframes(selected); setPicked([]); };
+    const openSmooth = (): void => { closeRenderPopup(); setSmoothing(true); };
+    const menuItems: MenuItem[] = [
+        {
+            id: 'previous', type: 'button', label: 'Route from the previous trail', disabled: !previous, onSelect: () => make(true),
+            title: previous ? `Make the route from the trail the last jump ended (${previous}). It replaces the route.` : 'No previous trail is kept: a jump keeps the trail it ends, when that went deep.',
+        },
+        { id: 'list', type: 'separator' },
+        {
+            id: 'delete', type: 'button', label: selected.length > 0 ? `Delete selected (${selected.length})` : 'Delete selected', disabled: selected.length === 0, onSelect: removeSelected,
+            title: 'Delete the selected keyframes, in one undo step (the Delete key does the same after a click in the list). To select: click a keyframe, Ctrl-click (Cmd on a Mac) to add or remove one, Shift-click for the range.',
+        },
+        {
+            id: 'clear', type: 'button', label: 'Clear route', disabled: keys.length === 0, onSelect: () => { setPicked([]); clearRoute(); },
+            title: 'Clear the route: every keyframe goes, and a recorded free look with them; the playhead returns to the start. One undo on the timeline brings all of it back. The trail stays.',
+        },
+    ];
     const onListKey = (e: React.KeyboardEvent): void => {
         if (e.key !== 'Delete' || selected.length === 0 || (e.target as HTMLElement).tagName === 'INPUT') return;
         e.preventDefault();
@@ -347,83 +366,51 @@ export const RoutePanel: React.FC = () => {
 
             {/* Off while a render runs: a disabled fieldset for the keyboard, no pointer events for the mouse. */}
             <fieldset disabled={rendering} className={`min-w-0 flex flex-col ${rendering ? 'opacity-50 pointer-events-none' : ''}`}>
-            <TrailRow />
-            <div className="px-2 pt-1 flex gap-1">
+            <TrailRow onRoute={() => make(false)}>
                 <button
                     type="button"
-                    data-dz-route-here
-                    disabled={!flown}
-                    onClick={() => make(false)}
-                    title="Make the route from the trail: from where it began to this view, without its dead ends. It replaces the route."
-                    className={`${plainButton} flex-1`}
+                    data-dz-route-more
+                    aria-haspopup="menu"
+                    aria-expanded={!!menuAt}
+                    onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt(menuAt ? null : { x: r.right - 224, y: r.bottom + 2 }); }}
+                    title="More: Route from the previous trail, Delete selected, Clear route"
+                    className={`${plainButton} w-6 shrink-0`}
                 >
-                    Route to here
+                    ⋯
                 </button>
-                {previous && (
-                    <button
-                        type="button"
-                        data-dz-route-previous
-                        onClick={() => make(true)}
-                        title={`Make the route from the trail the last jump ended (${previous}). It replaces the route.`}
-                        className={`${plainButton} flex-1`}
-                    >
-                        Route from the previous trail
-                    </button>
-                )}
-            </div>
-
-            {source && <Smoothing value={source.smoothing} />}
+            </TrailRow>
             {keys.length > 1 && (
-                <div className="px-2 pt-1 flex gap-1">
-                    <button
-                        type="button"
-                        data-dz-route-flown
-                        disabled={!source}
-                        onClick={() => retimeRoute(true)}
-                        title="Time the route as it was flown: the trail's own clock, a pause counted as half a second. For a route made from the trail."
-                        className={`${plainButton} flex-1`}
-                    >
-                        As flown
-                    </button>
-                    <button
-                        type="button"
-                        data-dz-route-even
-                        onClick={() => retimeRoute(false)}
-                        title="Time every leg by its length on screen, at 0.5 decades a second"
-                        className={`${plainButton} flex-1`}
-                    >
-                        Even pace
-                    </button>
+                <div data-dz-route-timing className="px-2 pt-1 flex gap-1">
+                    <Segmented<Timing>
+                        name="route-timing"
+                        options={[
+                            { id: 'flown', name: 'As flown', disabled: !source, title: 'Time the route as it was flown: the trail\'s own clock, a pause counted as half a second. For a route made from the trail. One undo on the timeline brings the timing back.' },
+                            { id: 'even', name: 'Even', title: 'Time every leg by its length on screen, at 0.5 decades a second. One undo on the timeline brings the timing back.' },
+                            { id: 'smooth', name: 'Smooth...', title: 'Even out how fast the picture moves, and the turn: the whole route or the legs selected, with a graph before and after. Positions never move. One undo on the timeline brings it back.' },
+                        ]}
+                        value={routeTiming() ?? 'none'}
+                        onChange={(id) => { if (id === 'smooth') openSmooth(); else retimeRoute(id === 'flown'); }}
+                        pad="px-1"
+                        className={timingRow}
+                    />
                     <button
                         type="button"
                         data-dz-route-reverse
                         onClick={reverseRoute}
                         title="Make the route run the other way: the last keyframe becomes the first, and the picture at the playhead stays. One undo on the timeline brings it back."
-                        className={`${plainButton} flex-1`}
+                        className={`${plainButton} px-2`}
                     >
                         Reverse
-                    </button>
-                    <button
-                        type="button"
-                        data-dz-route-smooth
-                        aria-pressed={smoothing}
-                        onClick={() => { closeRenderPopup(); setSmoothing(true); }}
-                        title="Smooth the route's pace and turn: the whole route or the legs selected, with a graph of the pace before and after. Positions never move. One undo on the timeline brings it back."
-                        className={`${plainButton} flex-1`}
-                    >
-                        Smooth...
                     </button>
                 </div>
             )}
 
             {keys.length > 0 && (
                 <div className="px-2 pt-2 text-[10px] leading-tight text-fg-tertiary">
-                    <div data-dz-route-summary>
-                        {keys.length} keyframe{keys.length === 1 ? '' : 's'} · {seconds(keys[keys.length - 1].frame - keys[0].frame)} s
+                    <div data-dz-route-summary title="The keyframes, the route's length, its first and last depth, and its pace: the decades between those two depths over the length.">
+                        {keys.length} keyframe{keys.length === 1 ? '' : 's'} · {seconds(length)} s
                         {' '}· <span className="font-mono tabular-nums">{formatDepthCompact(keys[0].depth)} -&gt; {formatDepthCompact(keys[keys.length - 1].depth)}</span>
-                    </div>
-                    <div data-dz-route-pace title="How fast the picture moves at the playhead: the camera's speed over its depth.">
-                        pace <span className="font-mono tabular-nums">{pace}</span> decades a second
+                        {keys.length > 1 && <>{' '}· <span data-dz-route-pace className="font-mono tabular-nums">{pace}</span> decades a second</>}
                     </div>
                     {keys.length > 1 && (
                         <div
@@ -466,29 +453,6 @@ export const RoutePanel: React.FC = () => {
                     </button>
                 </div>
             )}
-
-            <div className="px-2 pt-2 flex gap-1">
-                <button
-                    type="button"
-                    data-dz-route-delete-selected
-                    disabled={selected.length === 0}
-                    onClick={removeSelected}
-                    title="Delete the selected keyframes, in one undo step (the Delete key does the same after a click in the list). To select: click a keyframe, Ctrl-click (Cmd on a Mac) to add or remove one, Shift-click for the range."
-                    className={`${plainButton} flex-1`}
-                >
-                    <TrashIcon /> Delete selected{selected.length > 0 ? ` (${selected.length})` : ''}
-                </button>
-                <button
-                    type="button"
-                    data-dz-route-clear
-                    disabled={keys.length === 0}
-                    onClick={() => { setPicked([]); clearRoute(); }}
-                    title="Clear the route: every keyframe goes, and a recorded free look with them; the playhead returns to the start. One undo on the timeline brings all of it back. The trail stays."
-                    className={`${plainButton} flex-1`}
-                >
-                    Clear route
-                </button>
-            </div>
 
             <div data-dz-route-list tabIndex={0} onKeyDown={onListKey} className="p-2 space-y-1 outline-none">
                 {keys.length === 0 && (
@@ -579,6 +543,14 @@ export const RoutePanel: React.FC = () => {
             <div data-dz-route-room aria-hidden className="absolute left-0 top-full h-14 w-px pointer-events-none [:root:has([data-help-id='ui.timeline'])_&]:hidden" />
 
             {smoothing && <SmoothDialog picked={selected} onClose={() => setSmoothing(false)} />}
+
+            {menuAt && (
+                <AnchoredMenu anchor={menuAt} onClose={() => setMenuAt(null)} ignore="[data-dz-route-more]" className="w-56 bg-surface border border-line/15 rounded-lg shadow-2xl p-1">
+                    <div data-dz-route-menu>
+                        <MenuItemList items={menuItems} close={() => setMenuAt(null)} />
+                    </div>
+                </AnchoredMenu>
+            )}
 
             {asking !== null && (
                 <Modal onClose={() => setAsking(null)}>

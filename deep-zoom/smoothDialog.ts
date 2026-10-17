@@ -19,9 +19,11 @@
  *     less can only be even.
  *   - THE MISS ALLOWED at a keyframe and THE FREE LOOK'S SMOOTHING: optional sliders (his answers 4 and 5);
  *     off, every keyframe's aim stays (every keyframe exact) and the look is carried as it is.
- *   - THE PACE GRAPH (`readPace`, `paceColumns`, `keyframeMap`, `paceRange`, `strayFrames`): how fast the middle of the
- *     picture moves along the route, as the reader reads it (`routePictureSpeed`: every third frame, the
- *     picture chosen in "Pace by"), BEFORE the pass and AFTER it. AFTER IS THE ROUTE READ AGAIN as the engine
+ *   - THE PACE GRAPH (`readPace`, `paceColumns`, `keyframeMap`, `paceRange`, `strayFrames`, `strayShare`): how fast the
+ *     middle of the picture moves along the route, as the reader reads it (`routePictureSpeed`: every third frame, the
+ *     picture chosen in "Even out by", which was "Pace by" until 2026-10-17), BEFORE the pass and AFTER it. Its score is
+ *     a SHARE of the frames read (`strayShare`), not a count, which grows with a longer route (the owner, STREAMLINE.md
+ *     stage 6). AFTER IS THE ROUTE READ AGAIN as the engine
  *     plays it, not the pass's own reckoning (`SmoothResult.speedAfter`): S1 measured the two apart on the
  *     owner's route (82 frames off against 3; the path between keyframes moves a little with a retime).
  *     The reading before is drawn on the route's timing after, through the keyframes (`keyframeMap`): the two
@@ -38,8 +40,8 @@
  *     only stops the reading after it (the pass stands, one undo on the timeline takes it back).
  *
  * PITFALLS
- *   - A READING IS OF ONE "PACE BY". The graph's before and after are read the same way, so the change it
- *     shows is the pass's; switching "Pace by" reads the route again.
+ *   - A READING IS OF ONE "EVEN OUT BY". The graph's before and after are read the same way, so the change it
+ *     shows is the pass's; switching "Even out by" reads the route again.
  *   - THE SIGNATURE IS A STRING OF EVERY KEY of the three tracks (about 200 KB on the owner's route of 105
  *     keyframes and 911 pace keys): build it when the route changes, not every render.
  *   - A reading made while the user changed a formula value under it is kept under the values it started
@@ -59,7 +61,7 @@
  *   asked where 12,375 had been at the Cancel; and "dialog: Cancel while the route is read after the pass ...").
  * @assumption What is smoothed (the legs between the first and the last keyframe selected, the legs that hold a
  *   frame range), a run's three phases and its readings kept by signature through an undo and a redo, the graph's
- *   columns and range, the stray score against the check's own, and the close keyframes' rows have green lines in
+ *   columns and range, the stray score against the check's own (its share too), and the close keyframes' rows have green lines in
  *   the same check ("dialog: ..."), none broken on its own (three breaks were the stage's allowance).
  */
 import { useAnimationStore } from '../store/animationStore';
@@ -297,6 +299,17 @@ export function strayFrames(speed: ArrayLike<number>, fps: number, lo = 0, hi = 
         if (r > 1.25 || r < 0.8) strays++;
     }
     return strays;
+}
+
+/**
+ * The share of the frames `[lo, hi)` that were read (frames not read, NaN, are left out) which stray
+ * (`strayFrames`): 0 to 1, null when none was read. What the dialog gives - a share, not a count, which grows
+ * with a longer route.
+ */
+export function strayShare(speed: ArrayLike<number>, fps: number, lo = 0, hi = speed.length): number | null {
+    let read = 0;
+    for (let i = Math.max(0, Math.floor(lo)); i < Math.min(speed.length, Math.ceil(hi)); i++) if (speed[i] > 0) read++;
+    return read > 0 ? strayFrames(speed, fps, lo, hi) / read : null;
 }
 
 // ── close keyframes ──────────────────────────────────────────────────────────────────────────────

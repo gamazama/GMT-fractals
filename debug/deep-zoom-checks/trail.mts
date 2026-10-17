@@ -23,13 +23,12 @@
  *   pick     every sample within the tolerance; a tighter tolerance never fewer keyframes; the cap
  *   time     the even pace against the trail's clock; a pause is half a second; a gap is even
  *   heading  a tap back does not turn it, a retreat does; with the trail off, the same
- *   route    "Route to here" in the app: one undo step, no view set, the camera on the route
+ *   route    "Route to here" in the app: one undo step, no view set, the camera on the route, at the even pace
  *   exact    its keyframes are trail samples to the digit, each with its iteration key
- *   smooth   the smoothing cuts it again from the same trail, and back
  *   picture  (2026-10-12) the keyframes of a cut route get their pictures: each of its own view with its own count, a
- *            frame run before it is taken and the renderer's iteration rule held off meanwhile; the camera is put back
- *            to the digit; the trail, the route and the undo stack are told nothing; a route cut again draws only the
- *            samples that are new. NOT FALSIFIED: green lines only.
+ *            frame run before it is taken (two when the renderer does not draw every depth one way) and the renderer's
+ *            iteration rule held off meanwhile; the camera is put back to the digit; the trail, the route and the undo
+ *            stack are told nothing. NOT FALSIFIED: green lines only.
  *            A ROUTE THAT ARRIVES with a loaded scene (`setSequence`: five keyframes under other ids) is owed its
  *            pictures and gets them from the same pass: not while a formula's shader builds, the camera and the undo
  *            stack as they were, each keyframe tried once. FALSIFIED 2026-10-12, route.ts, the `owePictures` listener on
@@ -45,8 +44,7 @@
  *   reverse  (2026-10-16, stage Z1 of plans/deep-zoom-shell/ZOOM-OUTS.md) `reverseTrail`: the same views the other way,
  *            each gap on its step, the clock mirrored, the directions negated, twice the trail it was. In the app: the
  *            cut route reversed still knows its trail (the trail reversed); "As flown" times each leg as flown, the
- *            other way round; the smoothing cuts again from the trail reversed, with the pictures its samples had, and
- *            turned back gives the reversed route; reversed again it reads the very trail it was cut from.
+ *            other way round; reversed again it reads the very trail it was cut from.
  *            FALSIFIED 2026-10-16, route.ts, `routeSource` never turning the trail round -> 4 red: "reverse: a route cut
  *            from the trail, reversed ...", "reverse: the smoothing slider cuts it again ..." (the route ran forwards
  *            again), "reverse: and turned back ...", "reverse: reversed again ...". "As flown" stayed green: timed off the
@@ -105,6 +103,10 @@
  *              frame and undone ..." (two counts on frame 48), and the two "time:" lines that write both tracks at once
  *   NOT RED, and why: with `follow` ignoring the off switch, "heading: (the trail switched off ...)" stays green - the app's own
  *   `followTrail` asks first.
+ * The "smooth:" lines named above, and the "picture:", "time:" and "reverse:" lines that cut a route again at another
+ * smoothing, went with the Smoothing slider (`setRouteSmoothing`) on 2026-10-17, STREAMLINE.md stage 6. The two frames a
+ * picture takes when the renderer does not draw every depth one way moved from one of them to the loaded scene's line.
+ * `routeTiming` (which timing is lit in the Route tab) rides on the "route:" and "time:" lines.
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -119,7 +121,7 @@ import { startHostSync } from '../../deep-zoom/useHostSync';
 import { setReadings } from '../../deep-zoom/navigationState';
 import {
     ROUTE_ITERATIONS_TRACK, ROUTE_PACE_TRACK, ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, headingNow, installRoute, noteMove, noteTurn, retimeRoute, reverseRoute,
-    routeDrives, routeFromTrail, routeHandSet, routeKeys, routeSource, routeViewAt, setKeyframe, setRouteSmoothing, takeOwedPictures, useRoute,
+    routeDrives, routeFromTrail, routeHandSet, routeKeys, routeSource, routeTiming, routeViewAt, setKeyframe, takeOwedPictures, useRoute,
 } from '../../deep-zoom/route';
 import type { RoutePayload } from '../../deep-zoom/route';
 import {
@@ -585,9 +587,9 @@ check(made === keys.length && made > 8 && made < 80 && anim().undoStack.length =
 check(!anim().sequence.tracks[ROUTE_PACE_TRACK], 'route: and the Pace track of the route it replaces goes in that step (a pass\'s timing was the old route\'s)');
 check(calls.length === 0 && cameraOnRoute() && anim().currentFrame === keys[keys.length - 1].frame && anim().durationFrames >= keys[keys.length - 1].frame,
     'route: no view is set by it: the camera stands on the last keyframe, the playhead is there, and the timeline holds the route', `${calls.length} setView, frame ${anim().currentFrame}`);
-check(routeSource()?.smoothing === ROUTE_SMOOTHING.initial && !routeHandSet(), 'route: it knows it came from the trail, at the smoothing first offered');
+check(!!routeSource() && !routeHandSet() && routeTiming() === 'even', 'route: it knows it came from the trail, and it is at the even pace', `${routeTiming()}`);
 const offBy = worstOffRoute();
-check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of the trail lies within the smoothing of the route as it plays', `worst ${offBy}`);
+check(offBy <= ROUTE_SMOOTHING && offBy > 0.005, 'route: every sample of the trail lies within the smoothing of the route as it plays', `worst ${offBy}`);
 
 // ── exact ────────────────────────────────────────────────────────────────────────────────────────
 {
@@ -603,27 +605,6 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
         'exact: a keyframe holds the camera and the way it was travelling there, nothing else (no K mark: a smoothing pass may miss it)', `stray ${stray.join()}`);
     check(countKeys().length === keys.length && countKeys().every((c, i) => c.frame === keys[i].frame && c.value === sampleOf[i]?.iters && c.interpolation === 'Linear'),
         'exact: and each has its iteration key, the count in force when it was flown', countKeys().map((c) => c.value).join());
-}
-
-// ── smooth ───────────────────────────────────────────────────────────────────────────────────────
-{
-    const first = JSON.stringify(depthKeys().map((k) => [k.frame, (k.payload as RoutePayload).view.cam[2]])), trail = routeSource()?.trail, undoAt = anim().undoStack.length;
-    setRouteSmoothing(0.2);
-    const loose = routeKeys().length, looseOff = worstOffRoute();
-    check(loose < keys.length && routeSource()?.smoothing === 0.2 && routeSource()?.trail === trail && anim().undoStack.length === undoAt + 1,
-        'smooth: a wider smoothing cuts the route again from the same trail, with fewer keyframes, in one undo step', `${loose} against ${keys.length}`);
-    check(looseOff <= 0.2 && looseOff > ROUTE_SMOOTHING.initial && cameraOnRoute(), 'smooth: every sample lies within the new one, and the camera is still on the route', `worst ${looseOff}`);
-    setRouteSmoothing(0.01);
-    const tight = routeKeys().length;
-    check(tight > keys.length && worstOffRoute() <= 0.01, 'smooth: a narrower one makes more keyframes', `${tight} against ${keys.length}, worst ${worstOffRoute()}`);
-    setRouteSmoothing(ROUTE_SMOOTHING.initial);
-    check(JSON.stringify(depthKeys().map((k) => [k.frame, (k.payload as RoutePayload).view.cam[2]])) === first, 'smooth: and turned back it is the route it was');
-    const steps = anim().undoStack.length;
-    setRouteSmoothing(ROUTE_SMOOTHING.initial);
-    setRouteSmoothing(7);
-    check(anim().undoStack.length === steps + 1 && routeSource()?.smoothing === ROUTE_SMOOTHING.max, 'smooth: the same smoothing again is no step; one past the range is the widest');
-    setRouteSmoothing(ROUTE_SMOOTHING.initial);
-    keys = routeKeys();
 }
 
 // ── picture ──────────────────────────────────────────────────────────────────────────────────────
@@ -646,26 +627,6 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
         'picture: the trail, the heading, the undo stack and who holds the camera are as they were', `${trailSamples().length - samples} samples, ${anim().undoStack.length - steps} steps, heading ${JSON.stringify(headingNow())} was ${heading}`);
     calls.length = 0;
     check(takeOwedPictures() === 0 && calls.length === 0, 'picture: with none owed, nothing is set');
-    // Cut again from the same trail: the samples that had a picture keep it, only the new keyframes are drawn.
-    setRouteSmoothing(0.2);
-    const loose = routeKeys();
-    calls.length = 0;
-    check(loose.length < keys.length && loose.every((k) => pictures()[k.id] === own(k)) && takeOwedPictures() === 0 && calls.length === 0,
-        'picture: a wider smoothing: every keyframe is a sample that had its picture, and nothing is drawn again', `${loose.filter((k) => !pictures()[k.id]).length} of ${loose.length} without, ${calls.length} setView`);
-    setRouteSmoothing(0.01);
-    const tight = routeKeys(), fresh = tight.filter((k) => !pictures()[k.id]);
-    calls.length = 0;
-    stepped = 0;
-    drawMode = 'auto';                               // the developer lever off 'deep': the frame after a jump is drawn the last depth's way
-    const leftTight = takeOwedPictures();
-    drawMode = 'deep';
-    check(tight.length > keys.length && fresh.length === tight.length - keys.length && leftTight === 0 && calls.length === fresh.length + 1 && JSON.stringify(host.getView()) === stood
-        && tight.every((k) => pictures()[k.id] === own(k, fresh.includes(k) ? 2 : 1)) && stepped === 2 * (fresh.length + 1),
-        'picture: a narrower one: only the keyframes that are new are drawn (two frames each, and two back, when the renderer does not draw every depth one way), and the camera is back again',
-        `${fresh.length} without of ${tight.length} (${keys.length} before), ${calls.length} setView, ${stepped} frames`);
-    setRouteSmoothing(ROUTE_SMOOTHING.initial);
-    keys = routeKeys();
-    check(keys.every((k) => pictures()[k.id] === own(k)), 'picture: and turned back, every keyframe has its picture at once');
 
     // A route that ARRIVES (2026-10-12): a scene loaded over this one. Five keyframes of the route as a scene's text
     // holds them, under other key ids: none has a picture, and none came from a trail. `setSequence` is how a loaded
@@ -685,9 +646,12 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
     check(loaded.length === 5 && routeHandSet() && waiting === 5 && calls.length === 0 && loaded.every((k) => !pictures()[k.id]),
         'picture: a route that arrives with a loaded scene is owed its pictures, and none is taken while the shader of the scene\'s formula still builds', `${loaded.length} keyframes, ${waiting} owed, ${calls.length} setView`);
     building = null;
+    drawMode = 'auto';                               // the developer lever off 'deep': the frame after a jump is drawn the last depth's way
     const leftLoaded = takeOwedPictures();
-    check(leftLoaded === 0 && loaded.every((k) => pictures()[k.id] === own(k)),
-        'picture: then each of its keyframes gets its picture: of its own view, with the count keyed there', `${leftLoaded} owed, ${loaded.filter((k) => pictures()[k.id] !== own(k)).length} of ${loaded.length} wrong`);
+    drawMode = 'deep';
+    check(leftLoaded === 0 && loaded.every((k) => pictures()[k.id] === own(k, 2)) && stepped === 2 * (loaded.length + 1),
+        'picture: then each of its keyframes gets its picture: of its own view, with the count keyed there (two frames each, and two back, when the renderer does not draw every depth one way)',
+        `${leftLoaded} owed, ${loaded.filter((k) => pictures()[k.id] !== own(k, 2)).length} of ${loaded.length} wrong, ${stepped} frames`);
     check(JSON.stringify(host.getView()) === stoodLoaded && calls.length === loaded.length + 1 && anim().undoStack.length === stepsLoaded && trailSamples().length === samples,
         'picture: and the camera is the very view it was, with no undo step and no trail sample added', `${calls.length} setView, ${anim().undoStack.length - stepsLoaded} steps, back ${JSON.stringify(host.getView()) === stoodLoaded}`);
     calls.length = 0;
@@ -735,30 +699,25 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
 {
     const even = keys.map((k) => k.frame), ids = depthKeys().map((k) => k.id).join(), values = JSON.stringify(depthKeys().map((k) => [k.value, k.payload])), undoAt = anim().undoStack.length;
     retimeRoute(false);
-    check(anim().undoStack.length === undoAt, 'time: "Even pace" on a route that is at the even pace changes nothing, and is no undo step');
+    check(anim().undoStack.length === undoAt, 'time: "Even" on a route that is at the even pace changes nothing, and is no undo step');
     retimeRoute(true);
     const asFlown = routeKeys().map((k) => k.frame), trail = routeSource()?.trail ?? [];
     const seconds = (asFlown[asFlown.length - 1] - asFlown[0]) / 30;
-    check(asFlown.join() !== even.join() && Math.abs(seconds - trailSeconds(trail)) < 0.5 && anim().undoStack.length === undoAt + 1,
-        'time: "As flown" times the route by the trail\'s clock, in one undo step', `${seconds} s against ${trailSeconds(trail)}`);
+    check(asFlown.join() !== even.join() && Math.abs(seconds - trailSeconds(trail)) < 0.5 && anim().undoStack.length === undoAt + 1 && routeTiming() === 'flown',
+        'time: "As flown" times the route by the trail\'s clock, in one undo step, and the route is then as flown', `${seconds} s against ${trailSeconds(trail)}, ${routeTiming()}`);
     check(depthKeys().map((k) => k.id).join() === ids && JSON.stringify(depthKeys().map((k) => [k.value, k.payload])) === values
         && countKeys().every((c, i) => c.frame === asFlown[i]) && !!routeSource() && cameraOnRoute() && anim().currentFrame === asFlown[asFlown.length - 1],
         'time: only key times move: the same keys, views and counts, each iteration key on its keyframe, the playhead with the camera');
-    setRouteSmoothing(0.1);
-    const cutFlown = routeKeys().map((k) => k.frame);
-    check(Math.abs((cutFlown[cutFlown.length - 1] - cutFlown[0]) / 30 - trailSeconds(trail)) < 0.5, 'time: cut again, the route is still timed as flown');
-    setRouteSmoothing(ROUTE_SMOOTHING.initial);
     retimeRoute(false);
-    check(routeKeys().map((k) => k.frame).join() === even.join(), 'time: "Even pace" puts every leg back at 0.5 decades a second', `${routeKeys().map((k) => k.frame)} against ${even}`);
+    check(routeKeys().map((k) => k.frame).join() === even.join() && routeTiming() === 'even', 'time: "Even" puts every leg back at 0.5 decades a second, and the route is then even',
+        `${routeKeys().map((k) => k.frame)} against ${even}, ${routeTiming()}`);
     keys = routeKeys();
 }
 
 // ── reverse (in the app; 2026-10-16, stage Z1 of plans/deep-zoom-shell/ZOOM-OUTS.md) ─────────────
 // The cut route reversed (`reverseRoute`): its keyframes now run the trail backwards, so what the
-// route came from is the trail reversed - the smoothing cuts again from that, and "As flown" is
-// the flown clock mirrored.
+// route came from is the trail reversed, and "As flown" is the flown clock mirrored.
 {
-    const pictures = (): Record<string, string> => useRoute.getState().thumbnails;
     const legsOf = (frames: readonly number[]): number[] => frames.slice(1).map((f, i) => f - frames[i]);
     const trail = routeSource()?.trail ?? [], n = trail.length, sequence = anim().sequence, stack = anim().undoStack, again = anim().redoStack, playhead = anim().currentFrame;
     retimeRoute(true);
@@ -767,9 +726,9 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
     const steps = anim().undoStack.length, first = keys[0].frame;
     reverseRoute();
     const from = routeSource(), back = from?.trail ?? [];
-    check(anim().undoStack.length === steps + 1 && !!from && !routeHandSet() && from.smoothing === ROUTE_SMOOTHING.initial && back !== trail && back.length === n
+    check(anim().undoStack.length === steps + 1 && !!from && !routeHandSet() && back !== trail && back.length === n
         && back.every((s, i) => s.p === trail[n - 1 - i].p) && routeKeys().every((k, j) => camOf(back[from.samples[j]]).join() === k.view.cam.join()),
-        'reverse: a route cut from the trail, reversed in one undo step, still knows it came from the trail: the trail reversed, each keyframe its sample, at the smoothing it had');
+        'reverse: a route cut from the trail, reversed in one undo step, still knows it came from the trail: the trail reversed, each keyframe its sample');
     retimeRoute(true);
     const reversedFlown = routeKeys().map((k) => k.frame), reversedLegs = legsOf(reversedFlown), mirroredLegs = [...flownLegs].reverse();
     const legsOff = reversedLegs.filter((l, i) => l !== mirroredLegs[i]).length;
@@ -778,18 +737,6 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
         `reverse: "As flown" on the reversed route: every leg takes the time it was flown in, the other way round (${legsOff} of ${reversedLegs.length} legs a frame apart), in one undo step`,
         `${legsOff} legs differ, ${(reversedFlown[reversedFlown.length - 1] - first) / 30} s against ${trailSeconds(trail)}`);
     retimeRoute(false);
-    const cutBefore = routeKeys();
-    setRouteSmoothing(0.2);
-    const loose = routeKeys(), now = routeSource(), carried = loose.filter((k) => pictures()[k.id]?.startsWith(`${k.view.cam.join()} | `)).length;
-    check(now?.trail === back && now.smoothing === 0.2 && loose.length < cutBefore.length && sameCamera(loose[0].view, cutBefore[0].view)
-        && sameCamera(loose[loose.length - 1].view, cutBefore[cutBefore.length - 1].view) && worstOffRoute() <= 0.2 && cameraOnRoute(),
-        `reverse: the smoothing slider cuts it again from the trail reversed: from where the route ended to where it began, ${loose.length} keyframes, every sample within the smoothing`,
-        `${loose.length} keyframes, worst ${worstOffRoute()}, on the route ${cameraOnRoute()}`);
-    check(carried === loose.length, `reverse: and the pictures taken at the trail's samples go with them: ${carried} of ${loose.length} keyframes have theirs at once`);
-    setRouteSmoothing(ROUTE_SMOOTHING.initial);
-    const recut = routeKeys();
-    check(JSON.stringify(recut.map((k) => [k.frame, k.view, k.heading])) === JSON.stringify(cutBefore.map((k) => [k.frame, k.view, k.heading])),
-        'reverse: and turned back to the smoothing it had, it is the reversed route again: the same views and headings at the same frames', `${recut.length} keyframes against ${cutBefore.length}`);
     reverseRoute();
     check(routeSource()?.trail === trail && sameCamera(routeKeys()[0].view, keys[0].view) && sameCamera(routeKeys()[routeKeys().length - 1].view, keys[keys.length - 1].view),
         'reverse: reversed again, the route reads the very trail it was cut from, and runs the way it was flown');
@@ -861,8 +808,8 @@ check(offBy <= ROUTE_SMOOTHING.initial && offBy > 0.005, 'route: every sample of
     retimeRoute(false);
     const byLine = routeKeys().map((k) => k.frame);
     check(anim().undoStack.length === steps + 1 && byLine[0] === timed[0] && byLine.join() !== timed.join() && byLine.every((f, i) => Number.isInteger(f) && (i === 0 || f > byLine[i - 1]))
-        && countKeys().every((c, i) => c.frame === byLine[i]) && cameraOnRoute(),
-        'time: "Even pace" times it by the straight line between its keyframes, in one undo step, iteration keys and playhead with it', `${timed} -> ${byLine}`);
+        && countKeys().every((c, i) => c.frame === byLine[i]) && cameraOnRoute() && routeTiming() === 'even',
+        'time: "Even" times it by the straight line between its keyframes, in one undo step, iteration keys and playhead with it, and the route is then even', `${timed} -> ${byLine}, ${routeTiming()}`);
     anim().undo();
     fly(straight([ahead[0] - 0.05 * z, ahead[1], z], [here[0] - 0.05 * z, here[1], z]), 0, 1, 200);
     check(way() < -0.999, 'heading: a retreat of a whole depth turns it', `${way()}`);

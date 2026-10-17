@@ -39,8 +39,10 @@
  *     `deep-zoom/components/SmoothDialog.tsx`, the dialog's logic `deep-zoom/smoothDialog.ts`.
  *   - THE OTHER WAY TO MAKE A ROUTE is to cut it from the trail (`deep-zoom/trail.ts`: what the app
  *     remembers of how the camera was flown). `routeFromTrail()` replaces the route with one whose
- *     keyframes are the trail's own samples; `setRouteSmoothing()` cuts it again from the same
- *     trail, more or fewer keyframes; `retimeRoute()` moves key times only. This file is told of
+ *     keyframes are the trail's own samples, cut at `ROUTE_SMOOTHING`; `retimeRoute()` moves key
+ *     times only, and `routeTiming()` says which of the two timings the route is in. (The Smoothing
+ *     slider that cut it again from the same trail, `setRouteSmoothing`, went on 2026-10-17,
+ *     STREAMLINE.md stage 6: Smooth... is the one smoothing.) This file is told of
  *     every move, turn and set view, and passes each on to the trail. A route from the PREVIOUS
  *     trail first puts back the formula that trail was flown in, when another is in force: a jump
  *     (`jumpToTrailEnd`, deep-zoom/locations.ts).
@@ -171,8 +173,8 @@
  *     put the camera has none, and the path then enters it along the mean of its two legs). A
  *     keyframe that takes a new view (K on it, its row's button, Key Cam on it) keeps the heading
  *     it had: the nudge that framed it is not the way the route goes.
- *   - WHAT A CUT ROUTE CAME FROM IS SESSION MEMORY (`made`, by key id): the smoothing slider and
- *     "As flown" need the trail. After a reload, or for a route from a scene file, every keyframe
+ *   - WHAT A CUT ROUTE CAME FROM IS SESSION MEMORY (`made`, by key id): "As flown" needs the
+ *     trail. After a reload, or for a route from a scene file, every keyframe
  *     counts as set by hand. A REVERSED route runs its trail backwards, and `routeSource` hands
  *     back the trail reversed for it: read off the order of the keyframes' samples each time, so
  *     a reverse writes nothing into `made` and an undo of one needs nothing either.
@@ -217,8 +219,7 @@
  *     96-pixel one; what was measured is in the PICTURES @assumption below). It waits while the
  *     timeline plays, the hands fly, a dive flies or a route renders, and while a formula's
  *     shader is still building (a loaded scene may bring another formula: until its shader is
- *     there the renderer draws the plain picture). A route cut again from the same trail (the
- *     smoothing) keeps the pictures of the samples it had (`pictured`).
+ *     there the renderer draws the plain picture).
  *     A SCENE THAT IS BEING APPLIED IS NEVER PICTURED HALF WAY: the scene's keyframes arrive in
  *     the middle of the load, before its view, and all that happens then is that they are noted
  *     as owed; the pictures are a later task. Before a renderer is ready nothing is owed at all
@@ -271,17 +272,17 @@
  *   parks: no check line; tried once in the app, 2026-10-17.
  * @invariant A route cut from the trail is one undo step, its keyframes are trail samples to the
  *   digit, each with its iteration key, and every sample lies within the smoothing of the route as
- *   `routeViewAt` plays it; the smoothing cuts it again from the same trail; "Even pace" and "As
- *   flown" move key times only; an iteration key follows its keyframe when that is moved or deleted
- *   on the timeline, and is left alone by an undo - proven by: npm run check:deep-zoom-trail (the
- *   "route: ...", "exact: ...", "smooth: ...", "time: ...", "follow: ..." lines). Falsified
- *   2026-10-11: see that check's header.
+ *   `routeViewAt` plays it; "Even" and "As flown" move key times only; an iteration key follows
+ *   its keyframe when that is moved or deleted on the timeline, and is left alone by an undo -
+ *   proven by: npm run check:deep-zoom-trail (the "route: ...", "exact: ...", "time: ...",
+ *   "follow: ..." lines). Falsified 2026-10-11: see that check's header. (Its clause on the
+ *   Smoothing slider and the "smooth: ..." lines went with the slider, 2026-10-17.)
  * @invariant While the route is rendered (`setRouteRendering(true)`) K and a row's replace set
  *   nothing and leave no undo step, and `scrubRouteTo` still puts the camera on the route -
  *   proven by: npm run check:deep-zoom-route (the "render: ..." lines). Falsified 2026-10-11: the
  *   test taken out of `write` -> 3 red.
  * @assumption The same hold on `deleteKeyframe`, on Play and a leg's play, on a route cut from the
- *   trail, on the smoothing and on the two timings: each is one `routeRendering()` test. The check
+ *   trail and on the two timings: each is one `routeRendering()` test. The check
  *   has a line for the delete and one for a leg's play; none was taken out on its own.
  * @invariant The view shown is the route's rotation at the frame times the look IN THE CAMERA'S OWN
  *   FRAME (the hand's turn while it plays, the tracks' when scrubbed, a keyframe set under them),
@@ -363,7 +364,7 @@
  *   `route()` building the path from the depth track alone -> 3 red (0 of 1,437 half frames the
  *   engine's path; a pass's even pace x1.28; a range's two neighbouring legs).
  * @assumption The rest of the Pace track has green lines and was not broken on its own (three
- *   breaks were the stage's allowance): a typed leg and Even pace take its keys with the keyframes,
+ *   breaks were the stage's allowance): a typed leg and Even take its keys with the keyframes,
  *   in proportion and not on whole frames; Reverse mirrors it, the camera within 1e-14 of where it
  *   was; a keyframe dragged on the timeline takes its two legs' pace keys with it; Clear route takes
  *   it in its one step (check:deep-zoom-route, the other "pace: ..." lines); a route cut from the
@@ -391,14 +392,14 @@
  *   turn by that much when the route is reversed; on a keyframe it does not move at all.
  * @invariant A route cut from the trail and reversed still knows it came from the trail: the
  *   trail reversed (`routeSource`). "As flown" times each leg as it was flown, the other way
- *   round; the smoothing cuts again from the trail reversed, and turned back to the smoothing it
- *   had gives the reversed route again; reversed again, it reads the very trail it was cut from -
- *   proven by: npm run check:deep-zoom-trail (the "reverse: ..." lines of its second half).
- *   Falsified 2026-10-16: `routeSource` never turning the trail round -> 4 red there ("As flown"
- *   stayed green: off the trail forwards with the samples descending, each leg is the same size).
+ *   round; reversed again, it reads the very trail it was cut from - proven by: npm run
+ *   check:deep-zoom-trail (the "reverse: ..." lines of its second half). Falsified 2026-10-16:
+ *   `routeSource` never turning the trail round -> 4 red there, two of them lines of the Smoothing
+ *   slider, gone with it on 2026-10-17 ("As flown" stayed green: off the trail forwards with the
+ *   samples descending, each leg is the same size).
  * @assumption PICTURES: every keyframe of a cut route gets the picture of its own view at its
  *   keyed count, the camera is put back to the digit, the trail, the heading and the undo stack
- *   are not touched, and a route cut again draws only its new samples - green lines in
+ *   are not touched - green lines in
  *   check:deep-zoom-trail ("picture: ..."), none falsified, against a fake renderer whose
  *   "frame" is a counter. IN THE REAL APP, once, 2026-10-12 (headless Chrome on the GPU, a 1440 x
  *   900 window, the live frame 288 x 320; debug/scratch/route-fixes/app-six.mts, git-ignored): a
@@ -495,8 +496,8 @@ export const ROUTE_UNIT = FIXED_UNIT;
 /** How many points of a leg are asked "is this inside the solid". */
 export const ROUTE_SOLID_SAMPLES = 9;
 /** The smoothing a route is cut from a trail with: how far a flown view may lie from the route,
- *  in depths at that view. "Follow closely" to "smooth glide". */
-export const ROUTE_SMOOTHING = { min: 0.01, max: 0.5, initial: 0.05 } as const;
+ *  in depths at that view. (A slider from 0.01 to 0.5 set it until 2026-10-17; 0.05 was its start.) */
+export const ROUTE_SMOOTHING = 0.05;
 /** A route cut from a trail has no more keyframes than this. */
 export const ROUTE_TRAIL_KEYS = 300;
 /** The free look's three tracks, in radians: pan, tilt, roll (FREE LOOK in the header). The params
@@ -1343,12 +1344,10 @@ export function clearRoute(): void {
 
 // ── a route cut from the trail ───────────────────────────────────────────────────────────────────
 
-/** By key id, this session: the trail a keyframe was cut from (its dead ends gone), which sample
- *  of it, and the smoothing asked for. The oldest go past `MADE_KEPT`. */
-const made = new Map<string, { trail: readonly TrailSample[]; sample: number; smoothing: number }>();
+/** By key id, this session: the trail a keyframe was cut from (its dead ends gone), and which
+ *  sample of it. The oldest go past `MADE_KEPT`. */
+const made = new Map<string, { trail: readonly TrailSample[]; sample: number }>();
 const MADE_KEPT = 4000;
-/** The timing last asked for: a route cut again (the smoothing slider) is timed the same way. */
-let flownTiming = false;
 
 const timing = (): RouteTiming => ({ fps: anim().fps, pace: ROUTE_PACE, maxLegSeconds: ROUTE_MAX_LEG_SECONDS });
 const viewOfSample = (s: TrailSample): RouteView =>
@@ -1358,27 +1357,27 @@ const viewOfSample = (s: TrailSample): RouteView =>
  * What the route was cut from: set while every one of its keyframes came from one trail, this
  * session. `samples`: which sample of `trail` each keyframe is, in route order. A route that runs
  * its trail BACKWARDS (it was reversed: `reverseRoute`) came from the trail reversed: that is
- * what is handed back, so the smoothing cuts again from it and "As flown" reads its clock. Read
- * off the keyframes each time, never written by the reverse, so an undo of one needs nothing.
+ * what is handed back, so "As flown" reads its clock. Read off the keyframes each time, never
+ * written by the reverse, so an undo of one needs nothing.
  */
-export function routeSource(): { trail: readonly TrailSample[]; smoothing: number; samples: number[] } | null {
+export function routeSource(): { trail: readonly TrailSample[]; samples: number[] } | null {
     const keys = route().keys, first = keys.length > 0 ? made.get(keys[0].id) : undefined;
     if (!first || !keys.every((k) => made.get(k.id)?.trail === first.trail)) return null;
     const samples = keys.map((k) => made.get(k.id)?.sample ?? 0), end = first.trail.length - 1;
     return samples[0] > samples[samples.length - 1]
-        ? { trail: trailReversed(first.trail), smoothing: first.smoothing, samples: samples.map((s) => end - s) }
-        : { trail: first.trail, smoothing: first.smoothing, samples };
+        ? { trail: trailReversed(first.trail), samples: samples.map((s) => end - s) }
+        : { trail: first.trail, samples };
 }
 
 /** The route holds a keyframe that no trail made: one set by hand, or from a scene. */
 export const routeHandSet = (): boolean => route().keys.some((k) => !made.has(k.id));
 
 /** Replace the route with the one cut from `trail` (its dead ends gone). One animation-undo step. */
-function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
+function cutRoute(trail: readonly TrailSample[]): number {
     stopAt = null;
     if (anim().isPlaying) anim().pause();
-    const pick = pickKeyframes(trail, { ...timing(), tolerance: smoothing, cap: ROUTE_TRAIL_KEYS });
-    const frames = flownTiming ? trailFrames(trail, pick.index, timing(), true) : pick.frames;
+    const pick = pickKeyframes(trail, { ...timing(), tolerance: ROUTE_SMOOTHING, cap: ROUTE_TRAIL_KEYS });
+    const frames = pick.frames;
     const directions = trailDirections(trail);
     // The keys the pick measured, as they are: what was measured is what plays.
     const depthKeys: Keyframe[] = depthCurve(frames, pick.index.map((i) => trail[i].depth)).keys.map((k, j) => {
@@ -1393,14 +1392,10 @@ function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
     ensureTrack(ROUTE_ITERATIONS_TRACK, 'Iterations');
     dropTrack(ROUTE_PACE_TRACK);                                     // a pass's timing was the old route's
     anim().replaceKeyframes([{ trackId: ROUTE_TRACK, newKeys: depthKeys }, { trackId: ROUTE_ITERATIONS_TRACK, newKeys: countKeys }]);
-    depthKeys.forEach((k, j) => made.set(k.id, { trail, sample: pick.index[j], smoothing }));
+    depthKeys.forEach((k, j) => made.set(k.id, { trail, sample: pick.index[j] }));
     for (const id of made.keys()) { if (made.size <= MADE_KEPT) break; made.delete(id); }
-    // Their pictures: the ones this trail's samples already have (the route cut again; a reversed route cut
-    // again from the trail reversed: the same samples the other way), the rest a moment from now.
-    const known = pictured.get(trail), turned = reversedTrails.get(trail), knownTurned = turned && pictured.get(turned), have: Picture[] = [];
-    const pictureOf = (i: number): string | undefined => known?.get(i) ?? knownTurned?.get(trail.length - 1 - i);
-    owed = depthKeys.filter((k, j) => { const p = pictureOf(pick.index[j]); if (p) have.push({ id: k.id, view: (k.payload as RoutePayload).view, picture: p }); return !p; }).map((k) => k.id);
-    keepPictures(have);
+    // Their pictures, a moment from now: none of them was on screen as a keyframe.
+    owed = depthKeys.map((k) => k.id);
     picturesSoon();
 
     // (A recorded free look is left as it is: where it turns the last keyframe, the camera does not stand on it.)
@@ -1430,17 +1425,9 @@ export function routeFromTrail(previous = false): number {
     const flown = previous ? previousTrail() : trailToHere();
     if (!flown) { showToast(previous ? 'No previous trail is kept' : 'Nothing has been flown yet: there is no trail to make a route from', 'info'); return 0; }
     if (previous) jumpToTrailEnd(flown, previousTrailFormula());
-    flownTiming = false;
-    const count = cutRoute(cutDetours(flown), ROUTE_SMOOTHING.initial);
+    const count = cutRoute(cutDetours(flown));
     showToast(`Route made from the trail: ${count} keyframes`, 'success');
     return count;
-}
-
-/** Cut the route again from the trail it came from, with another smoothing. One animation-undo
- *  step; nothing when the route did not come from a trail, or already has that smoothing. */
-export function setRouteSmoothing(smoothing: number): void {
-    const from = routeSource(), next = Math.min(ROUTE_SMOOTHING.max, Math.max(ROUTE_SMOOTHING.min, smoothing));
-    if (from && next !== from.smoothing && !routeRendering()) cutRoute(from.trail, next);
 }
 
 /**
@@ -1455,12 +1442,46 @@ export function retimeRoute(flown: boolean): void {
     if (keys.length < 2 || !r.depth || (flown && !from) || routeRendering()) return;
     stopAt = null;
     if (anim().isPlaying) anim().pause();
-    if (from) flownTiming = flown;
     const was = keys.map((k) => k.frame);
-    const now = from
-        ? trailFrames(from.trail, from.samples, timing(), flown, was[0])
-        : evenFrames(keys.map(zoomKey), timing(), was);
-    moveKeyframes(r, was, now);
+    moveKeyframes(r, was, timedFrames(r, from, flown, was));
+}
+
+/** The key times `retimeRoute(flown)` gives the route `r` (`from`: what it was cut from), its first keyframe where it is. */
+function timedFrames(r: Built, from: ReturnType<typeof routeSource>, flown: boolean, was: readonly number[]): number[] {
+    return from ? trailFrames(from.trail, from.samples, timing(), flown, was[0]) : evenFrames(r.keys.map(zoomKey), timing(), was);
+}
+
+/** What `routeTiming` last said, and of which route (`route()`, rebuilt when a track changes) at which frame rate. */
+let timed: { of: Built; fps: number; is: 'flown' | 'even' | null } | null = null;
+
+/**
+ * Which of its two timings the route is in: 'flown' or 'even' when every key time is the one
+ * `retimeRoute` would give it (a route cut from the trail is 'even'). Null when that cannot be
+ * said: fewer than two keyframes, or a Pace track that holds keys (a smoothing pass's: the clock
+ * is then not the key times alone) - and null when neither, after a typed leg or a key moved on
+ * the timeline. Worked out again only when the route or the frame rate changed: the Route tab
+ * asks at every render.
+ * @invariant A route just cut from the trail, or timed with Even, is 'even'; timed As flown it is
+ *   'flown'; a route with a keyframe set by hand, timed with Even, is 'even' - proven by: npm run
+ *   check:deep-zoom-trail ("route: it knows it came from the trail, and it is at the even pace",
+ *   "time: ... and the route is then as flown", the two "time: ... and the route is then even").
+ *   Falsified 2026-10-17, one break a run: `same` answering true for any timing -> 2 red (the cut
+ *   route and the trail's route timed Even read 'flown'); the 'flown' test never taken -> 1 red (the
+ *   As flown line); the 'even' test asked of a trail's route only -> 1 red (the route set by hand).
+ * @assumption Null with a Pace track that holds keys, after a typed leg and after a key moved on the
+ *   timeline: no check line.
+ */
+export function routeTiming(): 'flown' | 'even' | null {
+    const r = route(), fps = anim().fps;
+    if (timed && timed.of === r && timed.fps === fps) return timed.is;
+    const from = routeSource(), was = r.keys.map((k) => k.frame), same = (now: readonly number[]): boolean => now.every((f, i) => f === was[i]);
+    let is: 'flown' | 'even' | null = null;
+    if (r.keys.length > 1 && r.depth && !(r.pace && r.pace.keyframes.length > 0)) {
+        if (from && same(timedFrames(r, from, true, was))) is = 'flown';
+        else if (same(timedFrames(r, from, false, was))) is = 'even';
+    }
+    timed = { of: r, fps, is };
+    return is;
 }
 
 /**
@@ -1539,14 +1560,13 @@ function moveKeyframes(r: Built, was: readonly number[], now: readonly number[])
 
 // ── reverse ──────────────────────────────────────────────────────────────────────────────────────
 
-/** By trail, the same trail the other way, both ways round: a reversed route reversed again reads
- *  the very trail it was cut from, and a route cut from either finds the pictures of the other. */
+/** By trail, the same trail the other way: a reversed route reads one trail reversed each time. */
 const reversedTrails = new WeakMap<readonly TrailSample[], readonly TrailSample[]>();
 
 /** `trail` the other way (`reverseTrail`), made once. */
 function trailReversed(trail: readonly TrailSample[]): readonly TrailSample[] {
     let back = reversedTrails.get(trail);
-    if (!back) { back = reverseTrail(trail); reversedTrails.set(trail, back); reversedTrails.set(back, trail); }
+    if (!back) { back = reverseTrail(trail); reversedTrails.set(trail, back); }
     return back;
 }
 
@@ -1899,8 +1919,6 @@ export function mergeCloseKeyframes(seconds = CLOSE_LEG_SECONDS): string[] {
 let owed: string[] = [];
 /** The keyframes' views a picture was tried for (`pictureId`). A keyframe's view is tried once: a keyframe whose picture cannot be drawn keeps its number. */
 const asked = new Set<string>();
-/** By trail: the picture taken at a sample. A route cut again from the same trail draws only the samples that are new. */
-const pictured = new WeakMap<readonly TrailSample[], Map<number, string>>();
 /** A picture is OF A KEYFRAME'S VIEW: its own stored view, as a string. */
 const viewKey = (v: RouteView): string => `${v.cam.join()}|${v.yaw}|${v.pitch}|${v.roll ?? 0}`;
 /** Which keyframe, holding which view: what one picture is of. Another keyframe at the same view is another picture (a
@@ -2000,11 +2018,6 @@ export function takeOwedPictures(budgetMs = Infinity): number {
             const picture = host.thumbnail(THUMBNAIL_PX);
             if (!picture) continue;                                  // nothing can be drawn now: it keeps its number
             taken.push({ id, view: key.view, picture });
-            // A trail's sample keeps the picture only while the keyframe is that sample's very view (a pass may have moved its aim).
-            const from = made.get(id);
-            if (from && viewKey(viewOfSample(from.trail[from.sample])) === viewKey(key.view)) {
-                pictured.set(from.trail, (pictured.get(from.trail) ?? new Map<number, string>()).set(from.sample, picture));
-            }
         }
         if (away) { host.setView(here); run(); }
     } finally {

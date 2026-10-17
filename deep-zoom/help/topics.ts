@@ -145,19 +145,22 @@ A route is a camera move through keyframes: views you set along the way. It is k
 - Click a row to select it. Its play button goes to its keyframe, playing the leg that arrives there, and stops on it; its other buttons replace the keyframe with the view on screen, and delete it.
 - With the playhead stopped on a keyframe before the last, \`K\` gives that keyframe the view on screen: the button then reads **Replace keyframe**.
 - A row is red when its leg passes through the solid. Move one of its two keyframes, or add one between them.
+- The ⋯ menu beside **Route to here** has **Delete selected**, for the rows you selected, and **Clear route**, for all of it. One undo brings either back.
 - \`T\` opens the timeline, where a keyframe can be moved in time.
 - With the pointer over the Route tab, as over the timeline, \`Space\` plays and pauses the route and \`Ctrl+Z\` undoes its edits; the fly keys wait until the pointer leaves.
 
 ## From the trail
 The app remembers how you fly. That is the trail, and its line on the Route tab says how deep and how long it is.
 - **Route to here** makes the route from the trail: from where it began to this view, without the dead ends. It replaces the route, and asks first when the route has keyframes you set by hand.
-- **Smoothing** sets how closely that route follows what you flew.
+- When a jump ends a trail that went deep, that trail is kept: **Route from the previous trail**, in the ⋯ menu, makes the route from it.
 - The **Trail** button switches the remembering off and on.
 
 ## Timing
-- **Even pace** times every leg by its length on screen, half a decade a second.
 - **As flown** times a route made from the trail the way you flew it.
+- **Even** times every leg by its length on screen, half a decade a second. Of the two, the one the route is in is lit.
+- **Smooth...** evens out how fast the picture moves, over the whole route or the legs you selected, with a graph of it before and after.
 - **Reverse** makes the route run the other way: its last keyframe becomes the first. One undo brings it back.
+- The line under them gives the route's keyframes, its length, its first and last depth, and its pace: the decades it goes a second.
 
 ## Playing
 - **Play** runs the route from the playhead to its last keyframe.

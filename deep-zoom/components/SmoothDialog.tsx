@@ -8,13 +8,15 @@
  * 2026-10-16 (plans/deep-zoom-shell/SMOOTHING.md, "The tool, as decided"), from the top:
  *   - WHAT: the whole route, the legs selected (the Route tab's rows, else the route's keys selected on the
  *     timeline: the first to the last, every leg between) or a frame range (the legs that hold it).
- *   - PACE BY: the route's own picture (the default), the picture with the free look on top, the path alone.
+ *   - EVEN OUT BY ("Pace by" until 2026-10-17, STREAMLINE.md stage 6: "pace" is decades a second and nothing
+ *     else): the route's own picture (the default), the picture with the free look on top, the path alone.
  *   - STRENGTH: one log slider from 4 s to the length of what is smoothed; its far end is one even pace.
  *   - THE MISS ALLOWED at a keyframe and THE FREE LOOK'S SMOOTHING: each a slider with a box to switch it
  *     off (off: every keyframe exact; the look carried as it is).
  *   - THE PACE GRAPH: how fast the middle of the picture moves along the route (picture heights a second,
  *     log), what is smoothed shaded; after a pass the route before it in gray, as it is now in colour, and
- *     the study's score under it (frames off their own 3 s average by over 25 %). The route is read when
+ *     the study's score under it (frames off their own 3 s average by over 25 %) AS A SHARE of the frames
+ *     read, "Frames off pace 43 % -> 5 %": a count grows with a longer route (`strayShare`). The route is read when
  *     the dialog opens and whenever it changes (not while it plays): about 4 s for the owner's 192 s route.
  *   - THE PROGRESS LINE while anything is read, with Cancel; the page stays usable (the reader works in
  *     tasks of 50 ms, the camera back on its view at the end of each).
@@ -61,7 +63,7 @@ import type { PaceBy } from '../route';
 import { CLOSE_LEG_SECONDS } from '../routeSmooth';
 import {
     EVEN, LOOK_SMOOTHING, MISS, closeRows, keyframeMap, knownPace, lastSmoothRun, paceColumns, paceRange, readPace, routeSignature, runSmooth, smoothSpan,
-    strayFrames, strengthFor, strengthFromSlider, strengthScale, strengthText, timelinePicked,
+    strayShare, strengthFor, strengthFromSlider, strengthScale, strengthText, timelinePicked,
 } from '../smoothDialog';
 import type { PaceReading, SmoothPhase, SmoothRun, SmoothScope, Strength } from '../smoothDialog';
 
@@ -84,6 +86,7 @@ interface Work { phase: SmoothPhase | 'graph'; done: number; of: number }
 type Outcome = { kind: 'done'; run: SmoothRun; what: string } | { kind: 'cancelled' } | { kind: 'nothing' };
 
 const plural = (n: number, one: string, many = `${one}s`): string => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
+const percent = (share: number): string => `${Math.round(share * 100)} %`;
 
 /**
  * The pace graph over a window of the route (`win`: frames from its first keyframe, in its timing now), log upward.
@@ -193,7 +196,7 @@ export const SmoothDialog: React.FC<{ picked: readonly string[]; onClose: () => 
     const close = useMemo(() => closeRows(keys, closeKeyframes(), fps), [depth, fps]);
 
     // The route as it stands is read when there is no reading of it: on opening, after a pass or an undo, for another
-    // "Pace by". Not while it plays or renders, nor during a run (which reads for itself).
+    // "Even out by". Not while it plays or renders, nor during a run (which reads for itself).
     useEffect(() => {
         if (busy || now || keys.length < 2 || playing || rendering || stoppedAt === sig) return;
         const ctl = new AbortController();
@@ -268,14 +271,14 @@ export const SmoothDialog: React.FC<{ picked: readonly string[]; onClose: () => 
         const m = keyframeMap(last.framesBefore, last.framesAfter);
         return (i: number): number => m(before.first + i) - now.first;
     }, [before, last, now]);
-    const strayNow = useMemo(() => (now ? strayFrames(now.speed, now.fps) : null), [now]);
-    const strayBefore = useMemo(() => (before ? strayFrames(before.speed, before.fps) : null), [before]);
-    // A part of the route: its own frames off too, before (in its old frames) and now.
-    const inNow = useMemo(() => (now && part && shade ? strayFrames(now.speed, now.fps, shade[0], shade[1]) : null), [now, part, shade?.[0], shade?.[1]]);
+    const strayNow = useMemo(() => (now ? strayShare(now.speed, now.fps) : null), [now]);
+    const strayBefore = useMemo(() => (before ? strayShare(before.speed, before.fps) : null), [before]);
+    // A part of the route: its own share off too, before (in its old frames) and now.
+    const inNow = useMemo(() => (now && part && shade ? strayShare(now.speed, now.fps, shade[0], shade[1]) : null), [now, part, shade?.[0], shade?.[1]]);
     const inBefore = useMemo(() => {
         if (!before || !last || !part || !span) return null;
         const f0 = last.framesBefore[0];
-        return strayFrames(before.speed, before.fps, last.framesBefore[span.a] - f0, last.framesBefore[span.b] - f0);
+        return strayShare(before.speed, before.fps, last.framesBefore[span.a] - f0, last.framesBefore[span.b] - f0);
     }, [before, last, part, span?.a, span?.b]);
     const share = work && work.of > 0 ? Math.min(1, work.done / work.of) : 0;
     const off = busy || rendering;
@@ -321,7 +324,7 @@ export const SmoothDialog: React.FC<{ picked: readonly string[]; onClose: () => 
                         </div>
 
                         <Dropdown<PaceBy>
-                            label="Pace by"
+                            label="Even out by"
                             value={paceBy}
                             onChange={setPaceBy}
                             options={PACE_BY.map((p) => ({ value: p.value, label: p.label }))}
@@ -362,13 +365,13 @@ export const SmoothDialog: React.FC<{ picked: readonly string[]; onClose: () => 
                             <span className="flex items-center gap-1"><span className="inline-block w-3 h-px bg-accent-400" />{before ? 'now' : 'the route'}</span>
                             <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 bg-accent-500/15 border-x border-accent-500/50" />smoothed</span>
                         </div>
-                        <div data-dz-smooth-score className="pt-1 leading-snug" title="Frames where the middle of the picture strays over 25 % from its own 3 s average: the score the study judged a timing by">
+                        <div data-dz-smooth-score className="pt-1 leading-snug" title="The share of the frames where the middle of the picture strays over 25 % from its own 3 s average: the score the study judged a timing by. A share, not a count: a longer route has more frames.">
                             {strayNow === null ? (now !== null || work ? KEEP_LINE : stoppedAt === sig ? 'Reading the pace was cancelled: Smooth reads it first.'
                                 : 'The pace is read when the route is not playing.')
                                 : <>
-                                    Off their own 3 s average by over 25 %:{' '}
-                                    <span className="font-mono text-fg-secondary">{strayBefore !== null ? `${plural(strayBefore, 'frame')} -> ${strayNow.toLocaleString('en-US')}` : plural(strayNow, 'frame')}</span>
-                                    {inNow !== null && <>, in what is smoothed <span className="font-mono text-fg-secondary">{inBefore !== null ? `${inBefore.toLocaleString('en-US')} -> ` : ''}{inNow.toLocaleString('en-US')}</span></>}
+                                    Frames off pace{' '}
+                                    <span className="font-mono text-fg-secondary">{strayBefore !== null ? `${percent(strayBefore)} -> ${percent(strayNow)}` : percent(strayNow)}</span>
+                                    {inNow !== null && <>, in what is smoothed <span className="font-mono text-fg-secondary">{inBefore !== null ? `${percent(inBefore)} -> ` : ''}{percent(inNow)}</span></>}
                                 </>}
                         </div>
                         <div className="pt-0.5 text-fg-faint leading-snug">A pass cannot smooth what lies outside what is smoothed: an edge on a rough stretch stays as rough.</div>

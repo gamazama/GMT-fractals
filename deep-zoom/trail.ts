@@ -52,8 +52,7 @@
  *                    behind it: each leg by the straight line between its two keyframes.
  *   `reverseTrail`   the trail the other way, for a route that was reversed (`reverseRoute` in
  *                    `deep-zoom/route.ts`): a cut route reversed runs its trail backwards, and
- *                    `routeSource` hands it this instead, so the smoothing and "As flown" go on
- *                    working.
+ *                    `routeSource` hands it this instead, so "As flown" goes on working.
  *
  * THE SEAM
  *   - `followTrail`, `trailTurned`, `trailViewSet`: from `deep-zoom/route.ts` (a move, a turn, a

@@ -52,7 +52,7 @@
  *   engine   (2026-10-16, stage S1 of plans/deep-zoom-shell/SMOOTHING.md) the engine's key lookup, a binary search now,
  *            against the scan it replaced, on random tracks: the same values to the bit
  *   pace     the Pace track: the path's clock is the depth track times it, to the digit; none or x1 changes nothing;
- *            a typed leg, Even pace, a drag on the timeline, Reverse and Clear route take it along
+ *            a typed leg, Even, a drag on the timeline, Reverse and Clear route take it along
  *   smooth   the pass's rules on the pure functions (deep-zoom/routeSmooth.ts: the warp, a range, the clock, the look),
  *            then the pass itself (`smoothRoute`) on a scene whose rays meet a cone narrowing to a passage near 1e-7 -
  *            the fake host's `freeDistance` - (the rush evened, one undo step, positions to the digit, K keyframes and
@@ -210,7 +210,7 @@ import {
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
 import { carryLook, paceChange, paceSpan, speedMargin, warpRoute } from '../../deep-zoom/routeSmooth';
 import {
-    EVEN, STRENGTH_MIN, closeRows, keyframeMap, knownPace, paceColumns, paceRange, routeSignature, runSmooth, smoothSpan, strayFrames, strengthFor, strengthFromSlider,
+    EVEN, STRENGTH_MIN, closeRows, keyframeMap, knownPace, paceColumns, paceRange, routeSignature, runSmooth, smoothSpan, strayFrames, strayShare, strengthFor, strengthFromSlider,
     strengthScale, timelinePicked,
 } from '../../deep-zoom/smoothDialog';
 import type { SmoothPhase } from '../../deep-zoom/smoothDialog';
@@ -1196,14 +1196,14 @@ const places = (from: number, to: number): string[] => { const out: string[] = [
     check(same === all && moved > 0.05, `pace: the path's scale is the depth track times the Pace track: at every half frame the camera is the engine's own path with that scale, to the digit (${all} half frames; a pace of x3 and of x0.5 moves the camera by up to ${(Math.exp(moved) - 1).toFixed(2)} of its distance)`,
         `${same} of ${all} the same`);
 
-    // A typed leg, then Even pace: the pace keys go with the keyframes, in proportion and not rounded.
+    // A typed leg, then Even: the pace keys go with the keyframes, in proportion and not rounded.
     setLegSeconds(ks[2].id, 5);
     const typed = paceKeys().map((k) => k.frame).join();
     check(typed === '0,120,240,240.5,390,480,570', 'pace: a typed leg takes the pace keys with the keyframes: those of its leg in proportion (not rounded: a clock\'s keys would meet), those after it by its frames',
         typed);
     retimeRoute(false);
     check(paceKeys().map((k) => k.frame).join() === keyed.map((k) => k.frame).join() && routeKeys().map((k) => k.frame).join() === '0,240,540,720',
-        'pace: and Even pace takes them back with the keyframes, to where they were', paceKeys().map((k) => k.frame).join());
+        'pace: and Even takes them back with the keyframes, to where they were', paceKeys().map((k) => k.frame).join());
     anim().undo();
     anim().undo();
     // Reverse: the Pace track mirrored, the camera where it was at every mirrored frame.
@@ -1552,9 +1552,12 @@ function smoothScene(): void {
         && !!read && !!run.before && run.before.speed.every((v, i) => v === read.speed[i]) && !!readAfter && !!run.after && run.after.speed.length === readAfter.speed.length && run.after.speed.every((v, i) => v === readAfter.speed[i]),
         `dialog: a run reads the route before the pass, runs it (one undo step), and reads the route again after it - the route as it now plays, not the pass's own reckoning (${run?.result.seconds.map((s) => s.toFixed(1)).join(' s -> ')} s)`,
         `phases ${phases}, steps ${anim().undoStack.length - steps}, rays ${readBefore}`);
+    // Given as a share of the frames read (2026-10-17, STREAMLINE.md stage 6: a count grows with a longer route).
+    const shareOf = (s: ArrayLike<number>): number => strays(s) / Array.from(s).filter((v) => v > 0).length;
     check(!!run?.before && !!run.after && strayFrames(run.after.speed, fps) * 4 < strayFrames(run.before.speed, fps) && strayFrames(run.before.speed, fps) === strays(run.before.speed)
-        && strayFrames(run.after.speed, fps) === strays(run.after.speed),
-        `dialog: its score is the study's (the middle of the picture off its own 3 s average by over 25 %): ${run?.before ? strayFrames(run.before.speed, fps) : '-'} frames before, ${run?.after ? strayFrames(run.after.speed, fps) : '-'} after`);
+        && strayFrames(run.after.speed, fps) === strays(run.after.speed)
+        && strayShare(run.before.speed, fps) === shareOf(run.before.speed) && strayShare(run.after.speed, fps) === shareOf(run.after.speed) && strayShare([NaN, 0], fps) === null,
+        `dialog: its score is the study's (the middle of the picture off its own 3 s average by over 25 %), given as a share of the frames read: ${run?.before ? strayFrames(run.before.speed, fps) : '-'} frames before (${run?.before ? Math.round(100 * (strayShare(run.before.speed, fps) ?? 0)) : '-'} %), ${run?.after ? strayFrames(run.after.speed, fps) : '-'} after (${run?.after ? Math.round(100 * (strayShare(run.after.speed, fps) ?? 0)) : '-'} %)`);
     calls.length = 0;
     anim().undo();
     const undone = knownPace('route'), undoneRays = calls.filter((c) => c.name === 'freeDistance').length;
