@@ -3,19 +3,23 @@
 // warning, and the "Viewport Sample / Est. Total" estimator. The
 // plugin owns everything else — form scaffolding, progress, ETA,
 // stop/resume/finish-early, capability check, disk-mode probe.
+// Two pieces that were here are the engine's since 2026-10-17, when the
+// deep zoomer took over GMT's export options: the size list
+// (`canvasResolutionPresets`, installed in main.tsx) and the Internal
+// Scale slider (`InternalScaleField`, drawn below with GMT's value).
 
 import React, { useEffect, useState } from 'react';
-import Slider, { DraggableNumber } from '../components/Slider';
+import { DraggableNumber } from '../components/Slider';
 import { useEngineStore } from '../store/engineStore';
 import { getProxy } from '../engine-gmt/engine/worker/WorkerProxy';
 import { VIDEO_FORMATS } from '../data/constants';
 import { canEncodeFormat } from '../engine/export/videoEncoder';
 import { formatDurationMs, formatTimeWithUnits } from '../components/timeline/exportHelpers';
 import { WarningNote } from '../components/WarningNote';
+import { InternalScaleField } from '../engine/plugins/RenderDialog';
 import type {
     RenderDialogExtraFieldsProps,
     RenderDialogConfig,
-    RenderDialogResolutionPreset,
     RenderDialogStartContext,
 } from '../engine/plugins/RenderDialog';
 import type { AppGmtExtra } from '../engine-gmt/components/timeline/RenderPopup/exportRunner';
@@ -29,29 +33,6 @@ export const APP_GMT_DEFAULT_EXTRA: AppGmtExtra = {
     exportDepth:   false,
     depthMin:      0,
     depthMax:      5,
-};
-
-// Reactive preset provider — recomputed on every form render so the
-// "Viewport (WxH)" entry tracks fixedResolution mode and "Screen
-// (WxH)" tracks current window dimensions.
-export const appGmtResolutionPresets = (): RenderDialogResolutionPreset[] => {
-    const state = useEngineStore.getState();
-    const presets: RenderDialogResolutionPreset[] = [];
-    if (state.resolutionMode === 'Fixed') {
-        const [w, h] = state.fixedResolution;
-        presets.push({ label: 'Viewport', w, h });
-    }
-    presets.push({ label: 'Screen', w: window.innerWidth, h: window.innerHeight });
-    presets.push(
-        { label: '720p HD (16:9)',         w: 1280, h: 720  },
-        { label: '1080p FHD (16:9)',       w: 1920, h: 1080 },
-        { label: '1440p QHD (16:9)',       w: 2560, h: 1440 },
-        { label: '4K UHD (16:9)',          w: 3840, h: 2160 },
-        { label: 'Square 1:1 (Insta)',     w: 1080, h: 1080 },
-        { label: 'Portrait 4:5 (Insta)',   w: 1080, h: 1350 },
-        { label: 'Vertical 9:16 (TikTok)', w: 1080, h: 1920 },
-    );
-    return presets;
 };
 
 // Start-button label: image-sequence requires the directory picker,
@@ -251,18 +232,8 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                 )}
             </div>
 
-            {/* Internal scale (SSAA) */}
-            <Slider
-                label="Internal Scale (SSAA)"
-                value={extra.internalScale}
-                min={1.0} max={2.0} step={0.01}
-                onChange={(v) => patchExtra({ internalScale: v })}
-                overrideInputText={`${+extra.internalScale.toFixed(2)}x`}
-                highlight={extra.internalScale > 1.0}
-            />
-            <div className="px-2 text-[8px] text-fg-dim mb-2">
-                Use 1.5x or 2.0x for sharper details (Supersampling).
-            </div>
+            {/* Internal scale (SSAA): the engine's field, GMT's value */}
+            <InternalScaleField value={extra.internalScale} onChange={(v) => patchExtra({ internalScale: v })} />
 
             {/* Viewport sample-time estimator. Drives the user's
              *  intuition for "how long will this render take" before

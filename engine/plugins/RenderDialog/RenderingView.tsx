@@ -1,6 +1,11 @@
 // In-progress export view — progress bar, ETA, settings summary,
 // stop / resume / finish-early / discard controls. Lifted from
 // fluid-toy and made generic.
+//
+// REMAINING is a range ("1m 20s – 1m 40s"), or - when the runner hands
+// one figure as both ends (above 0) - "about" it, in whole minutes from
+// a minute on ("about 3 min"): the deep zoomer's, from the frames it has
+// made so far (2026-10-17). Every other runner hands a range.
 
 import React from 'react';
 import Button from '../../../components/Button';
@@ -8,6 +13,13 @@ import { PlayIcon, StopIcon, CheckIcon, TrashIcon } from '../../../components/Ic
 import { VIDEO_FORMATS } from '../../../data/constants';
 import { formatTimeWithUnits } from '../../../components/timeline/exportHelpers';
 import type { RenderDialogConfig } from './types';
+
+/** One figure of time left, as the dialog says it: seconds under a minute, whole minutes under an hour. */
+const aboutTime = (secs: number): string => {
+    if (secs < 60) return `about ${Math.max(1, Math.round(secs))} s`;
+    const m = Math.round(secs / 60);
+    return m < 60 ? `about ${m} min` : `about ${Math.floor(m / 60)} h ${m % 60} min`;
+};
 
 export interface RenderingViewProps {
     onStop:           () => void;
@@ -66,8 +78,10 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
                 </div>
                 <div className="flex flex-col text-right">
                     <span className="t-label-sm text-fg-dim mb-0.5">Remaining</span>
-                    <span className="font-mono text-sm font-bold text-accent-300">
-                        {formatTimeWithUnits(etaRange.min)} – {formatTimeWithUnits(etaRange.max)}
+                    <span className="font-mono text-sm font-bold text-accent-300" data-render-remaining>
+                        {etaRange.min > 0 && etaRange.min === etaRange.max
+                            ? aboutTime(etaRange.min)
+                            : `${formatTimeWithUnits(etaRange.min)} – ${formatTimeWithUnits(etaRange.max)}`}
                     </span>
                 </div>
                 <div className="flex flex-col pt-2 border-t border-line/5">

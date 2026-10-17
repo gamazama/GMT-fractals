@@ -132,18 +132,31 @@ export const DeepZoomApp: React.FC = () => {
             <div className="flex-1 flex overflow-hidden relative">
                 {!isMobile && <Dock side="left" />}
 
-                {/* Mode controls off: in Fixed mode the frame's inner box is a fixed
-                    width and height under a CSS scale, which the renderer would read
-                    as its size. Declined until the engine has a sink for it (gap E4). */}
-                <ViewportFrame className="flex-1" showModeControls={false}>
+                {/* GMT's canvas control (2026-10-17): the viewport's Full / Fixed mode. In Fixed
+                    mode the frame's inner box is the Fixed width and height under a CSS scale,
+                    and the renderer reads that box as its size (`clientWidth`, which no scale
+                    changes): the picture takes the Fixed shape, and Quality's Frame size, the
+                    drawn long edge, is capped by the Fixed size instead of the window's. The
+                    frame's own controls stay off: the control is a HUD item under the depth box
+                    (main.tsx), which holds the corner they would take. The HUD and the depth
+                    scale lie over the picture as it shows, unscaled (`pictureOverlay`): in Fixed
+                    mode they would otherwise shrink with the box. */}
+                <ViewportFrame
+                    className="flex-1"
+                    showModeControls={false}
+                    pictureOverlay={(
+                        <>
+                            <HudHost />
+                            {/* The depth scale (the `camera` feature's overlay). A sibling of
+                                the picture's frame, never inside it. */}
+                            <FeatureOverlays />
+                        </>
+                    )}
+                >
                     <DeepZoomSurface />
                     {/* GMT's fly navigation, driving the renderer through its host. A sibling
                         of the picture: it draws the look-drag reticle over it. */}
                     <DeepZoomNavigation />
-                    <HudHost />
-                    {/* The depth scale (the `camera` feature's overlay). A sibling of the
-                        picture's frame, never inside it. */}
-                    <FeatureOverlays />
                 </ViewportFrame>
 
                 <Dock side="right" />

@@ -45,6 +45,7 @@ import { DeepZoomApp } from './DeepZoomApp';
 import { registerUI } from '../engine/features/ui';
 import { setupDeepZoom } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
+import { ViewportModeControls } from '../engine/plugins/viewport/ViewportModeControls';
 import { installTopBar, topbar } from '../engine/plugins/TopBar';
 import { registerCoreSettings } from '../store/coreSettings';
 import { registerDeepZoomSettings } from './settings';
@@ -96,6 +97,9 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
 // under the splash. It is caught here and handed to the boundary as
 // `initialError`, which draws the same readable fallback on first paint.
 let bootError: unknown = null;
+
+/** GMT's canvas control as a HUD item (registered below, under the depth box). */
+const CanvasControl: React.FC = () => <ViewportModeControls inline />;
 try {
     // Registers the engine's own panel components (`auto-feature-panel`, …)
     // in the component registry. Before any panel renders.
@@ -103,9 +107,11 @@ try {
 
     // @engine/viewport, with the adaptive loop OFF. The renderer sizes its own
     // frame (its long-edge setting and a depth-dependent cap that keeps one
-    // deep draw under the GPU watchdog), so nothing here reads qualityFraction,
-    // renderScale or canvasPixelSize. `enabled: false` pins qualityFraction at 1
-    // so no readout shows a scale the renderer is not using.
+    // deep draw under the GPU watchdog), so nothing here reads qualityFraction
+    // or renderScale. `enabled: false` pins qualityFraction at 1 so no readout
+    // shows a scale the renderer is not using. The viewport's Full / Fixed mode
+    // IS this app's (GMT's canvas control, 2026-10-17: the HUD item below, and
+    // DeepZoomApp.tsx for what the renderer reads in Fixed mode).
     installViewport({ enabled: false });
 
     // @engine/topbar — the defaults: project name (left), FPS (right), adaptive
@@ -170,6 +176,12 @@ try {
     // picture; it takes the pointer (its Dive field), the rest of the HUD does not.
     installHud();
     hud.register({ id: 'deep-zoom.depth', slot: 'top-left', component: DepthReadout, className: 'pointer-events-auto' });
+    // GMT's canvas control (the owner, 2026-10-17: "we still need to appropriate the resolution/canvas control from
+    // gmt too"): the engine's ViewportModeControls - Full / Fixed, the Fixed size dragged or typed, its shape from the
+    // menu, Fill back. UNDER the depth box: the box holds the picture's top-left corner, where GMT puts the control.
+    // Inline, in the slot's flow, so it follows the box's height; no render-scale pill (Frame size is the renderer's
+    // own resolution, in Quality).
+    hud.register({ id: 'deep-zoom.canvas', slot: 'top-left', order: 1, component: CanvasControl, className: 'pointer-events-auto ml-2' });   // ml-2: the depth box's own margin
 
     // The engine's animation tick (`engine.animation`, ANIMATE phase). This call is its
     // only registration: without it the timeline does not play. The modulation UI (LFO

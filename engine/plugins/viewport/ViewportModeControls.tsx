@@ -13,6 +13,15 @@
  * in a custom layout, or disable via ViewportFrame's showModeControls
  * prop. GMT hides it during broadcast mode; toy-fluid might hide it
  * when the user toggles a clean-feed mode.
+ *
+ * `inline` (2026-10-17, the deep zoomer's): the controls in the flow of
+ * their parent - a HUD slot, under the app's own instrument there -
+ * instead of placed at `top` / `left`, and without the render-scale
+ * pill (it centres on the viewport, and an app whose surface sizes
+ * itself has no render scale for it to set). Without `availableWidth`
+ * / `availableHeight` the "Fit to Window" presets fit the viewport
+ * area the frame last measured (`canvasPixelSize`, physical pixels,
+ * over the device pixel ratio).
  */
 
 import React from 'react';
@@ -32,6 +41,8 @@ export interface ViewportModeControlsProps {
      *  fixedResolution. */
     availableWidth?: number;
     availableHeight?: number;
+    /** In the flow of the parent, with no render-scale pill (see the header). */
+    inline?: boolean;
 }
 
 /** Compact segmented picker for the user's render-scale multiplier.
@@ -98,25 +109,32 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
     left = 12,
     availableWidth,
     availableHeight,
+    inline = false,
 }) => {
     const mode = useEngineStore((s) => s.resolutionMode);
     const fixedResolution = useEngineStore((s) => s.fixedResolution);
     const setMode = useEngineStore((s) => s.setResolutionMode);
     const setFixedResolution = useEngineStore((s) => s.setFixedResolution);
+    const area = useEngineStore((s) => s.canvasPixelSize);
+    const dpr = window.devicePixelRatio || 1;
+    // Placed at top / left, or (inline) in the parent's flow.
+    const placed = inline ? 'relative' : 'absolute';
+    const at = inline ? undefined : { top, left };
 
     if (mode === 'Fixed') {
         const [w, h] = fixedResolution;
         return (
             <>
                 {/* Top-left: resolution drag-pill + Fill button */}
-                <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
+                <div className={`${placed} z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap`} style={at}>
                     <FixedResolutionControls
                         width={w}
                         height={h}
                         top={0}
                         left={0}
-                        maxAvailableWidth={availableWidth ?? w * 2}
-                        maxAvailableHeight={availableHeight ?? h * 2}
+                        inline={inline}
+                        maxAvailableWidth={availableWidth ?? area[0] / dpr}
+                        maxAvailableHeight={availableHeight ?? area[1] / dpr}
                         onSetResolution={setFixedResolution}
                         onSetMode={setMode}
                     />
@@ -124,13 +142,15 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
                 {/* Top-center: render-scale (DPR multiplier) — only shown
                     in Fixed mode. Centred on the viewport via 50% + a
                     translateX(-50%) to keep it visually balanced no
-                    matter how wide the canvas is. */}
-                <div
-                    className="absolute z-50 -translate-x-1/2"
-                    style={{ top, left: '50%' }}
-                >
-                    <RenderScaleControl />
-                </div>
+                    matter how wide the canvas is. Not inline (header). */}
+                {!inline && (
+                    <div
+                        className="absolute z-50 -translate-x-1/2"
+                        style={{ top, left: '50%' }}
+                    >
+                        <RenderScaleControl />
+                    </div>
+                )}
             </>
         );
     }
@@ -139,7 +159,7 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
     // multiplier is intentionally hidden here — it's only meaningful when
     // the user is composing for a target output size (Fixed mode).
     return (
-        <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
+        <div className={`${placed} z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap`} style={at}>
             <button
                 onClick={(e) => { e.stopPropagation(); setMode('Fixed'); }}
                 className="flex items-center gap-1.5 text-[9px] font-bold text-fg-tertiary bg-surface/80 px-2 py-1 rounded border border-line/10 hover:border-accent-500/50 hover:text-accent-400 hover:bg-accent-900/30 transition-all shadow-sm backdrop-blur-md group"

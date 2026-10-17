@@ -23,9 +23,10 @@
  *   - Telemetry reaches the engine's chrome from a store subscription, not from React render: the
  *     fps goes to `viewport.reportRenderFps` (the top bar's counter), and the first live sample
  *     takes the HTML splash down.
- *   - Overlays (HUD, boot lines, later the depth scale) are SIBLINGS of `#dz-frame`, never its
+ *   - Overlays (HUD, boot lines, the depth scale) are SIBLINGS of `#dz-frame`, never its
  *     children: the canvas is appended to the frame in code, after React's children, and would
- *     paint over them.
+ *     paint over them. (The HUD and the depth scale lie in the viewport frame's `pictureOverlay`
+ *     since 2026-10-17, so that they keep their size in Fixed mode: DeepZoomApp.tsx.)
  *
  * PITFALLS
  *   - `host.step(now)` takes a TIMESTAMP in milliseconds. The tick's own argument is a delta in

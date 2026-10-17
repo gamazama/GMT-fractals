@@ -4,12 +4,20 @@
 // extraWarning, extraInfoRows).
 //
 // Rows, top to bottom: What (the format: one segmented row for three
-// formats or fewer, a dropdown above that), the size (a width and a
-// height, or under `shapes` a width and a Shape row), Quality (`draft`
-// only), the range (frames, or seconds under `rangeInSeconds`), bitrate,
-// samples, the app's fields, the summary. The words are plain: no
-// codec's name and no "RAM" / "DISK" (the format labels are
-// data/constants.ts's).
+// formats or fewer, a dropdown above that), the size (a preset, a width
+// and a height), Quality (`draft` only), the range (frames, or seconds
+// under `rangeInSeconds`), bitrate, samples, the app's fields, the
+// summary. The words are plain: no codec's name and no "RAM" / "DISK"
+// (the format labels are data/constants.ts's).
+//
+// Two pieces for apps, beside the form (2026-10-17, lifted from app-gmt
+// when the deep zoomer took over GMT's export options - one master each):
+//   - `canvasResolutionPresets`: the size list as GMT's canvas gives it -
+//     the viewport's Fixed size ("Viewport", Fixed mode only), the
+//     window ("Screen"), then the standard sizes.
+//   - `InternalScaleField`: the Internal Scale (SSAA) slider. The value
+//     lives in the app's `extra` bag; rendering larger and scaling down
+//     is the runner's.
 
 import React from 'react';
 import Slider, { DraggableNumber } from '../../../components/Slider';
@@ -18,18 +26,17 @@ import Button from '../../../components/Button';
 import { Segmented } from '../../../components/ui';
 import { PlayIcon, SaveIcon, AlertIcon } from '../../../components/Icons';
 import { VIDEO_FORMATS } from '../../../data/constants';
+import { useEngineStore } from '../../../store/engineStore';
 import type {
     RenderDialogConfig,
     RenderDialogExtraFieldsProps,
     RenderDialogPreset,
     RenderDialogResolutionPreset,
-    RenderDialogShape,
 } from './types';
 
-/** `VIDEO_FORMATS`' PNG sequence: under the install option `frameFolder` it is the format
- *  "Frames (PNG folder)" - one PNG a frame, written by the runner into a folder. */
-export const FRAME_FOLDER_FORMAT_INDEX = VIDEO_FORMATS.findIndex((f) => f.imageSequence && f.ext === 'png');
-export const isFrameFolderFormat = (formatIndex: number): boolean => formatIndex === FRAME_FOLDER_FORMAT_INDEX;
+/** Under the install option `frameFolder`, `VIDEO_FORMATS`' image sequences - "Frames (PNG folder)" and
+ *  "Frames (JPG folder)" - are folders: one file a frame, written by the runner into a folder it asks for. */
+export const isFrameFolderFormat = (formatIndex: number): boolean => !!VIDEO_FORMATS[formatIndex]?.imageSequence;
 
 type FormatFilter = (formatDef: typeof VIDEO_FORMATS[number], index: number) => boolean;
 
@@ -39,7 +46,7 @@ type FormatFilter = (formatDef: typeof VIDEO_FORMATS[number], index: number) => 
 export function shownFormats(formatFilter: FormatFilter | undefined, frameFolder: boolean): number[] {
     return VIDEO_FORMATS
         .map((f, i) => ({ f, i }))
-        .filter(({ f, i }) => (formatFilter ? formatFilter(f, i) : (!f.imageSequence || (frameFolder && isFrameFolderFormat(i)))))
+        .filter(({ f, i }) => (formatFilter ? formatFilter(f, i) : (!f.imageSequence || frameFolder)))
         .sort((a, b) => Number(a.f.listLast) - Number(b.f.listLast))
         .map(({ i }) => i);
 }
@@ -53,6 +60,39 @@ const DEFAULT_RES_PRESETS: RenderDialogResolutionPreset[] = [
     { label: 'Portrait 4:5 (Insta)',   w: 1080, h: 1350 },
     { label: 'Vertical 9:16 (TikTok)', w: 1080, h: 1920 },
 ];
+
+/** The sizes as the canvas gives them (a `resolutionPresets` function, read each time the form draws): in Fixed mode
+ *  the viewport's Fixed size ("Viewport"), always the window ("Screen"), then the standard sizes. App-gmt's list since
+ *  it had one; the deep zoomer's since 2026-10-17. */
+export const canvasResolutionPresets = (): RenderDialogResolutionPreset[] => {
+    const state = useEngineStore.getState();
+    const presets: RenderDialogResolutionPreset[] = [];
+    if (state.resolutionMode === 'Fixed') {
+        const [w, h] = state.fixedResolution;
+        presets.push({ label: 'Viewport', w, h });
+    }
+    presets.push({ label: 'Screen', w: window.innerWidth, h: window.innerHeight });
+    presets.push(...DEFAULT_RES_PRESETS);
+    return presets;
+};
+
+/** The Internal Scale (SSAA) row: 1x to 2x. The field only - the value is the app's (its `extra` bag), and the runner
+ *  renders each frame that much larger and scales it down to the size set. */
+export const InternalScaleField: React.FC<{ value: number; onChange: (v: number) => void }> = ({ value, onChange }) => (
+    <>
+        <Slider
+            label="Internal Scale (SSAA)"
+            value={value}
+            min={1.0} max={2.0} step={0.01}
+            onChange={onChange}
+            overrideInputText={`${+value.toFixed(2)}x`}
+            highlight={value > 1.0}
+        />
+        <div className="px-2 text-[8px] text-fg-dim mb-2">
+            Use 1.5x or 2.0x for sharper details (Supersampling).
+        </div>
+    </>
+);
 
 /** A segmented row at the form's size: its buttons sized from outside (they are its direct
  *  children), as the deep zoomer's Route tab sizes its Timing row. */
@@ -78,9 +118,6 @@ export interface ConfigFormProps<TExtra> {
     /** The install options of the same names (types.ts). All absent: the form as it always was. */
     frameFolder:         boolean;
     rangeInSeconds:      boolean;
-    shapes?:             RenderDialogShape[];
-    shape:               number;
-    setShape:            (index: number) => void;
     draft?:              RenderDialogPreset;
     isDraft:             boolean;
     setDraft:            (on: boolean) => void;
@@ -103,14 +140,14 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
         durationFrames, isFormatSupported, formatSupportError, isDiskMode,
         showSamplesPerFrame, showFrameStep, showBitrate,
         formatFilter, resolutionPresets,
-        frameFolder, rangeInSeconds, shapes, shape, setShape, draft, isDraft, setDraft,
+        frameFolder, rangeInSeconds, draft, isDraft, setDraft,
         ExtraFormFields, ExtraInfoRows, ExtraWarning,
         startLabel, isStartDisabled,
         onStart,
     } = props;
 
     const currentFormat = VIDEO_FORMATS[cfg.formatIndex];
-    // `frameFolder`: the PNG sequence is offered, written by the runner into a folder.
+    // `frameFolder`: the image sequences are offered, written by the runner into a folder.
     const folderFormat = frameFolder && isFrameFolderFormat(cfg.formatIndex);
     const formatOptions = shownFormats(formatFilter, frameFolder).map((index) => ({ label: VIDEO_FORMATS[index].label, value: index }));
 
@@ -123,11 +160,6 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
         ...(presets.some((p) => p.w === cfg.width && p.h === cfg.height)
             ? []
             : [{ label: `Custom (${cfg.width}x${cfg.height})`, value: presetVal }]),
-    ];
-    // `shapes`: the list is of widths; a width not in it (a Draft's) is listed as the size it gives.
-    const widthOpts = [
-        ...presets.map((p) => ({ label: p.label, value: p.w })),
-        ...(presets.some((p) => p.w === cfg.width) ? [] : [{ label: `${cfg.width} x ${cfg.height}`, value: cfg.width }]),
     ];
 
     const totalFrames = Math.floor((cfg.endFrame - cfg.startFrame) / Math.max(1, cfg.frameStep)) + 1;
@@ -186,65 +218,40 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
 
                 {ExtraWarning && <ExtraWarning cfg={cfg} extra={extra} />}
 
-                {shapes ? (
-                    <>
-                        <Dropdown
-                            label="Width"
-                            labelSuffix={<span className="font-normal text-fg-muted"> · {cfg.width} x {cfg.height}</span>}
-                            value={cfg.width}
-                            onChange={(v) => setCfg({ width: Number(v) })}
-                            options={widthOpts}
-                            className="mb-1.5"
-                        />
-                        <div className="mb-1.5">
-                            <label className="t-label mb-0.5 block">Shape</label>
-                            <Segmented
-                                name="render-shape"
-                                className={SEG}
-                                value={shape}
-                                onChange={setShape}
-                                options={shapes.map((s, i) => ({ id: i, name: s.label, title: s.title }))}
+                <Dropdown
+                    label="Size"
+                    value={presetVal}
+                    onChange={(v) => {
+                        const [w, h] = (v as string).split('x').map(Number);
+                        setCfg({ width: w, height: h });
+                    }}
+                    options={presetOpts}
+                    className="mb-1.5"
+                />
+                <div className="flex gap-1 mb-1.5">
+                    <div className="flex-1">
+                        <label className="t-label mb-0.5 block">Width</label>
+                        <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
+                            <DraggableNumber
+                                value={cfg.width}
+                                onChange={(v) => setCfg({ width: Math.max(32, Math.round(v)) })}
+                                step={2}
+                                overrideText={cfg.width.toFixed(0)}
                             />
                         </div>
-                    </>
-                ) : (
-                    <>
-                        <Dropdown
-                            label="Size"
-                            value={presetVal}
-                            onChange={(v) => {
-                                const [w, h] = (v as string).split('x').map(Number);
-                                setCfg({ width: w, height: h });
-                            }}
-                            options={presetOpts}
-                            className="mb-1.5"
-                        />
-                        <div className="flex gap-1 mb-1.5">
-                            <div className="flex-1">
-                                <label className="t-label mb-0.5 block">Width</label>
-                                <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
-                                    <DraggableNumber
-                                        value={cfg.width}
-                                        onChange={(v) => setCfg({ width: Math.max(32, Math.round(v)) })}
-                                        step={2}
-                                        overrideText={cfg.width.toFixed(0)}
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex-1">
-                                <label className="t-label mb-0.5 block">Height</label>
-                                <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
-                                    <DraggableNumber
-                                        value={cfg.height}
-                                        onChange={(v) => setCfg({ height: Math.max(32, Math.round(v)) })}
-                                        step={2}
-                                        overrideText={cfg.height.toFixed(0)}
-                                    />
-                                </div>
-                            </div>
+                    </div>
+                    <div className="flex-1">
+                        <label className="t-label mb-0.5 block">Height</label>
+                        <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
+                            <DraggableNumber
+                                value={cfg.height}
+                                onChange={(v) => setCfg({ height: Math.max(32, Math.round(v)) })}
+                                step={2}
+                                overrideText={cfg.height.toFixed(0)}
+                            />
                         </div>
-                    </>
-                )}
+                    </div>
+                </div>
 
                 {draft && (
                     <div className="mb-1.5">

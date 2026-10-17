@@ -19,6 +19,13 @@
  *   3. Mode controls overlay — FixedResolutionControls when Fixed,
  *      a compact "Fixed" toggle when Full. Opt-out via showModeControls.
  *
+ *   4. Three places for an app's overlays: `children` (inside the sized
+ *      box: scaled with the picture in Fixed mode), `outerOverlay` (the
+ *      whole viewport area) and `pictureOverlay` (2026-10-17: over the
+ *      picture as it shows, the box's visible rectangle, NOT scaled - an
+ *      instrument on the picture stays readable in Fixed mode; in Full
+ *      mode it is the whole area, as `children` are).
+ *
  * GMT's full viewport (worker display + R3F Canvas + DOM overlays +
  * composition + histogram + region select) slots in as children.
  * Fractal-toy's single canvas slots in as children. Toy-fluid's canvas
@@ -79,6 +86,19 @@ export interface ViewportFrameProps {
      *  rather than the canvas. ViewportModeControls already uses this
      *  level for the mode-switch button. */
     outerOverlay?: React.ReactNode;
+
+    /** Optional overlay laid over the picture AS IT SHOWS: in Fixed
+     *  mode the scaled box's visible rectangle, at full size - not
+     *  scaled with it - so an instrument on the picture's corner stays
+     *  readable; in Full mode the whole area. It takes no pointer
+     *  (`pointer-events-none`): its items opt back in. The deep zoomer
+     *  lays its HUD and its depth scale here.
+     *  @assumption It lies on the picture's visible rectangle (the 1px
+     *  border of the Fixed box aside) - seen in the deep zoomer on
+     *  2026-10-17 (debug/scratch/canvas-export/try.mjs, git-ignored): at
+     *  Fixed 1920 x 1080 shown at 1163 x 654 the depth box kept its
+     *  217 x 79 and sat on the picture's corner. No guard stands behind it. */
+    pictureOverlay?: React.ReactNode;
 }
 
 const CONTROLS_OFFSET_Y = 40;
@@ -104,6 +124,7 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
     innerClassName = '',
     fixedPadding = 40,
     outerOverlay,
+    pictureOverlay,
 }) => {
     const outerRef = useRef<HTMLDivElement>(null);
     const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
@@ -228,6 +249,16 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
                     availableWidth={viewportSize.w}
                     availableHeight={viewportSize.h}
                 />
+            )}
+
+            {/* Over the picture as it shows, not scaled (see `pictureOverlay`). */}
+            {pictureOverlay && (
+                <div
+                    className="absolute pointer-events-none"
+                    style={{ left: canvasLeft, top: canvasTop, width: visibleW, height: visibleH }}
+                >
+                    {pictureOverlay}
+                </div>
             )}
 
             {/* Sibling of the inner sized container — viewport-area

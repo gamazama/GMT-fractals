@@ -23,9 +23,10 @@
 // passes none of them gets the dialog as it always was; two more of
 // that day, `fixedSizes` and `presets`, went on 2026-10-17, below):
 //   - `frameFolder`: for a runner that makes every frame itself. The
-//     format "Frames (PNG folder)" and one Cancel button during the
-//     run. The frames go through `engine/export/frameFolder.ts`; the
-//     RUNNER asks for the folder, and looks into it.
+//     formats "Frames (PNG folder)" and (since 2026-10-17) "Frames (JPG
+//     folder)", and one Cancel button during the run. The frames go
+//     through `engine/export/frameFolder.ts`; the RUNNER asks for the
+//     folder, and looks into it.
 //   - `status.setResult(...)`: what to show when the run has ended (a
 //     few lines, a command with a Copy button) instead of the form.
 // And `defaults` may be a function, called each time the dialog opens.
@@ -45,8 +46,8 @@
 //
 // THE RENDER RECIPE (2026-10-17, the deep zoomer's streamline stage 7;
 // every app gains the first two):
-//   - IT REMEMBERS. What and how to render - the format, the size, the
-//     shape, Draft or Final, the samples, the bitrate, the frame step,
+//   - IT REMEMBERS. What and how to render - the format, the size,
+//     Draft or Final, the samples, the bitrate, the frame step,
 //     the `extra` bag - is kept under `storageKey` (localStorage, one
 //     key per installed dialog) from the first change by hand, and the
 //     dialog opens on it again, also after a reload. An app's `defaults`
@@ -58,13 +59,15 @@
 //   - ESCAPE CLOSES IT, but not while a run lasts (the window's X does
 //     not either); while a question is open, Escape closes it as the X
 //     does, and the question is answered with its `cancel`.
-//   - `shapes`: the size is a width and a shape, the height follows.
 //   - `draft`: a Quality row, [Draft | Final], Final putting back the
 //     values Draft replaced (it replaced the one-way `presets` buttons).
 //   - `rangeInSeconds`: Start and End in seconds.
 //   - Three formats or fewer are one segmented row, not a dropdown.
 //   (`fixedSizes`, the sizes-from-a-list-only option, went with
-//   `presets`: its one user, the deep zoomer, takes `shapes` now.)
+//   `presets`. `shapes` - a width and [Window | 16:9 | 1:1], the height
+//   following - went later that day: its one user, the deep zoomer,
+//   takes GMT's sizes now, from the canvas (`canvasResolutionPresets`),
+//   and its shape from the viewport's Fixed mode, one way, not two.)
 // The words are plain (no "RAM", "DISK" or codec names), and the bitrate
 // follows the size: a new size proposes its own (40 Mbps at 1920 x 1080,
 // by area) unless the same change sets one.
@@ -86,14 +89,13 @@ import type {
     InstallRenderDialogOptions,
     RenderDialogConfig,
     RenderDialogFlags,
-    RenderDialogPreset,
     RenderDialogStatus,
     RenderDialogDeps,
     RenderDialogQuestion,
     RenderDialogResult,
 } from './types';
 
-export { FRAME_FOLDER_FORMAT_INDEX } from './ConfigForm';
+export { InternalScaleField, canvasResolutionPresets, isFrameFolderFormat } from './ConfigForm';
 export type {
     RenderDialogConfig,
     RenderDialogFlags,
@@ -105,7 +107,6 @@ export type {
     RenderDialogExtraFieldsProps,
     RenderDialogPreset,
     RenderDialogResolutionPreset,
-    RenderDialogShape,
     RenderDialogStartContext,
     InstallRenderDialogOptions,
 } from './types';
@@ -134,28 +135,17 @@ const sameTyped = <T,>(base: T, stored: unknown): T => {
 /** The bitrate a size is given: 40 Mbps at 1920 x 1080, by area. */
 const bitrateFor = (w: number, h: number): number => Math.max(1, Math.round(40 * (w * h) / (1920 * 1080)));
 
-/** The height a width gives at a shape (width over height): the nearest even number. */
-const heightAt = (width: number, aspect: number): number => Math.max(2, 2 * Math.round(width / aspect / 2));
-
 /**
- * The next form from a change: under `shapes` (`aspect` not null) the height follows the width; a new size is given
- * its own bitrate unless the change sets one.
+ * The next form from a change: a new size is given its own bitrate unless the change sets one.
  *
  * @assumption A bitrate typed by hand lasts until the next change of size (the Draft / Final switch puts its own
  *   back). Read off this function; no try typed a bitrate, and no check stands behind it.
  */
-function settle(c: RenderDialogConfig, patch: Partial<RenderDialogConfig>, aspect: number | null): RenderDialogConfig {
+function settle(c: RenderDialogConfig, patch: Partial<RenderDialogConfig>): RenderDialogConfig {
     const next = { ...c, ...patch };
-    if (aspect !== null) next.height = heightAt(next.width, aspect);
     if ((next.width !== c.width || next.height !== c.height) && patch.bitrate === undefined) next.bitrate = bitrateFor(next.width, next.height);
     return next;
 }
-
-/** The form at a shape: the height follows; in Draft the draft is applied again, at that shape. */
-const reshape = (c: RenderDialogConfig, aspect: number | null, draft: RenderDialogPreset | null): RenderDialogConfig => {
-    const next = settle(c, {}, aspect);
-    return draft ? settle(next, draft.apply(next), aspect) : next;
-};
 
 /** What one installed dialog keeps between two opens in this session: the range, and the span it was left on. */
 interface DialogMemory {
@@ -189,7 +179,6 @@ interface ShellProps<TExtra> {
 interface Stored<TExtra> {
     cfg:         Kept;
     extra:       TExtra;
-    shape:       number;
     beforeDraft: Kept | null;
 }
 
@@ -213,11 +202,6 @@ function RenderDialogShell<TExtra>(
     const baseSize     = options.baseSize     ?? { width: BASE_WIDTH, height: BASE_HEIGHT };
     const expandedSize = options.expandedSize ?? baseSize;
     const storageKey   = options.storageKey   ?? `render-dialog:${window.location.pathname}`;
-    const shapes       = options.shapes;
-    const aspectOf = (i: number): number | null => {
-        const a = shapes?.[i]?.aspect;
-        return a === undefined ? null : typeof a === 'function' ? a() : a;
-    };
 
     // ─── The form as it opens ──────────────────────────────────────
     // The defaults (an object, or a function asked once per open), then what is kept over them, then the range.
@@ -241,19 +225,14 @@ function RenderDialogShell<TExtra>(
         if (!shownFormats(options.formatFilter, !!options.frameFolder).includes(cfg.formatIndex)) cfg.formatIndex = base.formatIndex;
         const kept = memory.range;
         if (kept && kept.span.start === span.start && kept.span.end === span.end) cfg = { ...cfg, startFrame: kept.startFrame, endFrame: kept.endFrame };
-        const s = stored?.shape;
-        const shape = shapes && typeof s === 'number' && Number.isInteger(s) && s >= 0 && s < shapes.length ? s : 0;
         const beforeDraft = options.draft && stored?.beforeDraft ? keptOf(stored.beforeDraft) : null;
-        if (shapes) cfg = reshape(cfg, aspectOf(shape), beforeDraft && options.draft ? options.draft : null);
-        return { span, cfg, shape, beforeDraft, extra: sameTyped((d?.extra ?? {}) as TExtra, stored?.extra), fps: d?.fps };
+        return { span, cfg, beforeDraft, extra: sameTyped((d?.extra ?? {}) as TExtra, stored?.extra), fps: d?.fps };
     }, []);
 
     const [cfg, setCfgState]          = useState<RenderDialogConfig>(opened.cfg);
     const [extra, setExtraState]      = useState<TExtra>(opened.extra);
-    const [shape, setShapeState]      = useState(opened.shape);
     /** In Draft: the values Draft replaced, for Final to put back. Null: Final. */
     const [beforeDraft, setBeforeDraft] = useState<Kept | null>(opened.beforeDraft);
-    const draftNow = beforeDraft && options.draft ? options.draft : null;
     /** Set by the first change by hand: nothing is kept for a dialog that was only looked at. */
     const changed = useRef(false);
 
@@ -267,16 +246,11 @@ function RenderDialogShell<TExtra>(
             next = { ...rest, ...('width' in patch || 'height' in patch || bitrate === undefined ? {} : { bitrate }), ...patch };
             setBeforeDraft(null);
         }
-        setCfgState((c) => settle(c, next, aspectOf(shape)));
+        setCfgState((c) => settle(c, next));
     };
     const patchExtra = (patch: Partial<TExtra>) => {
         changed.current = true;
         setExtraState((e) => ({ ...e, ...patch }));
-    };
-    const setShape = (i: number) => {
-        changed.current = true;
-        setShapeState(i);
-        setCfgState((c) => reshape(c, aspectOf(i), draftNow));
     };
     const setDraft = (on: boolean) => {
         if (!options.draft || on === !!beforeDraft) return;
@@ -286,9 +260,9 @@ function RenderDialogShell<TExtra>(
             const patch = options.draft.apply(cfg);
             const keys = new Set(['width', 'height', 'bitrate', ...Object.keys(patch)]);
             setBeforeDraft(keptOf(Object.fromEntries([...keys].map((k) => [k, cfg[k as keyof RenderDialogConfig]]))));
-            setCfgState((c) => settle(c, patch, aspectOf(shape)));
+            setCfgState((c) => settle(c, patch));
         } else {
-            setCfgState((c) => settle(c, beforeDraft ?? {}, aspectOf(shape)));
+            setCfgState((c) => settle(c, beforeDraft ?? {}));
             setBeforeDraft(null);
         }
     };
@@ -296,18 +270,12 @@ function RenderDialogShell<TExtra>(
     // Kept: what and how, from the first change by hand (storageKey); the range, for the session (the closure).
     useEffect(() => {
         if (!changed.current) return;
-        const stored: Stored<TExtra> = { cfg: keptOf(cfg), extra, shape, beforeDraft };
+        const stored: Stored<TExtra> = { cfg: keptOf(cfg), extra, beforeDraft };
         safeLocalSet(storageKey, JSON.stringify(stored));
-    }, [cfg, extra, shape, beforeDraft]);
+    }, [cfg, extra, beforeDraft]);
     useEffect(() => {
         memory.range = { span: opened.span, startFrame: cfg.startFrame, endFrame: cfg.endFrame };
     }, [cfg.startFrame, cfg.endFrame]);
-
-    // `shapes`: a shape of live state (the app's picture) may have changed since the last draw.
-    useEffect(() => {
-        const aspect = aspectOf(shape);
-        if (aspect !== null && heightAt(cfg.width, aspect) !== cfg.height) setCfgState((c) => reshape(c, aspect, draftNow));
-    });
 
     // Re-clamp the frame range when the timeline duration changes. The
     // dialog is a non-modal DraggableWindow, so the user can shrink the
@@ -518,9 +486,6 @@ function RenderDialogShell<TExtra>(
                     formatFilter={options.formatFilter}
                     frameFolder={!!options.frameFolder}
                     rangeInSeconds={!!options.rangeInSeconds}
-                    shapes={shapes}
-                    shape={shape}
-                    setShape={setShape}
                     draft={options.draft}
                     isDraft={!!beforeDraft}
                     setDraft={setDraft}

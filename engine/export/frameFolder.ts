@@ -148,6 +148,30 @@ export async function pngSize(png: Blob): Promise<{ width: number; height: numbe
     return { width: head.getUint32(16), height: head.getUint32(20) };
 }
 
+/**
+ * The width and height a JPEG file says it has (its frame header, SOF0 to SOF15), or null when the bytes do not begin
+ * as a JPEG does or no frame header is in its first 64 KiB. The JPEG side of `pngSize`, for a folder of JPG frames.
+ *
+ * @assumption It reads the size of a canvas-made JPEG (the deep zoomer's JPG frames: `convertToBlob`, Chrome) - tried
+ *   in the app on 2026-10-17 (debug/scratch/canvas-export/, git-ignored: a JPG folder continued at another size was
+ *   refused, with both sizes said). No test stands behind it, and it was not broken on purpose.
+ */
+export async function jpegSize(jpg: Blob): Promise<{ width: number; height: number } | null> {
+    const b = new Uint8Array(await jpg.slice(0, 65536).arrayBuffer());
+    if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null;
+    for (let i = 2; i + 8 < b.length;) {
+        if (b[i] !== 0xff) return null;
+        const marker = b[i + 1];
+        if (marker === 0xff) { i++; continue; }                          // a fill byte
+        // SOF0..SOF15, but C4 (Huffman tables), C8 (reserved) and CC (arithmetic coding) are not frame headers.
+        if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+            return { width: (b[i + 7] << 8) | b[i + 8], height: (b[i + 5] << 8) | b[i + 6] };
+        }
+        i += 2 + ((b[i + 2] << 8) | b[i + 3]);
+    }
+    return null;
+}
+
 /** What of a set of frames is in the folder (`lookForFrames`). */
 export interface FramesFound {
     /** One answer a frame, in the order asked: the frame is there, as `has` says it. Shorter than
@@ -155,8 +179,9 @@ export interface FramesFound {
     there: boolean[];
     /** How many of them are there. */
     count: number;
-    /** The sizes the frames there say they have (`pngSize`), each size once, in the order met. A
-     *  frame that is not a PNG says none, so this can be empty with frames there. */
+    /** The sizes the frames there say they have (`pngSize`, or `jpegSize`), each size once, in the
+     *  order met. A frame that is neither a PNG nor a JPEG says none, so this can be empty with
+     *  frames there. */
     sizes: Array<{ width: number; height: number }>;
 }
 
@@ -175,7 +200,7 @@ export async function lookForFrames(folder: FrameFolder, indices: number[], stop
         found.there.push(file !== null);
         if (!file) continue;
         found.count++;
-        const size = await pngSize(file);
+        const size = (await pngSize(file)) ?? (await jpegSize(file));
         if (size && !found.sizes.some((s) => s.width === size.width && s.height === size.height)) found.sizes.push(size);
     }
     return found;

@@ -182,15 +182,17 @@ While a route plays in Fly mode, a drag on the picture or \`Q\` \`E\` turns the 
 **Render**, on the Route tab and on the timeline (and Render route in the File menu), makes the route into pictures: one for every frame from the first keyframe to the last. With no route it renders the timeline as it is. The dialog opens on what you set the last time, and Escape closes it.
 
 ## Video or frames
-- **Video MP4** writes one video file as the render goes. **Interrupt Render** holds it; then **Resume**, **Finish** to keep what is made so far, or **Discard**. A video cannot be continued later.
-- **Frames (PNG folder)** writes one PNG a frame into a folder you pick. A render you stop loses nothing: the frames written stay, and a later run can go on from them. At the end the dialog gives the ffmpeg line that makes a video of them.
+- **Video MP4** writes one video file as the render goes; so do its higher and best quality, for newer players, and **Video WebM**. A format this browser cannot make at that size says so. **Interrupt Render** holds a video; then **Resume**, **Finish** to keep what is made so far, or **Discard**. A video cannot be continued later.
+- **Frames (PNG folder)** and **Frames (JPG folder)** write one picture a frame into a folder you pick. A render you stop loses nothing: the frames written stay, and a later run can go on from them. At the end the dialog gives the ffmpeg line that makes a video of them.
 - The files are named after the project, or after the route's depths, such as deep_zoom_2e0_to_1e-3.
 
 ## Size and quality
-- **Width**, 640 to 3840 px, at a **Shape**: Window (the picture's own), 16:9 or 1:1.
+- **Size** offers the picture's own size while it is **Fixed** (**Viewport**), the window (**Screen**) and the usual video sizes; **Width** and **Height** take any other.
+- **Fixed**, under the depth readout on the picture, gives the picture a size and a shape of its own: drag the size, or pick a shape from its menu. **Fill** fills the space again. **Frame size** in Quality is still how sharp the picture is drawn, up to that size.
 - **Draft** is 320p and 1 sample, for a quick look at the whole route before the real render. **Final** puts back the size and the samples you had.
-- **Samples / Frame**: more samples are cleaner and slower.
-- Start and End are in seconds. Under them, the estimate says about how long the render will take.
+- **Samples / Frame**: more samples are cleaner and slower. **Internal Scale (SSAA)** draws each frame larger and shrinks it, for finer detail; 2x takes about four times as long.
+- Start and End are in seconds; **Step** renders every second frame, or every third, and so on.
+- The estimate says how long the render will take once a render at the same size and samples has run; during a render the dialog says about how long is left.
 
 ## When frames are already in the folder
 The dialog counts them and asks.
@@ -277,7 +279,7 @@ The three tabs on the right change how the picture looks, never where you are. \
 - **Fly or Orbit** (\`Tab\`), or type a depth and **Dive** to it.
 - **Save places** with \`B\`; \`1\` to \`9\` go back to the first nine.
 - **Routes**: \`K\` drops a keyframe as you fly, and **Play** flies through them.
-- **Render** a route as PNG frames or a video file, up to 3840 px.
+- **Render** a route as a video (MP4 or WebM) or as PNG or JPG frames, at GMT's sizes; **Fixed** gives the picture its own size and shape.
 
 ### If you used the earlier prototype
 - **Drag the picture to look.** \`Q\` \`E\` roll; \`Space\` and \`C\` go up and down.

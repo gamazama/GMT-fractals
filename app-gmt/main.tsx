@@ -70,7 +70,7 @@ import { installGmtCameraBinders } from '../engine-gmt/animation/cameraBinders';
 import { installGmtColoringBinders } from '../engine-gmt/animation/coloringBinders';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { useAnimationStore } from '../store/animationStore';
-import { installRenderDialog } from '../engine/plugins/RenderDialog';
+import { canvasResolutionPresets, installRenderDialog } from '../engine/plugins/RenderDialog';
 import { registerRenderAdjunct } from '../engine/animation/renderAdjunctRegistry';
 import { afxRenderAdjunct } from './AfxRenderAdjunct';
 import { fbxRenderAdjunct } from './FbxRenderAdjunct';
@@ -79,7 +79,6 @@ import {
     AppGmtExtraFormFields,
     AppGmtExtraWarning,
     APP_GMT_DEFAULT_EXTRA,
-    appGmtResolutionPresets,
     appGmtStartLabel,
     appGmtIsStartDisabled,
     appGmtCanEncode,
@@ -471,7 +470,7 @@ installRenderDialog<AppGmtExtra>({
     showSamplesPerFrame: true,
     formatFilter:        () => true, // keep image-sequence formats in the dropdown
     canEncode:           appGmtCanEncode,
-    resolutionPresets:   appGmtResolutionPresets,
+    resolutionPresets:   canvasResolutionPresets,
     extraFormFields:     AppGmtExtraFormFields,
     extraWarning:        AppGmtExtraWarning,
     startLabel:          appGmtStartLabel,

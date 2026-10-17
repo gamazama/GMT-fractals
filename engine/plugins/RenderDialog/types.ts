@@ -32,6 +32,9 @@ export interface RenderDialogStatus {
     /** 0..1 — plugin formats this as a percentage in the UI. */
     setProgress:      (n: number) => void;
     setElapsedTime:   (n: number) => void;
+    /** The time left, in seconds, as a range ("1m 20s – 1m 40s"). A
+     *  runner with ONE figure passes it as both ends (above 0): the
+     *  dialog then says "about" it, in whole minutes from a minute on. */
     setEtaRange:      (r: { min: number; max: number }) => void;
     setLastFrameTime: (n: number) => void;
     setStatusText:    (s: string) => void;
@@ -116,19 +119,8 @@ export interface RenderDialogPreset {
     /** Its tooltip: what it sets, in a line. */
     title?: string;
     /** The fields to change, given the form as it stands. Called when it
-     *  is chosen, so it may read live state; under `shapes` the height
-     *  then follows the width. */
+     *  is chosen, so it may read live state. */
     apply:  (cfg: RenderDialogConfig) => Partial<RenderDialogConfig>;
-}
-
-/** One shape of the frame (the install option `shapes`). */
-export interface RenderDialogShape {
-    /** The segment's word ("16:9", "Window"). */
-    label:  string;
-    title?: string;
-    /** Width over height; a function for a shape of live state (the
-     *  app's own picture), asked each time the form draws. */
-    aspect: number | (() => number);
 }
 
 export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
@@ -148,9 +140,9 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
 
     /** OPT-IN, for an app whose runner makes every frame itself and
      *  writes one file a frame into a folder the user picks
-     *  (`engine/export/frameFolder.ts`). It adds the format
-     *  "Frames (PNG folder)" - `VIDEO_FORMATS`' PNG sequence - and, while
-     *  that format is selected:
+     *  (`engine/export/frameFolder.ts`). It adds the formats
+     *  "Frames (PNG folder)" and "Frames (JPG folder)" - `VIDEO_FORMATS`'
+     *  image sequences - and, while one of them is selected:
      *  the start label "Save to a folder…", one Cancel button during
      *  the run instead of Interrupt / Resume / Finish / Discard, and no
      *  encoder probe (the format is available exactly where the browser
@@ -160,9 +152,9 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
      *  frames found there are a question for `status.ask`, not a box on
      *  the form.
      *  Without this option nothing above exists: the dialog is what it
-     *  was. To offer ONLY that format, or it and one video format, also
-     *  pass a `formatFilter` (three formats or fewer are drawn as one
-     *  segmented row instead of a dropdown);
+     *  was. To offer fewer formats, also pass a `formatFilter` (three
+     *  formats or fewer are drawn as one segmented row instead of a
+     *  dropdown);
      *  without one the video formats are listed beside it, and for those
      *  the dialog is the video dialog (the encoder probe, the bitrate,
      *  Interrupt / Resume / Finish / Discard) - the runner serves both. */
@@ -170,18 +162,11 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
 
     /** The localStorage key under which the dialog keeps what and how to
      *  render between two opens and across reloads: the format, the size,
-     *  the shape, Draft or Final, the samples, the bitrate, the frame step
+     *  Draft or Final, the samples, the bitrate, the frame step
      *  and the `extra` bag (the range is kept apart, for the session: see
      *  index.tsx). One key per installed dialog. Default
      *  `render-dialog:<the page's path>`. */
     storageKey?: string;
-
-    /** OPT-IN: the size is a WIDTH and a SHAPE. The shapes are one
-     *  segmented row ("Shape"); the size list offers widths (the `w` of
-     *  `resolutionPresets`, under their labels), the height follows from
-     *  the shape, made even, and there are no Width / Height fields.
-     *  Absent: a width and a height, as always. */
-    shapes?: RenderDialogShape[];
 
     /** OPT-IN: a "Quality" row, [Draft | Final]. Choosing Draft applies
      *  this preset (a small size and one sample, for a quick look before
@@ -209,7 +194,8 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     disableDiskMode?: boolean;
 
     /** Filter / extend the format dropdown. Defaults to all non-image-
-     *  sequence formats. App-gmt overrides to include PNG/JPG sequences. */
+     *  sequence formats, and under `frameFolder` the two folders too.
+     *  App-gmt overrides to include PNG/JPG sequences. */
     formatFilter?: (formatDef: typeof VIDEO_FORMATS[number], index: number) => boolean;
 
     /** Custom capability probe. Defaults to the main-thread encoder's
@@ -226,10 +212,10 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     ) => Promise<{ ok: boolean; reason?: string }>;
 
     /** Resolution preset list. Pass a function for reactive presets
-     *  that depend on live store / window state (e.g. app-gmt's
-     *  `Viewport (WxH)` and `Screen (WxH)` entries) — the form calls
-     *  it on each render so values stay current. Under `shapes` only
-     *  each preset's `w` counts: the list is of widths. */
+     *  that depend on live store / window state (e.g.
+     *  `canvasResolutionPresets`, ConfigForm.tsx: the canvas's
+     *  `Viewport (WxH)` in Fixed mode and the window's `Screen (WxH)`)
+     *  — the form calls it on each render so values stay current. */
     resolutionPresets?: RenderDialogResolutionPreset[] | (() => RenderDialogResolutionPreset[]);
 
     /** Override the Start button label. Default reads from disk-mode:

@@ -11,6 +11,9 @@ interface FixedResolutionControlsProps {
     height: number;
     top: number;
     left: number;
+    /** In the flow of its parent (a HUD slot) instead of placed at `top` / `left`; its menus open
+     *  below it either way. */
+    inline?: boolean;
     maxAvailableWidth: number;
     maxAvailableHeight: number;
     onSetResolution: (w: number, h: number) => void;
@@ -18,7 +21,7 @@ interface FixedResolutionControlsProps {
 }
 
 export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = ({
-    width, height, top, left, maxAvailableWidth, maxAvailableHeight, onSetResolution, onSetMode
+    width, height, top, left, inline = false, maxAvailableWidth, maxAvailableHeight, onSetResolution, onSetMode
 }) => {
     const [showResMenu, setShowResMenu] = useState(false);
     const [showCustomDialog, setShowCustomDialog] = useState(false);
@@ -127,8 +130,8 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
 
     return (
         <div
-            className="absolute flex flex-nowrap items-center gap-2 z-50 whitespace-nowrap transition-all duration-100 ease-out"
-            style={{ top, left }}
+            className={`${inline ? 'relative' : 'absolute'} flex flex-nowrap items-center gap-2 z-50 whitespace-nowrap transition-all duration-100 ease-out`}
+            style={inline ? undefined : { top, left }}
             data-help-id="ui.resolution"
             onContextMenu={handleContextMenu}
         >
