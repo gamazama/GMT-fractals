@@ -107,6 +107,7 @@ export const stage: DzStage = {
     steps: [
         {
             name: 'W flies along the view and S back, with the keyboard anywhere; nothing moves once the key is up',
+            quick: true,
             owner: 'N5',
             falsified: '2026-10-08: the sink\'s sign flipped in deep-zoom/DeepZoomNavigation.tsx (`host.moveAlong([-dx, -dy, -dz], 1)`) -> red, three lines: "W moved the camera along the view (direction . forward = -1.0000)", the surface farther (1.24 -> 3.31), S forward. Also red with `<DeepZoomNavigation />` taken out of DeepZoomApp.tsx: nothing moved (the own keys of the renderer module need the picture focused, and this step holds W with the keyboard on the page body).',
             async run(ctx) {

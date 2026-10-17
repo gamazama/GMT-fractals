@@ -124,6 +124,7 @@ export const stage: DzStage = {
     steps: [
         {
             name: 'the four dock tabs exist and each shows slider rows',
+            quick: true,
             owner: 'S2-7',
             falsified: '2026-10-08: the Colour panel given another id in deep-zoom/panels.ts -> red, "Colour is a panel in the right dock" and "Colour: tab button present" false.',
             async run(ctx) {
@@ -192,6 +193,7 @@ export const stage: DzStage = {
         },
         {
             name: 'drag the Detail slider: the module follows, and Ctrl+Z puts it back',
+            quick: true,
             owner: 'S2-3',
             falsified: '2026-10-08: the `detail` push removed from host/looseParams.ts -> red, "the module follows the store" false (store 7.46, module 1).',
             async run(ctx) {
@@ -223,6 +225,7 @@ export const stage: DzStage = {
         },
         {
             name: 'a row is shown only when the shading reads it',
+            quick: true,
             owner: 'S2-2',
             falsified: '2026-10-08: the `condition` removed from `keyElevation` in deep-zoom/features/light.ts -> red, "Classic: Key elevation hidden" false.',
             async run(ctx) {

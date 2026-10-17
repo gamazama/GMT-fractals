@@ -4,9 +4,10 @@
  * their steps. It holds no step of its own. A stage adds ONE FILE of steps and never edits this one.
  *
  *   npm run dev                                            (port 3400), then
- *   npm run smoke:deep-zoom                                every stage
+ *   npm run smoke:deep-zoom                                THE QUICK TIER (below): 15 s at most
  *   ENGINE_URL=http://localhost:3410 npm run smoke:deep-zoom
- *   npm run smoke:deep-zoom -- --stage 1                   one stage (repeatable, or 1,2)
+ *   npm run smoke:deep-zoom -- --full                      every step of every stage (smoke:deep-zoom-full)
+ *   npm run smoke:deep-zoom -- --stage 1                   one stage, every step (repeatable, or 1,2)
  *   npm run smoke:deep-zoom -- --stage 1 --step "hold W"   the steps whose name contains the text
  *                                                          (repeatable; any case)
  *   npm run smoke:deep-zoom -- --list                      print every step, its owner and how it
@@ -14,8 +15,24 @@
  *
  * The address in the environment is the dev server: its origin (`http://localhost:3410`) or the
  * page's full address. Only the origin is used; the page is always `/deep-zoom.html`.
- * Exit 0 all green, 1 any FAIL or "not proven", 2 the harness could not run (no server, a software
- * renderer, a bad stage file, a bad argument).
+ * Exit 0 all green, 1 any FAIL or "not proven" (or the quick tier over its budget), 2 the harness
+ * could not run (no server, a software renderer, a bad stage file, a bad argument).
+ *
+ * THE QUICK TIER, THE DEFAULT RUN (the owner, 2026-10-17: "permanently fix it so it can take up to
+ * 15s at most"; "full suite - run only when closing up a session or when pushing"). With no
+ * `--full`, `--stage` or `--step`, the run is the steps marked `quick: true` in every stage file, on
+ * ONE page booted ONCE (storage wiped first), in stage order, in a Chrome whose profile is kept
+ * between runs (`QUICK_PROFILE`, git-ignored): its HTTP cache and its GPU program cache stay warm,
+ * which is most of a boot (measured 2026-10-17: host.ready 9.5 s with empty caches, 0.7 s warm;
+ * the whole run 12.3 s warm). The whole command, from the process starting to the summary, has
+ * `QUICK_BUDGET_MS` (15 s): a run over it FAILS (exit 1) and names the boot and the slowest steps,
+ * so the tier cannot creep. Not held to it: a run whose boot took over `QUICK_COLD_BOOT_MS` - the
+ * caches were empty (the first run in a new profile, or the dev server bundled its dependencies
+ * afresh); it says so, and the next run is held. It is the gate while working and before a builder hands back; the full
+ * suite (`--full`, about 4 minutes) runs only when a session is closed up or before a push.
+ *   A step joins the quick tier only when it is cheap (about a second), calls no `ctx.boot()`, and
+ *   guards something a change could break unnoticed. Adding one means taking another out if the
+ *   budget says so. Quick steps share one page ACROSS stage files: each sets what it needs.
  *
  * WHY HEADED CHROME ON ANGLE D3D11. Headless Chromium without a GPU is SwiftShader: the deep
  * (perturbation) shader takes minutes to compile there, or draws something that proves nothing.
@@ -61,6 +78,7 @@
  *   owner      the package that owns the behaviour, so a red step has one owner.
  *   falsified  how the step was seen red, or `not falsified: <why>`.
  *   timeoutMs  optional, default 120 s. A step that runs over is a FAIL and the page is replaced.
+ *   quick      optional: the step is in THE QUICK TIER (above). Cheap, no `ctx.boot()`.
  *   run(ctx)   the step. It passes when it made at least one `ctx.check`, every check was true,
  *              it reported no `ctx.notProven`, it did not throw, and no page error or console
  *              error arrived while it ran.
@@ -75,7 +93,8 @@
  *   pageErrors, consoleLines, consoleErrors, expectConsoleError(pattern, why)
  *   downloads, dialogs(mode), dialogLog
  *
- * ISOLATION. One browser for the run. Each STAGE FILE gets a fresh browser context (so
+ * ISOLATION (the full run, and `--stage` / `--step`; the quick tier is the paragraph above). One
+ * browser for the run. Each STAGE FILE gets a fresh browser context (so
  * localStorage, IndexedDB and session state never pass from one stage to the next) and one page,
  * which the runner boots before the first step. STEPS OF A STAGE SHARE THAT PAGE, in file order:
  * a step sees the camera, the panels and the storage the steps before it left. So write each step
@@ -150,6 +169,8 @@ export interface DzStep {
     owner: string;
     falsified: string;
     timeoutMs?: number;
+    /** In the quick tier, the default run (THE QUICK TIER in the header). */
+    quick?: boolean;
     run(ctx: DzCtx): Promise<void>;
 }
 
@@ -191,7 +212,7 @@ export interface DzConsoleLine {
 export interface DzCtx {
     /** The stage's page. Read it afresh after `boot()`; do not keep it across steps. */
     readonly page: Page;
-    /** The stage's browser context (fresh per stage file). */
+    /** The stage's browser context (fresh per stage file; in the quick tier, the kept profile's one). */
     readonly context: BrowserContext;
     /** The dev server: `http://localhost:3410`. */
     readonly origin: string;
@@ -287,6 +308,12 @@ const READY_TIMEOUT_MS = 120_000;
 /** A host that has drawn no frame this long after it appeared is not being stepped: stop waiting. */
 const NO_FRAME_MS = 15_000;
 const STEP_TIMEOUT_MS = 120_000;
+/** The quick tier's whole run, from the process starting (THE QUICK TIER in the header). */
+const QUICK_BUDGET_MS = 15_000;
+/** A quick run whose boot took longer had empty caches, and is not held to the budget. */
+const QUICK_COLD_BOOT_MS = 3_000;
+/** The quick tier's Chrome profile, kept between runs for its caches (git-ignored). */
+const QUICK_PROFILE = path.join(ROOT, 'debug', 'scratch', 'dz-smoke-profile');
 
 /** The mounted host, or null. The holder exists on the dev server only. */
 const HOST = "(globalThis.__appHandles && globalThis.__appHandles['deep-zoom.host'] ? globalThis.__appHandles['deep-zoom.host'].ref.current : null)";
@@ -417,6 +444,8 @@ function isFatal(line: DzConsoleLine): boolean {
 class StageSession {
     page!: Page;
     bootInfo: DzBoot = { hostMs: -1, ready: false, readyMs: -1, readyError: 'not booted', splashMs: -1, frames: 0 };
+    /** The page's first boot: the quick tier judges its caches by it (a step may boot again, warm). */
+    firstBoot: DzBoot | null = null;
     readonly pageErrors: string[] = [];
     readonly consoleLines: DzConsoleLine[] = [];
     readonly incidents: Incident[] = [];
@@ -512,6 +541,7 @@ class StageSession {
         if (splashMs < 0 && (await untilOn(page, SPLASH_GONE, 3000, 50, alive)) >= 0) splashMs = Date.now() - t0;
         const frames = await evOn<number>(page, FRAME_COUNT).catch(() => 0);
         this.bootInfo = { hostMs, ready, readyMs, readyError: ready ? '' : state, splashMs, frames };
+        this.firstBoot ??= this.bootInfo;
         return this.bootInfo;
     }
 
@@ -607,114 +637,122 @@ async function failShot(session: StageSession, name: string): Promise<void> {
     log('             shot ' + SHOT_PREFIX + name + '.png');
 }
 
+/** A step picked to run: its stage, its place in the file, the step. */
+interface PlannedStep { stageId: string; index: number; step: DzStep }
+
 /** One stage file: a fresh context, one page, the picked steps in order. `closing` lists the page
  *  errors and console errors that no step was charged for (the boot, the gaps between steps). */
 async function runStage(browser: Browser, loaded: LoadedStage, picked: number[]): Promise<{ results: StepResult[]; closing: string[] }> {
     const { stage, file } = loaded;
-    const results: StepResult[] = [];
     log('\n── stage ' + stage.id + ' · ' + stage.title + '  (' + file.rel + ')');
-
     const context = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: true });
-    const session = new StageSession(context);
-    const notRun = (why: string) => {
-        for (const index of picked) {
-            if (results.some((r) => r.index === index)) continue;
-            log(stepTag(stage.id, index) + ' ' + stage.steps[index].name + '\n     => FAIL  not run: ' + why);
-            results.push({ stageId: stage.id, index, step: stage.steps[index], ok: false, why: ['not run: ' + why], ms: 0 });
-        }
-    };
-    const uncharged = () => session.incidents.filter((x) => !x.charged).map((x) => x.text + '  [arrived ' + x.during + ']');
-
     try {
-        await session.openPage();
-        try {
-            const b = await session.boot();
-            log('     boot: host in the holder after ' + b.hostMs + ' ms · '
-                + (b.ready ? 'host.ready after ' + b.readyMs + ' ms' : 'host.ready NOT resolved (' + b.readyError + ')')
-                + ' · ' + (b.splashMs >= 0 ? 'splash gone after ' + b.splashMs + ' ms' : 'splash still up'));
-        } catch (err) {
-            await failShot(session, 'fail-' + stage.id + '-boot');
-            notRun('the app did not boot: ' + firstLine(err));
-            return { results, closing: uncharged() };
-        }
-
-        for (const index of picked) {
-            const step = stage.steps[index];
-            const tag = stepTag(stage.id, index);
-            const state = newStepState(tag);
-            log(tag + ' ' + step.name + '  (owner ' + step.owner + ')');
-            const t0 = Date.now();
-            const why: string[] = [];
-            await session.tidy().catch(() => undefined);
-            const incidentsBefore = session.incidents.length;
-            session.current = state;
-
-            const limit = step.timeoutMs ?? STEP_TIMEOUT_MS;
-            let timedOut = false;
-            const run = (async () => { await step.run(makeCtx(session, state, log)); })();
-            run.catch(() => undefined);   // a step abandoned after its timeout must not raise an unhandled rejection
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            try {
-                await Promise.race([
-                    run,
-                    new Promise<void>((resolve) => { timer = setTimeout(() => { timedOut = true; resolve(); }, limit); }),
-                ]);
-            } catch (err) {
-                why.push('threw: ' + firstLine(err));
-            } finally {
-                if (timer) clearTimeout(timer);
-            }
-            if (timedOut) {
-                state.abandoned = true;
-                why.push('timed out after ' + secs(limit));
-            } else {
-                await sleep(150);   // an error the last action caused is still this step's
-            }
-
-            const printed = new Set(state.failures);
-            for (const f of state.failures) why.push(f);
-            for (const n of state.notProven) why.push('not proven: ' + n);
-            for (const incident of session.incidents.slice(incidentsBefore)) {
-                incident.charged = true;
-                why.push(incident.text);
-            }
-            if (!why.length && state.checks === 0) why.push('the step made no check');
-            session.current = newStepState('(between steps)');
-
-            const ok = why.length === 0;
-            if (!ok) {
-                for (const w of why) if (!printed.has(w) && !w.startsWith('not proven: ')) log('       FAIL  ' + w);
-                await failShot(session, 'fail-' + stage.id + '-' + String(index + 1).padStart(2, '0'));
-            }
-            log('     => ' + (ok ? 'ok  ' : 'FAIL') + '  (' + secs(Date.now() - t0) + ')');
-            results.push({ stageId: stage.id, index, step, ok, why, ms: Date.now() - t0 });
-
-            if (timedOut) {
-                // The abandoned step may still be inside a call on the page: the next step gets a new one.
-                try {
-                    await session.openPage();
-                    await session.boot();
-                } catch (err) {
-                    notRun('the app did not boot again after a step timed out: ' + firstLine(err));
-                    break;
-                }
-            }
-        }
-        await sleep(300);
-        return { results, closing: uncharged() };
+        return await runSteps(new StageSession(context), picked.map((index) => ({ stageId: stage.id, index, step: stage.steps[index] })), {}, stage.id);
     } finally {
         await context.close().catch(() => undefined);
     }
 }
 
+/** The steps in order on one session's page, booted once before the first (`bootOpts`). The caller
+ *  owns the context. `bootTag` names the boot's failure screenshot. */
+async function runSteps(session: StageSession, steps: PlannedStep[], bootOpts: DzBootOptions, bootTag: string): Promise<{ results: StepResult[]; closing: string[] }> {
+    const results: StepResult[] = [];
+    const notRun = (why: string) => {
+        for (const { stageId, index, step } of steps) {
+            if (results.some((r) => r.stageId === stageId && r.index === index)) continue;
+            log(stepTag(stageId, index) + ' ' + step.name + '\n     => FAIL  not run: ' + why);
+            results.push({ stageId, index, step, ok: false, why: ['not run: ' + why], ms: 0 });
+        }
+    };
+    const uncharged = () => session.incidents.filter((x) => !x.charged).map((x) => x.text + '  [arrived ' + x.during + ']');
+
+    await session.openPage();
+    try {
+        const b = await session.boot(bootOpts);
+        log('     boot: host in the holder after ' + b.hostMs + ' ms · '
+            + (b.ready ? 'host.ready after ' + b.readyMs + ' ms' : 'host.ready NOT resolved (' + b.readyError + ')')
+            + ' · ' + (b.splashMs >= 0 ? 'splash gone after ' + b.splashMs + ' ms' : 'splash still up'));
+    } catch (err) {
+        await failShot(session, 'fail-' + bootTag + '-boot');
+        notRun('the app did not boot: ' + firstLine(err));
+        return { results, closing: uncharged() };
+    }
+
+    for (const { stageId, index, step } of steps) {
+        const tag = stepTag(stageId, index);
+        const state = newStepState(tag);
+        log(tag + ' ' + step.name + '  (owner ' + step.owner + ')');
+        const t0 = Date.now();
+        const why: string[] = [];
+        await session.tidy().catch(() => undefined);
+        const incidentsBefore = session.incidents.length;
+        session.current = state;
+
+        const limit = step.timeoutMs ?? STEP_TIMEOUT_MS;
+        let timedOut = false;
+        const run = (async () => { await step.run(makeCtx(session, state, log)); })();
+        run.catch(() => undefined);   // a step abandoned after its timeout must not raise an unhandled rejection
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await Promise.race([
+                run,
+                new Promise<void>((resolve) => { timer = setTimeout(() => { timedOut = true; resolve(); }, limit); }),
+            ]);
+        } catch (err) {
+            why.push('threw: ' + firstLine(err));
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+        if (timedOut) {
+            state.abandoned = true;
+            why.push('timed out after ' + secs(limit));
+        } else {
+            await sleep(150);   // an error the last action caused is still this step's
+        }
+
+        const printed = new Set(state.failures);
+        for (const f of state.failures) why.push(f);
+        for (const n of state.notProven) why.push('not proven: ' + n);
+        for (const incident of session.incidents.slice(incidentsBefore)) {
+            incident.charged = true;
+            why.push(incident.text);
+        }
+        if (!why.length && state.checks === 0) why.push('the step made no check');
+        session.current = newStepState('(between steps)');
+
+        const ok = why.length === 0;
+        if (!ok) {
+            for (const w of why) if (!printed.has(w) && !w.startsWith('not proven: ')) log('       FAIL  ' + w);
+            await failShot(session, 'fail-' + stageId + '-' + String(index + 1).padStart(2, '0'));
+        }
+        log('     => ' + (ok ? 'ok  ' : 'FAIL') + '  (' + secs(Date.now() - t0) + ')');
+        results.push({ stageId, index, step, ok, why, ms: Date.now() - t0 });
+
+        if (timedOut) {
+            // The abandoned step may still be inside a call on the page: the next step gets a new one.
+            try {
+                await session.openPage();
+                await session.boot();
+            } catch (err) {
+                notRun('the app did not boot again after a step timed out: ' + firstLine(err));
+                break;
+            }
+        }
+    }
+    await sleep(300);
+    return { results, closing: uncharged() };
+}
+
 async function main(): Promise<number> {
     const argv = process.argv.slice(2);
-    const known = ['--stage', '--step', '--list'];
+    const known = ['--stage', '--step', '--list', '--full'];
     const unknown = argv.filter((a) => a.startsWith('--') && !known.some((k) => a === k || a.startsWith(k + '=')));
-    if (unknown.length) throw new HarnessError('unknown argument ' + unknown.join(', ') + ' (known: --stage <ids>, --step <text>, --list)');
+    if (unknown.length) throw new HarnessError('unknown argument ' + unknown.join(', ') + ' (known: --full, --stage <ids>, --step <text>, --list)');
     const onlyStages = argValues(argv, '--stage', true).map((s) => s.toLowerCase());
     const onlySteps = argValues(argv, '--step', false).map((s) => s.toLowerCase());
     const listOnly = argv.includes('--list');
+    // THE QUICK TIER (the header) unless a whole run or a choice of stages or steps was asked for.
+    const quick = !argv.includes('--full') && !onlyStages.length && !onlySteps.length;
     if (!ORIGIN) throw new HarnessError('the address is not an http one: ' + DEFAULT_ADDRESS);
 
     const files = discoverStages();
@@ -728,16 +766,17 @@ async function main(): Promise<number> {
     const plan = stages.map((loaded) => ({
         loaded,
         picked: loaded.stage.steps.map((_, i) => i)
+            .filter((i) => !quick || loaded.stage.steps[i].quick === true)
             .filter((i) => !onlySteps.length || onlySteps.some((t) => loaded.stage.steps[i].name.toLowerCase().includes(t))),
     })).filter((p) => p.picked.length > 0);
-    if (!plan.length) throw new HarnessError('no step matches --step ' + onlySteps.join(', '));
+    if (!plan.length) throw new HarnessError(quick ? 'no step is marked `quick: true`' : 'no step matches --step ' + onlySteps.join(', '));
 
     if (listOnly) {
         for (const { loaded, picked } of plan) {
             log('\nstage ' + loaded.stage.id + ' · ' + loaded.stage.title + '  (' + loaded.file.rel + ')');
             for (const i of picked) {
                 const s = loaded.stage.steps[i];
-                log(stepTag(loaded.stage.id, i) + ' ' + s.name + '\n       owner      ' + s.owner + '\n       falsified  ' + s.falsified);
+                log(stepTag(loaded.stage.id, i) + (s.quick ? ' (quick) ' : ' ') + s.name + '\n       owner      ' + s.owner + '\n       falsified  ' + s.falsified);
             }
         }
         return 0;
@@ -753,21 +792,42 @@ async function main(): Promise<number> {
     const t0 = Date.now();
     // DZ_HEADLESS=1: no window (see the header, WINDOWLESS RUNS). Still Chrome, still the same GPU flags;
     // the renderer line printed below is what says whether this run is on the real GPU.
-    const browser = await chromium.launch({ channel: 'chrome', headless: process.env.DZ_HEADLESS === '1', args: LAUNCH_ARGS });
+    const headless = process.env.DZ_HEADLESS === '1';
+    // The quick tier's one context is the kept profile's (THE QUICK TIER); a full run's stages each get a fresh one.
+    const kept = quick
+        ? await chromium.launchPersistentContext(QUICK_PROFILE, { channel: 'chrome', headless, args: LAUNCH_ARGS, viewport: VIEWPORT, acceptDownloads: true })
+            .catch((err) => { throw new HarnessError('the quick tier\'s Chrome did not start (another quick run holding ' + path.relative(ROOT, QUICK_PROFILE) + '?): ' + firstLine(err)); })
+        : null;
+    const browser = kept ? null : await chromium.launch({ channel: 'chrome', headless, args: LAUNCH_ARGS });
     const all: StepResult[] = [];
     const closingFails: string[] = [];
+    let bootMs = 0;
     try {
-        const probe = await browser.newPage();
+        const probe = kept ? await kept.newPage() : await browser!.newPage();
         const renderer = await evOn<string>(probe, "(() => { const gl = document.createElement('canvas').getContext('webgl2'); if (!gl) return 'no WebGL2'; const e = gl.getExtension('WEBGL_debug_renderer_info'); return e ? String(gl.getParameter(e.UNMASKED_RENDERER_WEBGL)) : 'unknown'; })()").catch(() => 'unknown');
         await probe.close();
-        log('[smoke:deep-zoom] ' + PAGE_URL + ' · ' + plan.length + ' stage' + (plan.length === 1 ? '' : 's') + ' · WebGL: ' + renderer);
+        log('[smoke:deep-zoom] ' + PAGE_URL + ' · ' + (kept ? 'the quick tier (' + plan.reduce((n, p) => n + p.picked.length, 0) + ' steps; --full for every step)' : plan.length + ' stage' + (plan.length === 1 ? '' : 's')) + ' · WebGL: ' + renderer);
         if (renderer === 'no WebGL2' || SOFTWARE_RENDERER.test(renderer)) {
             throw new HarnessError('this is not the real GPU (' + renderer + '): the smoke proves nothing on a software renderer');
         }
 
-        for (const { loaded, picked } of plan) {
+        if (kept) {
+            log('\n── the quick tier · one page, booted once with its storage wiped');
+            const session = new StageSession(kept);
+            const { results, closing } = await runSteps(session,
+                plan.flatMap(({ loaded, picked }) => picked.map((index) => ({ stageId: loaded.stage.id, index, step: loaded.stage.steps[index] }))),
+                { clearStorage: true }, 'quick');
+            bootMs = session.firstBoot?.readyMs ?? -1;
+            all.push(...results);
+            if (closing.length) {
+                log('     FAIL  a page error or console error that no step was charged for');
+                for (const c of closing) log('             ' + c);
+                closingFails.push('quick tier, outside any step: ' + closing.join(' | '));
+            }
+        }
+        for (const { loaded, picked } of kept ? [] : plan) {
             const tStage = Date.now();
-            const { results, closing } = await runStage(browser, loaded, picked);
+            const { results, closing } = await runStage(browser!, loaded, picked);
             all.push(...results);
             const bad = results.filter((r) => !r.ok).length;
             if (closing.length) {
@@ -778,9 +838,20 @@ async function main(): Promise<number> {
             log('   stage ' + loaded.stage.id + ': ' + (results.length - bad) + ' ok, ' + (bad + (closing.length ? 1 : 0)) + ' FAIL  (' + secs(Date.now() - tStage) + ')');
         }
     } finally {
-        await browser.close().catch(() => undefined);
+        await (kept ?? browser)?.close().catch(() => undefined);
     }
 
+    // The quick tier's budget is the whole command's: the process's own clock, tsx's start included.
+    const totalMs = Math.round(process.uptime() * 1000);
+    const cold = bootMs < 0 || bootMs > QUICK_COLD_BOOT_MS;
+    if (quick && totalMs > QUICK_BUDGET_MS && cold) {
+        log('\nthe quick tier took ' + secs(totalMs) + ' with empty caches (the boot ' + (bootMs < 0 ? 'did not finish' : secs(bootMs))
+            + '): not held to its ' + secs(QUICK_BUDGET_MS) + ' budget this once; the next run is.');
+    } else if (quick && totalMs > QUICK_BUDGET_MS) {
+        const slow = [...all].sort((a, b) => b.ms - a.ms).slice(0, 4).map((r) => stepTag(r.stageId, r.index) + ' ' + secs(r.ms)).join(', ');
+        closingFails.push('the quick tier took ' + secs(totalMs) + ', over its ' + secs(QUICK_BUDGET_MS) + ' budget (the boot ' + secs(bootMs)
+            + '; the slowest steps ' + slow + '): take a step out of it (`quick: true`) or make it cheaper. Every step: --full.');
+    }
     const failed = all.filter((r) => !r.ok);
     const failCount = failed.length + closingFails.length;
     if (failCount) {
@@ -792,8 +863,8 @@ async function main(): Promise<number> {
         }
         for (const c of closingFails) log('  ' + c);
     }
-    log('\nsmoke:deep-zoom: ' + (all.length - failed.length) + ' ok, ' + failCount + ' FAIL  (' + all.length + ' step' + (all.length === 1 ? '' : 's')
-        + ' of ' + plan.length + ' stage' + (plan.length === 1 ? '' : 's') + ', ' + secs(Date.now() - t0) + ')');
+    log('\nsmoke:deep-zoom' + (quick ? ' (quick)' : '') + ': ' + (all.length - failed.length) + ' ok, ' + failCount + ' FAIL  (' + all.length + ' step' + (all.length === 1 ? '' : 's')
+        + ' of ' + plan.length + ' stage' + (plan.length === 1 ? '' : 's') + ', ' + (quick ? secs(totalMs) + ' of the ' + secs(QUICK_BUDGET_MS) + ' budget' : secs(Date.now() - t0)) + ')');
     return failCount ? 1 : 0;
 }
 

@@ -113,6 +113,7 @@ export const stage: DzStage = {
     steps: [
         {
             name: 'host.ready resolves inside 120 s of loading the page',
+            quick: true,
             owner: 'S1-1',
             falsified: '2026-10-08: the `registerTick` call removed from DeepZoomSurface.tsx -> "host.ready resolved: no frame ran in the 15.0 s after the host appeared" and "the promise of the host now in the holder is resolved (pending)". The third check stayed green: the module\'s compile poll runs on a timer, not on frames.',
             async run(ctx) {
@@ -130,6 +131,7 @@ export const stage: DzStage = {
         },
         {
             name: 'exactly one canvas#dz-render-canvas, a child of #dz-frame, and it is the host\'s (StrictMode left one)',
+            quick: true,
             owner: 'S1-1',
             falsified: '2026-10-08: `canvas.remove()` taken out of `dispose` in host/moduleHost.ts -> "one canvas#dz-render-canvas in the document (found 2)" (StrictMode\'s first mount left its canvas behind) and "it is the canvas the mounted host draws on" red.',
             async run(ctx) {
@@ -181,6 +183,7 @@ export const stage: DzStage = {
         },
         {
             name: 'telemetry depth is a finite positive number',
+            quick: true,
             owner: 'S1-1',
             falsified: '2026-10-08: `telemetry` in host/moduleHost.ts made to answer `depth: NaN` -> "host.telemetry().depth = NaN". A contrived break: the number comes straight from the module.',
             async run(ctx) {
@@ -264,6 +267,7 @@ export const stage: DzStage = {
         },
         {
             name: 'camera strings set through host.setView come back byte-identical from getView',
+            quick: true,
             owner: 'S1-1',
             falsified: '2026-10-08: `getView` in host/moduleHost.ts made to send one `cam` value through `String(Number(...))` -> red, the first string came back as "-1.910668827…" (23 characters instead of 78).',
             async run(ctx) {
@@ -320,6 +324,7 @@ export const stage: DzStage = {
         },
         {
             name: 'source: deep-zoom/renderer is imported only under deep-zoom/host/',
+            quick: true,
             owner: 'S1-0',
             falsified: '2026-10-08: `import type { DzView as X } from \'./renderer\'` added to DeepZoomApp.tsx -> "14 shell files outside deep-zoom/host/ scanned, importing the renderer: deep-zoom/DeepZoomApp.tsx".',
             async run(ctx) {

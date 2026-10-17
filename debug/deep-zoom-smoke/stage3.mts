@@ -46,6 +46,7 @@ export const stage: DzStage = {
     steps: [
         {
             name: 'the Locations tab shows the six starter dives and an empty list',
+            quick: true,
             owner: 'S3-3 / S3-5',
             falsified: '2026-10-08: the `dz-starters` widget removed from the Locations panel in deep-zoom/panels.ts -> red, "six starter cards" false.',
             async run(ctx) {
