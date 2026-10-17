@@ -121,6 +121,11 @@
  *   - NO FILE PICKER (Firefox, Safari), or the picker refused: the video is made in memory, index
  *     first, and saved as a download at the end - what fluid-toy's runner does. The dialog's badge
  *     says RAM, and the result says "saved as a download".
+ *   - A PICKED FILE THE BROWSER WILL NOT LET THE PAGE WRITE (`createWritable` refused with
+ *     NotAllowedError; seen 2026-10-17 by the owner in the Claude app's built-in browser, which shows
+ *     the picker and then refuses the write): the same, in memory and a download at the end under the
+ *     name picked, and a toast says so before the first frame. A FOLDER the page may not write into
+ *     stops the run at its first frame with a line that says why (no frame is lost: none was made).
  *   - THE PIXELS GO THROUGH A PNG. The renderer hands a frame as a PNG blob and nothing else (grep
  *     `toBlob` in renderer/core.js), so the video sink decodes it again (`createImageBitmap`). At
  *     1920 x 1500 the renderer's encode took 125 ms and the decode here 41 ms of a frame of 0.80 s
@@ -431,7 +436,15 @@ async function openFolderSink(project: string, fps: number): Promise<FrameSink |
             return { there: [], aspect };
         },
         async put(frame, png) {
-            await folder.write(frame, png);
+            try {
+                await folder.write(frame, png);
+            } catch (err) {
+                // The browser showed the folder picker and will not let the page write into it (see the header).
+                if (err instanceof Error && err.name === 'NotAllowedError') {
+                    throw new Error(`this browser will not let the page write into "${folder.folder}" (the Claude app's built-in browser is one). Render in Chrome or Edge, or to a video file`);
+                }
+                throw err;
+            }
             if (overwriting && old.has(frame)) replaced++;
         },
         end: async () => '',                                             // every frame is a file already: nothing to close, nothing to throw away
@@ -456,8 +469,8 @@ async function openFolderSink(project: string, fps: number): Promise<FrameSink |
 /**
  * One video file (`cfg.formatIndex`: an MP4 or a WebM of `VIDEO_FORMATS`), through the engine's main-thread encoder.
  * Null: backed out of the picker. THE PICKER IS ITS FIRST AWAIT. With a picked file the video is written into it AS THE
- * RUN GOES (see the header, A VIDEO FILE); where the browser has no picker, or refuses it, the video is made in memory
- * and saved as a download at the end.
+ * RUN GOES (see the header, A VIDEO FILE); where the browser has no picker, refuses it, or refuses to let the page write
+ * the file picked, the video is made in memory and saved as a download at the end.
  */
 async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMode: boolean): Promise<FrameSink | null> {
     const format = VIDEO_FORMATS[cfg.formatIndex];
@@ -466,6 +479,8 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
     // The encoder gets a stream OF OURS that forwards to the file, not the file's own: it locks the stream it is
     // handed and never lets go, and a discarded run has to abort the file itself (engine/export/pickedFile.ts).
     let disk: ReturnType<typeof forwardToPickedFile> | null = null;
+    /** The name picked, when the browser would not let the page write that file (see the header). */
+    let refused: string | null = null;
     const pick = isDiskMode ? (window as unknown as { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker : undefined;
     if (typeof pick === 'function') {
         try {
@@ -477,13 +492,17 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
             disk = forwardToPickedFile(handle, await handle.createWritable());
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return null;
-            if (!(err instanceof Error && err.name === 'SecurityError')) throw err;
-            handle = null;                                               // the picker was refused: in memory, as where there is none
+            // The picker refused (SecurityError), or the file picked may not be written (NotAllowedError): in memory, as
+            // where there is no picker.
+            if (!(err instanceof Error && (err.name === 'SecurityError' || err.name === 'NotAllowedError'))) throw err;
+            if (handle && err.name === 'NotAllowedError') refused = handle.name;
+            handle = null;
             disk = null;
         }
     }
+    if (refused) showToast(`This browser will not let the page write "${refused}": the video is made in memory and saved as a download when it is done`, 'warning', 10000);
     const picked = handle && disk ? { handle, file: disk } : null;
-    const name = picked ? picked.handle.name : suggested;
+    const name = picked ? picked.handle.name : refused ?? suggested;
     const encoder = new MainThreadEncoder();
     let count = 0, bytes = 0, kept = false;
     const stream = picked ? picked.file.stream : null;
