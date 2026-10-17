@@ -162,6 +162,8 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     look('keyElevation', 'keyElev'),
     look('keyTurn', 'keyTurn'),
     look('lightTint', 'tint'),
+    look('fill', 'fill'),
+    look('kicker', 'kick'),
     look('shadows', 'shadow'),
     look('occlusion', 'ao'),
     look('occlusionRadius', 'aoRadius'),

@@ -11,7 +11,8 @@
  * THIS IS THE INTERIM FOR THE LIGHT STUDIO
  *   `dzLight` is what lights the picture until stage L lands (BUILD-PLAN package L5). At L5 five
  *   keys leave this feature for the shared light list (feature `lighting`, key `lights`) through
- *   one scene migration: `lightType`, `lampFalloff`, `keyElevation`, `keyTurn`, `lightTint`.
+ *   one scene migration: `lightType`, `lampFalloff`, `keyElevation`, `keyTurn`, `lightTint`. (The lamp's
+ *   shadows and offset, and the fill's and kicker's strengths, added since, are lights too: they go with them.)
  *   `shading`, `shadows`, `occlusion`, `occlusionRadius`, `occlusionSamples`, `bounce`, `sky`,
  *   `roughness` and `haze` stay. So: ADD NO DEPENDENT ON
  *   THOSE FIVE KEYS — no condition in another feature, no bridge, no shortcut, no saved-location
@@ -30,6 +31,8 @@
  *     keyElevation   api.setLook({ keyElev })      degrees
  *     keyTurn        api.setLook({ keyTurn })      degrees
  *     lightTint      api.setLook({ tint })
+ *     fill           api.setLook({ fill })         0 to 3, the key's strength (2026-10-17)
+ *     kicker         api.setLook({ kick })         0 to 3
  *     shadows        api.setLook({ shadow })
  *     occlusion      api.setLook({ ao })
  *     occlusionRadius   api.setLook({ aoRadius })  a share of the picture's height
@@ -42,7 +45,7 @@
  *     haze           api.setLook({ haze })
  *   `api.setLook(o)` is `Object.assign(look, o)`: one call may carry several keys, and a key it
  *   does not know is stored and ignored. Read-back: `api.dz.settings()` gives `lookMode`, `light`
- *   and `falloff`; the other thirteen are on `api.look` under the names above.
+ *   and `falloff`; the other fifteen are on `api.look` under the names above.
  *   ENUMS. `shading` and `lightType` are floats holding the option's INDEX
  *   (`engine/defineEnumParam.ts`). Each exports `X_OPTIONS` (option names, dropdown order),
  *   `X_RENDERER_VALUES` (the renderer's value for each option, same order — use `indexOf` on it to
@@ -60,7 +63,8 @@
  *     shading, lightType                              always
  *     lampFalloff                                     lightType is Lamp or Both
  *     lampShadows, lampOffset                         shading is New AND lightType is Lamp or Both
- *     keyElevation, keyTurn, lightTint, shadows       shading is New AND lightType is not Lamp
+ *     keyElevation, keyTurn, lightTint, fill, kicker,
+ *     shadows                                         shading is New AND lightType is not Lamp
  *     occlusion, occlusionRadius, occlusionSamples,
  *     bounce, sky, roughness, haze                    shading is New
  *   This departs from BLUEPRINT section 3, which shows `lightType` and `lampFalloff` under the
@@ -109,9 +113,8 @@
  *     of two divisions: a level in 3 pixels of a million (measured; grep `MEASURED 2026-10-12`
  *     under OCCLUSION FROM DEPTH in core.js). 32 samples cost 0.3 to 0.5 ms a frame more than
  *     10 at 1024 x 1024 (same place).
- *   - SIXTEEN MORE LOOK FIELDS ARE NOT HERE. `look` in core.js also holds exposure, saturation,
- *     shadow softness and length, haze colour, the key, fill and kicker
- *     strengths, the fill and kicker colours, metallic, reflectivity, diffuse, and three more
+ *   - FOURTEEN MORE LOOK FIELDS ARE NOT HERE. `look` in core.js also holds exposure, saturation,
+ *     shadow softness and length, haze colour, the key's strength, the fill and kicker colours, metallic, reflectivity, diffuse, and three more
  *     angles (key azimuth, fill azimuth, fill elevation). They have defaults and no
  *     range anywhere in the renderer; a slider with a guessed range is a control the renderer may
  *     not honour (BLUEPRINT section 3, DECISIONS D13). Add one only with a range read out of the
@@ -249,6 +252,24 @@ export const DzLightFeature = {
             condition: NEW_SHADING_KEY_LIT,
             description: 'How coloured the fill and the kicker are. 0: white. 1: orange and blue.',
         },
+        // ── The fill's and the kicker's strengths (the owner, 2026-10-17: "yes please", so shadows can go black).
+        //    Lights, so at L5 they go where `lightTint` goes. The shading pass adds each on top of the key with
+        //    no clamp (grep `uFillCol * nf`, `uKickCol * nk`); the range stops at the key's own strength (`key: 3.0`
+        //    in `const look = {`): past it the fill is the key.
+        fill: {
+            type: 'float',
+            default: 0.5, min: 0, max: 3, step: 0.05,
+            label: 'Fill',
+            condition: NEW_SHADING_KEY_LIT,
+            description: 'Strength of the fill, the softer light from the other side that lifts the shadows the key leaves. 0: none, so shadows fall to what the sky gives them.',
+        },
+        kicker: {
+            type: 'float',
+            default: 0.25, min: 0, max: 3, step: 0.05,
+            label: 'Kicker',
+            condition: NEW_SHADING_KEY_LIT,
+            description: 'Strength of the kicker, the light from below and behind the camera. 0: none.',
+        },
 
         // ── These stay in `dzLight` after L5.
         shadows: {
@@ -281,7 +302,7 @@ export const DzLightFeature = {
         },
         bounce: {
             type: 'float',
-            default: 0, min: 0, max: 4, step: 0.05,
+            default: 0, min: 0, max: 30, step: 0.05,   // 30: the owner rendered at 20 (2026-10-14) and asked for the row to reach it
             label: 'Bounce',
             condition: NEW_SHADING,
             description: 'Light that surfaces in the picture send on to their neighbours: a lit wall colours the shadow beside it. 0: none. 1: what those surfaces would send. Only what is in the picture sends any. Grainy in a moving frame; Occlusion samples sets its sample count too.',

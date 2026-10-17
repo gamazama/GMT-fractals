@@ -231,6 +231,9 @@ export interface DzLook {
     aoRadius?: number;
     /** The occlusion's taps a pixel (10 at the start; the shader takes 1 to 32). */
     aoTaps?: number;
+    /** The fill's strength (0.5 at the start) and the kicker's (0.25), each up to the key's 3. */
+    fill?: number;
+    kick?: number;
     /** Light the surfaces in the picture send on to their neighbours (0 at the start: none; 1: what they would send). */
     bounce?: number;
     /** How far round each point the bounce looks, as a share of the picture's height (0.4 at the start). */

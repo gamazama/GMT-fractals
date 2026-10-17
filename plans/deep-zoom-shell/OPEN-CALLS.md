@@ -135,6 +135,9 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
     **ANSWERED 2026-10-12, two of the four:** "0-byte file goes" (with 10 to 12), and "route
     markers still missing thumbnails" (section F). Draft's way back and the mixed folder: not
     answered, left recorded.
+14. **Undoing a Reverse leaves the playhead on the mirrored frame** (the playhead is not in the
+    undo), so the camera is off the route and the tab offers Return. Put to him 2026-10-17, not
+    answered. Recommended: leave it unless it bothers him (grep `reverseRoute` in route.ts).
 
 ## C. The shell (built the night of 2026-10-12; each was decided without him)
 
