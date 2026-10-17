@@ -79,9 +79,10 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
                 <div className="flex flex-col text-right">
                     <span className="t-label-sm text-fg-dim mb-0.5">Remaining</span>
                     <span className="font-mono text-sm font-bold text-accent-300" data-render-remaining>
-                        {etaRange.min > 0 && etaRange.min === etaRange.max
-                            ? aboutTime(etaRange.min)
-                            : `${formatTimeWithUnits(etaRange.min)} – ${formatTimeWithUnits(etaRange.max)}`}
+                        {etaRange.max <= 0 ? '--'                    // nothing measured yet: not "0s – 0s"
+                            : etaRange.min === etaRange.max
+                                ? aboutTime(etaRange.min)
+                                : `${formatTimeWithUnits(etaRange.min)} – ${formatTimeWithUnits(etaRange.max)}`}
                     </span>
                 </div>
                 <div className="flex flex-col pt-2 border-t border-line/5">

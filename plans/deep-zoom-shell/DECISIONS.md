@@ -330,6 +330,11 @@ the safe ranges, give them and they go in with stage 2.
 
 ## D14. Fixed frame size and the scale pill in the viewport
 
+> **Update 2026-10-17 (closed; the owner: "we still need to appropriate the resolution/canvas control
+> from gmt"):** Fixed mode is in (`381e44c4`). The deep zoomer's surface draws at the Fixed box itself
+> (`deep-zoom/DeepZoomSurface.tsx`), Frame size capped by it, so E4's size sink was not needed. The
+> scale pill stays hidden there (ViewportModeControls `inline`).
+
 The engine's viewport frame offers Fixed mode (a typed width and height, fit to the window) and a
 scale pill. The pill can already be pointed at the tool's own frame size. Fixed mode cannot: the
 renderer sizes itself and nothing tells it the numbers.

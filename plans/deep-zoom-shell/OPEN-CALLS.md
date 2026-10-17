@@ -482,3 +482,6 @@ section."** Nothing is open. S1 is with a builder (session started 2026-10-16).
 Delete a line when he answers. His answers of 2026-10-17 to the first eight are in the commits of that day.
 - F14, the light rig's readback flood (your kernel), measured as you asked: in a dive to 1e-9, 733 asks, 559 turned away while a read was pending, 174 writes, 174 reads, 0 failures, and 175 Chrome warnings. Every write is read once before the next, so the protocol is right and Chrome warns on every readback anyway. Ask less often (the warnings fall in proportion), accept them, or measure synchronously every N frames?
 - Starter places: yours. You generate proper ones and review them; the cards take them when they come (2026-10-17: "the place/zooms are generally random").
+- Frames with a step above 1 are numbered 0, 2, 4...: the ffmpeg line that joins them must read them by name (a glob), which Windows builds of ffmpeg cannot. Number such frames 0, 1, 2... instead (Continue then counts by step), or leave it?
+- In Fixed mode the canvas's render-scale pill is hidden in the deep zoomer. Should it drive Frame size there, or stay hidden?
+- The render dialog's first size is 1280 x 720 (GMT's 720p) whatever the picture's shape. Keep it, or open on the canvas's own shape at 1280 wide?
