@@ -477,3 +477,8 @@ search in the engine's key lookup; a pin on each Route tab row): **ANSWERED 2026
 was open then; one since ("S0, a section's edges"): after a section grows, keys on other tracks
 (a light, a colour) **ANSWERED 2026-10-16: "Move other tracks' keys later with the route after a
 section."** Nothing is open. S1 is with a builder (session started 2026-10-16).
+
+## J. The streamline (`STREAMLINE.md`, built from 2026-10-17)
+Delete a line when he answers.
+- F14, the light rig's readback flood (your kernel): reading the buffer before deleting the fence (`pollRig`, the one change as written) left it as it was: 256 "READ-usage buffer" warnings in a dive to 1e-9, then "too many errors" (`debug/scratch/streamline/rig-warnings.mjs` in the deep-zoom worktree, headless on the GPU, before and after). `requestRig` already re-arms only once the fence is gone, so the warning comes from something else. Reverted; what do you want to try?
+- A6: a lesson now puts the hints back as they were, but on a first visit they are ON before it (the stored choice is unset), so the first lesson still ends with every right-dock row doubled. Should the deep zoomer start with hints off?
