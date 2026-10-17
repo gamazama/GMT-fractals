@@ -2,8 +2,9 @@
  * deep-zoom/components/LocationText.tsx - a place as text, a scene as a link, the list as a file:
  * the foot of the Locations tab, five buttons in two rows.
  *
- * Copy location writes the view on screen as JSON; Paste location reads one back and jumps to it
- * (one undo step; a text it cannot read gets a toast that says why) - and a pasted text that holds
+ * Copy location writes the view on screen as JSON; Paste location reads one back, or the place in a
+ * link Copy link wrote, and jumps to it (one undo step; a text it cannot read gets a toast that says
+ * why) - and a pasted text that holds
  * SEVERAL locations is added to My locations instead; Copy link writes this page's address with
  * the scene in it. Export all downloads every saved location as one JSON file, thumbnails left
  * out; Import opens such a file and adds its locations to the list, skipping the ones already
@@ -51,7 +52,7 @@ export const LocationText: React.FC = () => {
         <div data-dz-location-text className="relative flex flex-col gap-1 px-2 py-2">
             <div className="flex gap-1">
                 <button type="button" data-dz-copy-location className={button} title="Copy this view as text" onClick={() => { void copyLocation(); }}>Copy location</button>
-                <button type="button" data-dz-paste-location className={button} title="Jump to a location copied as text. A text that holds several is added to My locations instead." onClick={() => { void pasteLocation(); }}>Paste location</button>
+                <button type="button" data-dz-paste-location className={button} title="Jump to a location copied as text, or to the place in a link from Copy link (its camera and formula, not its look). A text that holds several is added to My locations instead." onClick={() => { void pasteLocation(); }}>Paste location</button>
                 <button type="button" data-dz-copy-link className={button} title="Copy a link that opens this scene and view" onClick={() => { void copyShareLink(); }}>Copy link</button>
             </div>
             <div className="flex gap-1">

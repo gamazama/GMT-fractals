@@ -9,7 +9,8 @@
  *   A jump leaves all of those as they are. They live in the engine's state library
  *   (`savedLocations`): thumbnails, labels, nine slots, the Locations menu. `jumpTo` is the single
  *   path for every jump - a saved place, a slot key, Home, Back, the readout's "Start view"
- *   (`jumpStart`), a starter dive's start, a pasted location - so each one is one undo step and
+ *   (`jumpStart`), a starter dive's start, a pasted location or link, the end of the previous trail
+ *   under its own formula (`jumpToTrailEnd`) - so each one is one undo step and
  *   the renderer never becomes a second writer of the look values. A scene file and a share link
  *   are not places: they carry the whole scene.
  *
@@ -122,7 +123,8 @@ import type { DeepZoomHost, DzParams } from './host/DeepZoomHost';
 import { formatDepth, validDepth } from './components/depthFormat';
 import { depthNow } from './depthNow';
 import { isFlying } from './navigationState';
-import { trailEnds } from './trail';
+import { setTrailFormulaReader, trailEnds } from './trail';
+import type { TrailFormula, TrailSample } from './trail';
 import type { DzFormulaSlice } from './storeTypes';
 import { STARTERS } from './data/starters';
 
@@ -468,6 +470,31 @@ export function jumpStart(): void {
     jumpTo({ view: { ...(whole ?? formulaHome(choice)), iters: f.iterations, power: f.power, phase: [f.phaseTheta, f.phasePhi] }, formula: choice, depth: '' });
 }
 
+/** What a formula draws: its choice, power and phase (with a view's Julia constant). The iteration floor is not in it. */
+const SHAPE_KEYS = [...FORMULA_CHOICE_KEYS, 'power', 'phaseTheta', 'phasePhi'] as const;
+
+/**
+ * Where a trail ended, as a place: the camera of its last sample under the formula it was flown in
+ * (`TrailFormula`, deep-zoom/trail.ts) - jumped to when that formula does not draw what the one in
+ * force does. For a route made from the previous trail (`routeFromTrail` in deep-zoom/route.ts): a
+ * jump to another formula ended that trail, and its route on the formula in force passes through
+ * the solid. A jump like any other: one undo step, the trail ends, Back returns. Returns whether it
+ * jumped; not when the formula is the one in force, or not known.
+ */
+export function jumpToTrailEnd(trail: readonly TrailSample[], flownIn: TrailFormula | null): boolean {
+    const host = getHost(), end = trail[trail.length - 1];
+    if (!host || !flownIn || !end) return false;
+    const now = useEngineStore.getState().dzFormula, { roll: _roll, julia, ...here } = host.getView();
+    if (SHAPE_KEYS.every((key) => flownIn.formula[key] === now[key]) && String(flownIn.julia) === String(julia)) return false;
+    const cam = [String(end.p[0]), String(end.p[1]), String(end.p[2])] as [string, string, string];
+    return jumpTo({
+        // The look fields are the store's anyway (`viewForHost`): the camera and the count are the sample's.
+        view: { ...here, cam, yaw: end.yaw, pitch: end.pitch, ...(end.roll ? { roll: end.roll } : {}), ...(flownIn.julia ? { julia: flownIn.julia } : {}), iters: end.iters },
+        look: { dzFormula: flownIn.formula },
+        depth: String(end.depth),
+    });
+}
+
 /** Back to the view before the last jump. */
 export function jumpBack(): void {
     const back = backStack.pop();
@@ -635,6 +662,9 @@ export function installLocations(): void {
         },
         changeOf: (capture) => (capture as { seq: number }).seq,
     });
+
+    // The trail keeps the formula it is flown in (deep-zoom/trail.ts may not import the store).
+    setTrailFormulaReader(() => useEngineStore.getState().dzFormula);
 
     // A switch of formula shows the whole of the new one (PITFALLS: A CAMERA OF ONE FORMULA ...).
     useEngineStore.subscribe((s) => s.dzFormula?.kind, (kind, was) => {

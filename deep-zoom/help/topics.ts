@@ -126,7 +126,7 @@ The **Locations** tab opens with four sets of cards.
 
 ## Sharing
 At the foot of the tab:
-- **Copy location** and **Paste location** carry one place as text.
+- **Copy location** and **Paste location** carry one place as text. Paste takes a link from **Copy link** too: its camera and formula, not its light and colour.
 - **Copy link** makes a link that opens this view with its light and colour.
 - **Export all** saves My locations as one file, and **Import** adds the places in such a file. A file dropped on the app is added the same way.
 `,
@@ -141,7 +141,8 @@ A route is a camera move through keyframes: views you set along the way. It is k
 
 ## Keyframes
 - Fly to a view and press \`K\`, or **Add keyframe**. Fly on and press \`K\` again: the route now runs from the first view to the second.
-- Click a row to go to its keyframe. The buttons on a row play the leg that arrives there, replace the keyframe with the view on screen, and delete it.
+- Click a row to select it. Its play button goes to its keyframe, playing the leg that arrives there, and stops on it; its other buttons replace the keyframe with the view on screen, and delete it.
+- With the playhead stopped on a keyframe before the last, \`K\` gives that keyframe the view on screen: the button then reads **Replace keyframe**.
 - A row is red when its leg passes through the solid. Move one of its two keyframes, or add one between them.
 - \`T\` opens the timeline, where a keyframe can be moved in time.
 
@@ -162,7 +163,7 @@ The app remembers how you fly. That is the trail, and its line on the Route tab 
 - When the camera is not on the route, the tab says so, and **Return** puts it back.
 
 ## Free look
-While a route plays in Fly mode, a drag on the picture or \`Q\` \`E\` turns the view, and the route plays on under it. The turn is gone when playback stops, unless the timeline's record button is on: then it is kept with the route, and **Clear** removes it.
+While a route plays in Fly mode, a drag on the picture or \`Q\` \`E\` turns the view, and the route plays on under it. The turn is gone when playback stops, unless the timeline's record button is on: then it is kept with the route, and **Clear** removes it. The record button goes off when that playback stops.
 
 > A scene saved from the File menu keeps the route. A link does not carry it.
 `,

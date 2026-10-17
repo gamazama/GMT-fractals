@@ -33,18 +33,32 @@
  * set, or a moment after the route was cut from the trail; this session only - a keyframe from a
  * loaded scene shows its number), its depth, its time and, from the second row on, a SECONDS FIELD:
  * the length of the leg that arrives at it. A typed length moves that keyframe and every later one
- * (`setLegSeconds`), when the field is left or Enter is pressed. A row goes to its keyframe; its
- * buttons play the leg that arrives at it, replace it with the view on screen, and delete it. Its
- * PIN shows and toggles the K mark (`pinKeyframe` / `unpinKeyframe`, one undo step each): pinned, a
- * smoothing pass keeps this keyframe's aim to the digit (K, Key Cam and a replace pin it; a keyframe
- * cut from the trail or from an older scene is not). The pin stays shown while it is on. A row is
- * red when the leg that arrives at it passes through the solid.
- * SELECTING ROWS: a click selects one (and goes to it), Ctrl / Cmd-click adds or removes one,
- * Shift-click takes the range from the row clicked last. "Delete selected", or the Delete key
- * while the list has the focus (a click on a row gives it), removes them in one undo step
- * (`deleteKeyframes`). The selection is this panel's own state: ids that are no longer keyframes
- * (a delete, an undo, a route cut again) drop out of it by themselves.
+ * (`setLegSeconds`), when the field is left or Enter is pressed. A row's PLAY BUTTON parks the
+ * playhead on its keyframe, the camera with it (`playLeg`): from the second row on it plays the leg
+ * that arrives there and stops on it, on the first it goes there at once. Its other buttons replace
+ * it with the view on screen and delete it. Its PIN shows and toggles the K mark (`pinKeyframe` /
+ * `unpinKeyframe`, one undo step each): pinned, a smoothing pass keeps this keyframe's aim to the
+ * digit (K, Key Cam and a replace pin it; a keyframe cut from the trail or from an older scene is
+ * not). The pin stays shown while it is on. A row is red when the leg that arrives at it passes
+ * through the solid.
+ * PARKED: while the playhead stands on a keyframe that is not the last (and nothing plays), K
+ * gives that keyframe the view on screen (route.ts, `setKeyframe`; the owner's rule). So the add
+ * button then reads "Replace keyframe N (K)", and that row says "K replaces" beside its times.
+ * SELECTING ROWS: a click selects one - it moves neither the playhead nor the camera (the owner,
+ * F3, 2026-10-17: the play button parks) - Ctrl / Cmd-click adds or removes one, Shift-click takes
+ * the range from the row clicked last. "Delete selected", or the Delete key while the list has the
+ * focus (a click on a row gives it), removes them in one undo step (`deleteKeyframes`). The
+ * selection is this panel's own state: ids that are no longer keyframes (a delete, an undo, a route
+ * cut again) drop out of it by themselves.
  * When the camera is not where the playhead says, one line says so and "Return" puts it back.
+ * UNDO OVER THE TAB IS THE TIMELINE'S: with the pointer over it, this app's `DZ_ROUTE_HOVER` scope
+ * is pushed (deep-zoom/hotkeys.ts), so Ctrl+Z / Ctrl+Y undo the animation stack, where every edit
+ * made here is; anywhere else they undo the app's own stack (a jump, a flight, a slider), and Ctrl+Z
+ * after "Clear route" put the camera and the formula back by a jump and left the route cleared.
+ * "Over the tab" is over the scroll box the panel lives in (the dock's), not over the panel's own
+ * box, which ends where its content does: after "Clear route" the pointer stands below it (seen
+ * 2026-10-17). NOT the engine's 'timeline-hover' scope the timeline pushes: it binds Space to play as
+ * well, and Space is a fly key. The engine's `isTimelineHovered` is NOT set: it silences the fly keys.
  *
  * THE TAB ENDS WITH ROOM FOR THE TIMELINE'S TOGGLE. The engine's round button that opens the
  * timeline ("Animate" while hints are on; `fixed bottom-4 left-4` in components/TimelineHost.tsx)
@@ -71,7 +85,7 @@
  *     own Delete (a window listener that removes the keys selected ON THE TIMELINE) must not run
  *     for the same press. Backspace is not taken: it is "back to the view before the last jump".
  *   - A SECONDS FIELD IS AN INPUT INSIDE A ROW THAT IS CLICKED: its clicks stop at the field, or
- *     each would go to the keyframe and select the row. A text input read as a number (a comma or
+ *     each would select the row. A text input read as a number (a comma or
  *     a point): a number input prints the browser's own decimal mark, 9,83 beside this tab's 9.8.
  *   - THE ROOM FOR THE TOGGLE IS OUT OF FLOW, AND CSS ALONE TAKES IT AWAY. It is an absolute box
  *     56 px high under the tab's own box (the dock's 8 px of bottom padding lie inside it: 48 px
@@ -91,23 +105,29 @@
  *   (debug/scratch/route-fixes/app-six.mts, git-ignored). The row's pin (one undo step a click, shown
  *   while on) and "Smooth..." with the rows selected as its legs: driven once in the real app on the
  *   GPU, 2026-10-17, on the owner's route (debug/scratch/s2/app-smooth.mts, git-ignored).
+ * @assumption Ctrl+Z over the tab undoing the route (UNDO OVER THE TAB), a row click that moves
+ *   nothing, the play button that parks (row 1 included) and the "Replace keyframe N (K)" label with
+ *   its row's mark: tried once in the real app, 2026-10-17 (the browser pane, by hand). No standing
+ *   guard reaches them.
  * @assumption The last row ends clear of the toggle with the timeline closed, and with it open
  *   the list ends where it did before - measured once, 2026-10-11, in the app at 1280 x 800 with
  *   14 keyframes (debug/scratch/r7c/animate.mts, git-ignored; before the room was there its
  *   "the last row ... is clear of the toggle" line was red, the row 35 px under the button). No
  *   standing guard looks at it.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
 import { CheckeredFlagIcon, PauseIcon, PinIcon, PlayIcon, PlusIcon, SaveIcon, TrashIcon } from '../../components/Icons';
 import { openRenderPopup } from '../../engine/animation/renderPopupRegistry';
 import { BaseSlider } from '../../components/Slider';
 import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
 import { Modal } from '../../components/ui/Modal';
+import { useShortcutScope } from '../../engine/plugins/Shortcuts';
+import { DZ_ROUTE_HOVER } from '../hotkeys';
 import { useDzNavigation } from '../navigationState';
 import {
     ROUTE_SMOOTHING, ROUTE_TRACK, ROUTE_TYPED_LEG_SECONDS, cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, lookKeyed, pauseRoute, pinKeyframe,
-    playLeg, playRoute, replaceKeyframe, retimeRoute, returnToRoute, reverseRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo,
+    playLeg, playRoute, replaceKeyframe, retimeRoute, returnToRoute, reverseRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource,
     setKeyframe, setLegSeconds, setRouteSmoothing, unpinKeyframe, useRoute,
 } from '../route';
 import type { RouteKey } from '../route';
@@ -237,8 +257,27 @@ export const RoutePanel: React.FC = () => {
     const rangeFrom = useRef<string | null>(null);
     /** The Smooth... dialog is open. */
     const [smoothing, setSmoothing] = useState(false);
+    /** The pointer is over the tab: Ctrl+Z / Ctrl+Y are the timeline's (UNDO OVER THE TAB in the header). */
+    const [hovered, setHovered] = useState(false);
+    useShortcutScope(DZ_ROUTE_HOVER, hovered);
+    const rootRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        // The TAB is the scroll box this panel lives in (the dock's, a window's), not the panel's own box:
+        // after "Clear route" the list is gone and the pointer stands below it.
+        let box = rootRef.current?.parentElement ?? null;
+        while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+        const area = box ?? rootRef.current;
+        if (!area) return undefined;
+        const enter = (): void => setHovered(true), leave = (): void => setHovered(false);
+        area.addEventListener('pointerenter', enter);
+        area.addEventListener('pointerleave', leave);
+        setHovered(area.matches(':hover'));
+        return () => { area.removeEventListener('pointerenter', enter); area.removeEventListener('pointerleave', leave); };
+    }, []);
 
     const keys = routeKeys();
+    // Parked on a keyframe that is not the last: K gives it the view on screen (PARKED in the header).
+    const parked = !playing && under >= 0 && under < keys.length - 1;
     // Ids that are keyframes no more (a delete, an undo, a route cut again) are no selection.
     const selected = picked.filter((id) => keys.some((k) => k.id === id));
     const source = routeSource();
@@ -247,7 +286,7 @@ export const RoutePanel: React.FC = () => {
     const act = (run: (id: string) => void, id: string) => (e: React.MouseEvent): void => { e.stopPropagation(); run(id); };
     const make = (fromPrevious: boolean): void => { if (routeHandSet()) setAsking(fromPrevious); else routeFromTrail(fromPrevious); };
     /** A click on a row. With Shift: the range from the row clicked last. With Ctrl / Cmd: this row
-     *  in or out. Plain: this row alone, and the camera goes to it. */
+     *  in or out. Plain: this row alone. None of them moves the playhead or the camera. */
     const pick = (key: RouteKey, i: number) => (e: React.MouseEvent): void => {
         if (e.shiftKey) {
             const last = keys.findIndex((k) => k.id === rangeFrom.current), from = last >= 0 ? last : under >= 0 ? under : i;
@@ -257,7 +296,6 @@ export const RoutePanel: React.FC = () => {
         rangeFrom.current = key.id;
         if (e.ctrlKey || e.metaKey) { setPicked(selected.includes(key.id) ? selected.filter((id) => id !== key.id) : [...selected, key.id]); return; }
         setPicked([key.id]);
-        scrubRouteTo(key.frame);
     };
     const removeSelected = (): void => { if (selected.length > 0) deleteKeyframes(selected); setPicked([]); };
     const onListKey = (e: React.KeyboardEvent): void => {
@@ -268,17 +306,19 @@ export const RoutePanel: React.FC = () => {
     };
 
     return (
-        <div data-dz-route className="relative flex flex-col">
+        <div ref={rootRef} data-dz-route className="relative flex flex-col">
             <div className="px-2 pt-2 flex gap-1">
                 <button
                     type="button"
-                    data-dz-route-add
+                    data-dz-route-add={parked ? 'replace' : 'add'}
                     disabled={rendering}
                     onClick={() => { setKeyframe(); }}
-                    title="Add a keyframe from this view, after the last one (K). With the playhead on an earlier keyframe, that keyframe takes this view instead."
+                    title={parked
+                        ? `Give keyframe ${under + 1} the view on screen; it keeps its time (K). The playhead is parked on it: move the playhead off it to add a keyframe after the last one instead.`
+                        : 'Add a keyframe from this view, after the last one (K). With the playhead parked on an earlier keyframe (its row\'s play button), that keyframe takes this view instead.'}
                     className={`${topButton} flex-1 bg-accent-900/40 hover:bg-accent-800 text-accent-300 border-accent-500/30 disabled:opacity-40`}
                 >
-                    <PlusIcon /> Add keyframe
+                    {parked ? <><SaveIcon /> Replace keyframe {under + 1} (K)</> : <><PlusIcon /> Add keyframe</>}
                 </button>
                 <button
                     type="button"
@@ -385,7 +425,7 @@ export const RoutePanel: React.FC = () => {
                         <div
                             data-dz-route-look-help
                             className="pt-1 text-fg-faint"
-                            title="Free look: the view is turned on top of the route, and the route plays on. A fly key, the wheel or Orbit mode still stop it and hand you the camera. Without Record the turn is gone when playback stops; with Record on (the timeline's record button, camera recording enabled) it is kept as three tracks: Look pan, Look tilt, Look roll."
+                            title="Free look: the view is turned on top of the route, and the route plays on. A fly key, the wheel or Orbit mode still stop it and hand you the camera. Without Record the turn is gone when playback stops; with Record on (the timeline's record button, camera recording enabled) it is kept as three tracks: Look pan, Look tilt, Look roll, and Record goes off when playback stops."
                         >
                             Free look: while it plays, turn with a drag (Fly mode) or Q / E. Record on the timeline keeps it.
                         </div>
@@ -457,6 +497,7 @@ export const RoutePanel: React.FC = () => {
                     const through = !!solid[key.id];
                     const picture = thumbnails[key.id];
                     const chosen = selected.includes(key.id);
+                    const then = i === keys.length - 1 ? 'K then adds a keyframe after it' : 'K then gives it the view on screen';
                     return (
                         <div
                             key={key.id}
@@ -464,7 +505,7 @@ export const RoutePanel: React.FC = () => {
                             data-dz-route-selected={chosen || undefined}
                             aria-selected={chosen}
                             onClick={pick(key, i)}
-                            title="Go to this keyframe. Ctrl-click adds it to the selection or takes it out; Shift-click selects the range."
+                            title="Select this keyframe. Ctrl-click adds it to the selection or takes it out; Shift-click selects the range. Its play button takes the playhead and the camera to it."
                             className={`flex items-center gap-1.5 p-1.5 rounded border group cursor-pointer select-none ${
                                 through ? 'bg-danger/10 border-danger/40'
                                     : here ? 'bg-accent-900/20 border-accent-500/50'
@@ -485,6 +526,9 @@ export const RoutePanel: React.FC = () => {
                                 <div className="flex items-center gap-1.5 text-[9px] leading-tight text-fg-dim">
                                     <span title="When the route reaches this keyframe">{seconds(key.frame)} s</span>
                                     {i > 0 && <LegSeconds id={key.id} frames={key.frame - keys[i - 1].frame} fps={fps} />}
+                                    {here && parked && (
+                                        <span data-dz-route-parked className="text-accent-300 font-bold" title="The playhead is parked on this keyframe: K gives it the view on screen">K replaces</span>
+                                    )}
                                 </div>
                                 {through && (
                                     <div data-dz-route-solid className="text-[9px] leading-tight text-danger truncate" title="The leg that arrives at this keyframe passes through the solid: the picture goes blank on the way. Move one of its two keyframes, or add one between them.">
@@ -505,11 +549,15 @@ export const RoutePanel: React.FC = () => {
                                 >
                                     <PinIcon on={!!key.exact} />
                                 </button>
-                                {i > 0 && (
-                                    <button type="button" data-dz-route-leg onClick={act(playLeg, key.id)} className={`${rowButton} hover:text-accent-400`} title="Play the leg to this keyframe">
-                                        <PlayIcon />
-                                    </button>
-                                )}
+                                <button
+                                    type="button"
+                                    data-dz-route-leg
+                                    onClick={act(playLeg, key.id)}
+                                    className={`${rowButton} hover:text-accent-400`}
+                                    title={i === 0 ? `Go to this keyframe: the playhead is parked on it, and ${then}` : `Play the leg to this keyframe and park the playhead on it: ${then}`}
+                                >
+                                    <PlayIcon />
+                                </button>
                                 <button type="button" data-dz-route-replace onClick={act(replaceKeyframe, key.id)} className={`${rowButton} hover:text-fg-muted`} title="Replace with the view on screen">
                                     <SaveIcon />
                                 </button>

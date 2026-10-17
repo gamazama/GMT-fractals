@@ -42,6 +42,15 @@
  * A depth is kept as text but passes through a number on the way in (`depthText`): the text the
  * app writes (`String(depth)`) comes back as it was; `4.2e+0` typed by hand comes back `4.2`.
  *
+ * A LINK (2026-10-17). Paste location also takes what "Copy link" writes (`<page>#s=<share string>`,
+ * deep-zoom/share.ts), whole or its `#s=` part alone: `shareStringOf` finds the share string, the
+ * caller decodes it (the engine's `parseShareString`, which needs the feature registry: not pure),
+ * and `linkLocation` takes the place out of the scene it decodes to - the camera (`dzView`, its
+ * strings and its Julia constant as text) and the formula (`features.dzFormula`). Not the look the
+ * link carries: Paste is a jump, and a jump leaves light, colour and detail as they are. Its guard
+ * is the share code's (the `@invariant` in deep-zoom/share.ts: check:deep-zoom-scene-roundtrip, which
+ * has the real encoder); the check of this file has no line on it.
+ *
  * @invariant an exported list reads back with every `cam` string and the Julia constant byte for
  *   byte; one entry with a number-mangled camera is refused by itself and the rest are read -
  *   proven by: npm run check:deep-zoom-location-parse ("export: the Julia constant comes back byte
@@ -228,6 +237,27 @@ export function parseLocationList(text: string): ParsedLocationList {
         return { ok: false, reason: `That text is not a location: ${detail}.`, detail };
     }
     return { ok: true, list, total: items.length, locations, labels, refused };
+}
+
+// ── a link: what "Copy link" writes ──────────────────────────────────────────────────────────────
+
+/** The share string of a link as "Copy link" writes it, or of its `#s=` part alone (A LINK in the
+ *  header). Null when the text is not one: JSON is not, nor is anything with a space in it. */
+export function shareStringOf(text: string): string | null {
+    const m = /^(?![[{])\S*#s=(\S+)$/.exec((text ?? '').trim());
+    return m ? m[1] : null;
+}
+
+/** The place in the scene a link decodes to: its camera and its formula, nothing else of it (A LINK
+ *  in the header). Or the reason it holds none. */
+export function linkLocation(scene: unknown): DzLocationState | string {
+    const s = scene as { dzView?: unknown; features?: { dzFormula?: unknown } } | null;
+    const v = s?.dzView as Record<string, unknown> | undefined, formula = s?.features?.dzFormula;
+    if (!v || typeof v !== 'object') return 'That link could not be read.';
+    // The scene writes the angles as text (the share encoder rounds numbers): a view's own are numbers.
+    const view = viewOf({ cam: v.cam, julia: v.julia, yaw: Number(v.yaw), pitch: Number(v.pitch), roll: Number(v.roll) });
+    if (typeof view === 'string') return `That link holds no place: ${view}.`;
+    return { view, ...(formula && typeof formula === 'object' ? { look: { dzFormula: formula as NonNullable<DzLocationState['look']>['dzFormula'] } } : {}), depth: depthText(v.depth) };
 }
 
 /** What makes two places the same place for an import (see the header). A place with no formula of

@@ -6,6 +6,10 @@
  *                                    formula, as a saved place holds them (`captureLocation` in
  *                                    locations.ts; `locationParse.ts` reads it back, and last
  *                                    week's shapes too). A paste is a jump: one undo step.
+ *                                    Paste also takes a LINK as Copy link writes it, whole or
+ *                                    its `#s=` part: the place in it, its camera and formula,
+ *                                    and not its look (`shareStringOf` / `linkLocation` in
+ *                                    locationParse.ts; opening the link loads the whole scene).
  *   Export all / a pasted LIST       `exportAllLocations` downloads every saved location as one
  *                                    JSON file, in the stored order, thumbnails left out
  *                                    (`deep-zoom-locations.json`, the name the old prototype's
@@ -39,6 +43,13 @@
  *   - An imported place has no picture: thumbnails are not in the file, and drawing one would mean
  *     jumping to every place. Its row shows the engine list's empty square until it is updated.
  *
+ * @invariant Paste location takes the link Copy link writes, whole or its `#s=` part: a jump (one
+ *   undo step) to its camera and Julia constant byte for byte, its angles to the digit, and its
+ *   formula - proven by: npm run check:deep-zoom-scene-roundtrip ("link: Paste takes the link Copy
+ *   link writes ...", "link: its #s= part alone does the same ..."). Falsified 2026-10-17:
+ *   `shareStringOf` (locationParse.ts) answering null -> those 2 red. Its third line, "link: and not
+ *   the look it carries ...", stayed green under that break (nothing was applied at all): not
+ *   broken on its own.
  * @assumption A pasted list and an opened or dropped file land in My locations as the toast says,
  *   a second import of the same file adds nothing, the old prototype's file imports, and a single
  *   pasted location still jumps - seen in the app on 2026-10-12 (debug/scratch/shell-leftovers/
@@ -55,7 +66,7 @@ import { showToast } from '../engine/store/toastStore';
 import { getHost } from './host/current';
 import { captureLocation, jumpTo } from './locations';
 import type { DzLocation } from './locations';
-import { importSummary, locationToText, locationsToText, newLocations, parseLocationList } from './locationParse';
+import { importSummary, linkLocation, locationToText, locationsToText, newLocations, parseLocationList, shareStringOf } from './locationParse';
 import type { ParsedLocationList } from './locationParse';
 import { formatDepth, validDepth } from './components/depthFormat';
 
@@ -104,11 +115,19 @@ export async function pasteLocation(): Promise<void> {
 }
 
 /**
- * What "Paste location" does with a text. ONE location: jump to it (one undo step). SEVERAL: add
- * them to My locations and stay where the camera is. Says why when it can do neither. Returns
- * whether it jumped.
+ * What "Paste location" does with a text. ONE location, or a link: jump to it (one undo step).
+ * SEVERAL: add them to My locations and stay where the camera is. Says why when it can do neither.
+ * Returns whether it jumped.
  */
 export function applyLocationText(text: string): boolean {
+    const link = shareStringOf(text);
+    if (link !== null) {
+        const place = linkLocation(parseShareString(link));
+        if (typeof place === 'string') { showToast(place, 'warning', 5000); return false; }
+        if (!jumpTo(place)) return false;
+        showToast('Jumped to the place in the link: its camera and formula, not its look', 'info');
+        return true;
+    }
     const parsed = parseLocationList(text);
     if (!parsed.ok) { showToast(parsed.reason, 'warning', 5000); return false; }
     if (parsed.total > 1) { importLocations(parsed); return false; }

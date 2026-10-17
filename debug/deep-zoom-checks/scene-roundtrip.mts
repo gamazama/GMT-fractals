@@ -14,7 +14,8 @@
  *                 location's row and every keyframe's payload come back string for string, the
  *                 angles to the last digit, and the scene carries its version stamp. The store's
  *                 three number rows for the constant come back as the loaded constant's doubles,
- *                 and a jump to the saved place writes them too.
+ *                 and a jump to the saved place writes them too. Then Copy link's text (the real
+ *                 share encoder) pasted as a location (2026-10-17): a jump to its place.
  *   [2] parked    a view that was loaded and that no ready renderer has taken yet is what a scene
  *                 written meanwhile holds; once a ready renderer has it, the renderer's own view is.
  *   [3] session   the session's body is the scene `getPreset` writes, without the documents; it
@@ -32,6 +33,10 @@
  *     through the envelope and back ..." and "session: applied at boot ...".
  *   - deep-zoom/session.ts, the view's test taken out of `validate` -> 1 red: "session: a body
  *     whose camera went through numbers is refused (a clean start, never a wrong place)".
+ * FALSIFIED 2026-10-17, one break (stage 1 of plans/deep-zoom-shell/STREAMLINE.md, A3), the file
+ * restored byte for byte (md5): deep-zoom/locationParse.ts, `shareStringOf` answering null -> 2 red:
+ * "link: Paste takes the link Copy link writes ..." and "link: its #s= part alone does the same ...".
+ * "link: and not the look it carries ..." stayed green (nothing was applied at all).
  * NOT broken on purpose, so not known to be able to go red: the camera strings and the angles of
  * [1], the saved location's row, "scene: every keyframe's payload comes back byte for byte" (the
  * sequence is the engine's to carry), the version stamp, and the session's other refusals.
@@ -62,7 +67,8 @@ import type { DeepZoomHost, DzView } from '../../deep-zoom/host/DeepZoomHost';
 import { DZ_SCENE_VERSION } from '../../deep-zoom/presetFields';
 import type { DzSavedView } from '../../deep-zoom/presetFields';
 import { installRoute, noteMove, routeKeys, setKeyframe } from '../../deep-zoom/route';
-import { installShare } from '../../deep-zoom/share';
+import { applyLocationText, installShare } from '../../deep-zoom/share';
+import { locationToText, shareStringOf } from '../../deep-zoom/locationParse';
 import { jumpTo } from '../../deep-zoom/locations';
 import type { DzLocation } from '../../deep-zoom/locations';
 import { DZ_SESSION_FORMAT, dzSessionAdapter } from '../../deep-zoom/session';
@@ -213,6 +219,22 @@ const undoBefore = store().paramUndoStack.length;
 jumpTo(rows[0].state);
 check(sameTriple(first.sets[0]?.julia, JULIA) && store().dzFormula.juliaMode === true && rowsNow() === ROWS_TEXT && store().paramUndoStack.length === undoBefore + 1,
     'place: a jump to a Julia place writes the Constant row from its view, in the jump\'s one undo step', `${rowsNow()} for ${ROWS_TEXT}; ${store().paramUndoStack.length - undoBefore} undo steps`);
+// A LINK (2026-10-17, A3): Paste location takes what Copy link writes - the place in it, not its look.
+const LINK = `https://app.example/deep-zoom.html#s=${store().getShareString({ includeAnimations: false })}`;
+const pasted = (text: string): { jumped: boolean; set: DzView | undefined; steps: number } => {
+    elsewhere(first);
+    const steps = store().paramUndoStack.length, jumped = applyLocationText(text);
+    return { jumped, set: first.sets[first.sets.length - 1], steps: store().paramUndoStack.length - steps };
+};
+const whole = pasted(LINK);
+check(whole.jumped && sameTriple(whole.set?.cam, CAM_B) && sameTriple(whole.set?.julia, JULIA) && whole.set?.yaw === VIEW_A.yaw && whole.set?.pitch === VIEW_A.pitch
+    && whole.set?.roll === VIEW_A.roll && store().dzFormula.juliaMode === true && store().dzFormula.burning === true && store().dzFormula.power === 6 && whole.steps === 1,
+    'link: Paste takes the link Copy link writes: its camera, its Julia constant and its angles byte for byte, and its formula, in one undo step',
+    `${whole.jumped} ${JSON.stringify(whole.set?.cam?.map((c) => c.slice(-6)))} ${whole.set?.yaw} ${whole.steps} steps`);
+check(store().dzLight.lampFalloff === 4 && store().dzQuality.detail === 1, 'link: and not the look it carries: light and detail stay as they were', `${store().dzLight.lampFalloff} ${store().dzQuality.detail}`);
+const part = pasted(LINK.slice(LINK.indexOf('#')));
+check(part.jumped && sameTriple(part.set?.cam, CAM_B) && shareStringOf(locationToText(rows[0].state)) === null,
+    'link: its #s= part alone does the same; a location\'s JSON text is not taken for a link');
 useEngineStore.setState({ paramUndoStack: [], paramRedoStack: [] });      // [3] counts the undo stack after a session is applied
 
 // ── [2] a loaded view that no ready renderer has taken yet ───────────────────────────────────────

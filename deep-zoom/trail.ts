@@ -22,7 +22,17 @@
  *     does at a jump. Recording switched off and on again leaves a `gap` and never ends it.
  *   - It ENDS at a jump, a change of formula and a loaded scene (`trailEnds`, called by
  *     `deep-zoom/locations.ts` and `deep-zoom/presetFields.ts` BEFORE the view is set). One deeper
- *     than `TRAIL_KEEP_DECADES` is then kept as the previous trail - one only - and a toast says so.
+ *     than `TRAIL_KEEP_DECADES` is then kept as the previous trail - one only - and a toast says
+ *     so, once a session (the owner, F13, 2026-10-17: not at every jump).
+ *   - THE PREVIOUS TRAIL KEEPS THE FORMULA IT WAS FLOWN IN (`previousTrailFormula`): the store's
+ *     formula slice as of the trail's last followed move, and the view's Julia constant while that
+ *     mode is on. With the camera of a sample that is a place, as a saved location is one: a route
+ *     made from the previous trail jumps back to it first (`routeFromTrail` in deep-zoom/route.ts).
+ *     Read at the move, not when the trail ends: a switch of formula ends the trail AFTER the
+ *     store holds the new one, and an undo of a jump has put the old one back by the time it ends
+ *     the trail flown since. This file cannot import the store (presetFields.ts imports it before
+ *     the store exists): `installLocations` hands it the reader (`setTrailFormulaReader`); without
+ *     one (the node checks) no formula is kept and nothing is jumped to.
  *
  * CUTTING A ROUTE (three pure functions; `deep-zoom/route.ts` writes what they give)
  *   `cutDetours`     where the trail comes back to a place it had been - within `TRAIL_REACH` depths,
@@ -48,7 +58,8 @@
  * THE SEAM
  *   - `followTrail`, `trailTurned`, `trailViewSet`: from `deep-zoom/route.ts` (a move, a turn, a
  *     set view) and, while a dive flies, from the navigation tick. `trailEnds`: see above.
- *   - `trailToHere`, `previousTrail`, `trailHeadingNow`: read by `deep-zoom/route.ts`.
+ *   - `trailToHere`, `previousTrail`, `previousTrailFormula`, `trailHeadingNow`: read by
+ *     `deep-zoom/route.ts`. `setTrailFormulaReader`: from `deep-zoom/locations.ts`, once.
  *   - `useTrail`: the record button and its line (`deep-zoom/components/RoutePanel.tsx`).
  *   - The depth of a sample is the depth the app shows (`deep-zoom/navigationState.ts`), published
  *     8 times a second: no ray is marched for the trail.
@@ -96,6 +107,11 @@
  *   the digit, and reversed twice is the trail it was: green lines in check:deep-zoom-trail
  *   ("reverse: a trail reversed ...", "reverse: its clock ...", "reverse: and reversed twice
  *   ..."), none broken on its own (the stage's three breaks went to route.ts and the engine).
+ * @assumption The previous trail keeps the formula it was flown in, a route made from it puts that
+ *   formula back first, and the kept toast is said once a session: no check line (the node checks
+ *   hand the trail no formula reader). Tried once in the app, 2026-10-17: Surface (the bulb), Arches
+ *   (a Mandelbox), "Route from the previous trail": the bulb again at 1.08e-6, 9 keyframes, no leg
+ *   through the solid, the camera on the route; a second deep trail kept later said nothing.
  * @assumption The staleness guard (PITFALLS: THE DEPTH SHOWN LAGS) holds for a quarter second at
  *   most. One line of the check opens it ("end: after a view is set, nothing is taken while the
  *   depth shown is still that of the place left"); it was not seen red.
@@ -110,6 +126,7 @@ import type { Keyframe } from '../types';
 import { getHost } from './host/current';
 import { useDzNavigation } from './navigationState';
 import type { V3 } from './orbitCamera';
+import type { DzFormulaSlice } from './storeTypes';
 
 /** Fixed-point steps in one world unit: the camera's 256 fractional bits. */
 export const FIXED_UNIT = 2 ** 256;
@@ -599,10 +616,24 @@ export function pickKeyframes(samples: readonly TrailSample[], o: RouteTiming & 
 
 // ── the app's trail ──────────────────────────────────────────────────────────────────────────────
 
+/** The formula a trail was flown in (THE PREVIOUS TRAIL KEEPS THE FORMULA in the header). */
+export interface TrailFormula {
+    formula: DzFormulaSlice;
+    /** The Julia constant of the view, while that mode is on: three strings, as a view holds it. */
+    julia?: [string, string, string];
+}
+let readFormula: () => DzFormulaSlice | undefined = () => undefined;
+/** What the trail as it stands was last flown in, and what the previous one was; the kept toast is said once a session. */
+let flownIn: TrailFormula | null = null, previousIn: TrailFormula | null = null, toldKept = false;
+
 const TRAIL_KEY = 'gmt.deepZoom.trail';
 const trail = createTrail({
     on: safeLocalGet(TRAIL_KEY) !== '0',
-    kept: () => showToast('The trail so far is kept as the previous trail (Route tab)', 'info', 5000),
+    kept: () => {
+        previousIn = flownIn;
+        if (!toldKept) showToast('The trail so far is kept as the previous trail (Route tab)', 'info', 5000);
+        toldKept = true;
+    },
 });
 
 interface TrailUi {
@@ -635,8 +666,16 @@ function publish(): void {
 export function followTrail(): void {
     const host = getHost();
     if (!host || !trail.on) return;
-    trail.follow(host.getView(), shown(), seconds());
+    const view = host.getView(), formula = readFormula();
+    trail.follow(view, shown(), seconds());
+    // After the follow: a trail that this call ended (a set view it had never been at) keeps what it was flown in.
+    flownIn = formula ? { formula, ...(view.julia ? { julia: view.julia } : {}) } : null;
     publish();
+}
+
+/** How the trail reads the formula in force: `installLocations` hands it the store's (see the header). */
+export function setTrailFormulaReader(read: () => DzFormulaSlice): void {
+    readFormula = read;
 }
 
 /** The camera turned. */
@@ -675,6 +714,8 @@ export function trailToHere(): TrailSample[] | null {
 /** The trail as it is kept now, and the one the last jump ended (null: none deep enough was). */
 export const trailSamples = (): readonly TrailSample[] => trail.samples();
 export const previousTrail = (): readonly TrailSample[] | null => trail.previous();
+/** The formula the previous trail was flown in; null when none is kept or it is not known. */
+export const previousTrailFormula = (): TrailFormula | null => (trail.previous() ? previousIn : null);
 
 /** The direction of travel at the camera as it stands, read off the trail; null when the trail cannot say. */
 export function trailHeadingNow(): V3 | null {

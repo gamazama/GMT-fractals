@@ -41,7 +41,9 @@
  *     remembers of how the camera was flown). `routeFromTrail()` replaces the route with one whose
  *     keyframes are the trail's own samples; `setRouteSmoothing()` cuts it again from the same
  *     trail, more or fewer keyframes; `retimeRoute()` moves key times only. This file is told of
- *     every move, turn and set view, and passes each on to the trail.
+ *     every move, turn and set view, and passes each on to the trail. A route from the PREVIOUS
+ *     trail first puts back the formula that trail was flown in, when another is in force: a jump
+ *     (`jumpToTrailEnd`, deep-zoom/locations.ts).
  *   - OUT: the post-scrub hook hands the host ONE `setView` for a scrubbed frame, and only when the
  *     view differs from the last one it set - a parked playhead leaves the still to gather. The
  *     path between keyframes is the engine's (`engine/animation/zoomPath.ts`), with time in frames
@@ -94,6 +96,10 @@
  *     `LOOK_FIT_TOLERANCE`, a tenth of a degree a track. With Record on and nothing turned,
  *     nothing is written and the recorded look plays on as it is. The route's own track is held
  *     throughout (`releaseOnRecord: false`): its keys and payloads are never touched by a pass.
+ *     WHEN PLAYBACK STOPS AFTER A PASS, however it stops, RECORD GOES OFF (`passed`; this app's rule
+ *     only: the engine and GMT keep Record armed for their auto-key). Left on, a slider dragged
+ *     afterwards was keyed as a track of its own (a reviewer's Fill drag became `dzLight.fill`,
+ *     2026-10-17). Record on with no turn begins no pass and stays on.
  *   - A KEYFRAME SET UNDER A RECORDED LOOK holds the rotation that shows the view on screen with
  *     the look on top (`underLook`): what you see is what you key. K and Key Cam write no look key.
  *   - A RENDER gets the recorded look with no code of its own: it sets each frame with
@@ -261,6 +267,8 @@
  *   keyframe - proven by: npm run check:deep-zoom-route (the "set: ...", "leg: ...",
  *   "payload: ...", "drive: ...", "heading: ...", "solid: ...", "play: ..." lines). Falsified
  *   2026-10-11: see the check's header.
+ * @assumption The first row's play button (`playLeg` on the first keyframe) goes there at once and
+ *   parks: no check line; tried once in the app, 2026-10-17.
  * @invariant A route cut from the trail is one undo step, its keyframes are trail samples to the
  *   digit, each with its iteration key, and every sample lies within the smoothing of the route as
  *   `routeViewAt` plays it; the smoothing cuts it again from the same trail; "Even pace" and "As
@@ -287,6 +295,12 @@
  *   pass is thinned - proven by: npm run check:deep-zoom-route ("look: playback stops with no hand
  *   on the camera ...", "look: a recorded pass writes keys on the three tracks, thinned when it
  *   ends ..."). Falsified 2026-10-11: the listener on `isPlaying` emptied -> 3 red.
+ * @invariant When playback stops after a recorded pass, Record goes off - proven by: npm run
+ *   check:deep-zoom-route ("look: Record stays on after a playback with no turn, and goes off when
+ *   playback stops after a recorded pass ..."). Falsified 2026-10-17: the `passed` line taken out of
+ *   the `isPlaying` listener in `installRoute` -> 2 red (that line, and the second pass, which then
+ *   recorded nothing). Its first half, Record ON after a playback with no turn, was not broken on
+ *   its own; nor the other two ways a pass stops (a hand on the controls, the end of a leg).
  * @invariant A hand that takes the controls while a free look is on screen stops playback and the
  *   camera keeps its turn exactly, with no `setView`, and is the user's - proven by: npm run
  *   check:deep-zoom-route ("look: a fly key during playback stops it and the camera keeps its turn
@@ -453,9 +467,10 @@ import { isFlying, useDzNavigation } from './navigationState';
 import { toOrientation, toQuaternion } from './orbitCamera';
 import type { V3 } from './orbitCamera';
 import {
-    FIXED_UNIT, TRAIL_HEADING_TRAVEL, cutDetours, depthCurve, evenFrames, followTrail, pickKeyframes, previousTrail, reverseTrail,
+    FIXED_UNIT, TRAIL_HEADING_TRAVEL, cutDetours, depthCurve, evenFrames, followTrail, pickKeyframes, previousTrail, previousTrailFormula, reverseTrail,
     trailDirections, trailFrames, trailHeadingNow, trailToHere, trailTurned, trailViewSet,
 } from './trail';
+import { jumpToTrailEnd } from './locations';
 import type { RouteTiming, TrailSample } from './trail';
 import { autoIterationsHeld, flushHostSync, holdAutoIterations } from './useHostSync';
 import {
@@ -830,6 +845,8 @@ interface LookPass {
     old: [Keyframe[], Keyframe[], Keyframe[]] | null;
 }
 let pass: LookPass | null = null;
+/** A pass began since playback last stopped: when it stops, Record goes off (RECORDED in the header). */
+let passed = false;
 
 const qRoute = new THREE.Quaternion(), qLook = new THREE.Quaternion(), qTurn = new THREE.Quaternion(), lookEuler = new THREE.Euler();
 const TURN = 2 * Math.PI;
@@ -915,6 +932,7 @@ function beginPass(frame: number): void {
     if (hand) q.multiply(hand);
     hand = null;
     const plain = (value: number): Keyframe => ({ id: nanoid(), frame: start, value, interpolation: 'Linear', autoTangent: false, brokenTangents: false });
+    passed = true;
     pass = { q, start, samples: [[angles[0]], [angles[1]], [angles[2]]], live: [[plain(angles[0])], [plain(angles[1])], [plain(angles[2])]], at: start, angles, shown: frame, old: null };
 }
 
@@ -1105,10 +1123,12 @@ export function playRoute(): void {
     playSpan(at >= end ? keys[0].frame : at, end);
 }
 
-/** Play the leg that arrives at this keyframe - from the one before it - and stop. */
+/** Park the playhead on this keyframe, the camera with it (a row's play button): play the leg that
+ *  arrives at it - from the one before - and stop there; the first keyframe has no leg, and is gone to at once. */
 export function playLeg(id: string): void {
     const keys = route().keys, i = keys.findIndex((k) => k.id === id);
     if (i > 0) playSpan(keys[i - 1].frame, keys[i].frame);
+    else if (i === 0 && !routeRendering()) { stopAt = null; anim().pause(); scrubRouteTo(keys[0].frame); }
 }
 
 // ── setting, replacing and deleting a keyframe ───────────────────────────────────────────────────
@@ -1400,11 +1420,16 @@ function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
  * Cut the route from the trail: from its start to the camera as it stands, or (`previous`) the
  * trail the last jump ended. At the smoothing first offered and the even pace. It REPLACES the
  * route (ask first when `routeHandSet()`). One animation-undo step. Returns the keyframes made.
+ * THE PREVIOUS TRAIL MAY BE OF ANOTHER FORMULA (a jump to a Mandelbox place ends a dive on the
+ * bulb): its own formula is put back first, the camera where that trail ended - a place jump
+ * (`jumpToTrailEnd` in deep-zoom/locations.ts), one undo step on the app's own stack. Cut on the
+ * formula in force, every leg of such a route passed through the solid (2026-10-17, A2).
  */
 export function routeFromTrail(previous = false): number {
     if (routeRendering()) return 0;
     const flown = previous ? previousTrail() : trailToHere();
     if (!flown) { showToast(previous ? 'No previous trail is kept' : 'Nothing has been flown yet: there is no trail to make a route from', 'info'); return 0; }
+    if (previous) jumpToTrailEnd(flown, previousTrailFormula());
     flownTiming = false;
     const count = cutRoute(cutDetours(flown), ROUTE_SMOOTHING.initial);
     showToast(`Route made from the trail: ${count} keyframes`, 'success');
@@ -2060,11 +2085,15 @@ export function installRoute(): void {
     // Playback stopped, and no hand took the camera (that path settles the look before it pauses):
     // a recorded pass is thinned, an unrecorded turn is dropped, and the view goes back to the
     // route with what is recorded - one `setView`, from the scrub of the frame it stopped on.
+    // After a pass, however it stopped, Record goes off (RECORDED in the header).
     useAnimationStore.subscribe((s) => s.isPlaying, (playing) => {
-        if (!playing && settleLook() && driving) animationEngine.scrub(anim().currentFrame);
+        if (playing) return;
+        const looked = settleLook();
+        if (passed) { passed = false; useAnimationStore.setState({ isRecording: false }); }
+        if (looked && driving) animationEngine.scrub(anim().currentFrame);
     });
     // Record, or the camera's share of it, went off while the timeline plays on: the pass ends there.
-    useAnimationStore.subscribe((s) => s.isRecording && s.recordCamera, (on) => { if (!on) endPass(); });
+    useAnimationStore.subscribe((s) => s.isRecording && s.recordCamera, (on) => { if (!on) { endPass(); passed = false; } });
 
     // Every `setView` is a jump as far as the heading goes; one that is not the hook's own also takes the camera.
     let offViewSet: (() => void) | null = null;

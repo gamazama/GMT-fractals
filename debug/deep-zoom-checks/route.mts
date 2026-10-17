@@ -180,6 +180,12 @@
  *     3. smoothDialog.ts, `strengthFor` handing 4 s for `EVEN`                -> 1 red: "dialog: the strength is one log slider
  *        from 4 s ..."
  *     NOT FALSIFIED, green only: every other "dialog:" line.
+ *   - record (2026-10-17, stage 1 of plans/deep-zoom-shell/STREAMLINE.md, A4: Record goes off when playback stops after a
+ *     recorded pass; route.ts put back byte for byte, its checksum compared): the `passed` line taken out of the `isPlaying`
+ *     listener in `installRoute`                                            -> 2 red: "look: Record stays on after a playback
+ *     with no turn, and goes off when playback stops after a recorded pass ..." (on after the pass true), "look: a second pass
+ *     over part of the first ..." (the line before it turns Record on again, which then turned it off). The two passes and the
+ *     lines after them turn Record on again by hand where it went off, so they run as they did before the rule.
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -645,6 +651,7 @@ let lookUndo = anim().undoStack.length;
 anim().play();
 play(30);
 anim().pause();
+const armedAfterNoTurn = anim().isRecording;
 check(anim().undoStack.length === lookUndo && !lookKeyed() && lookKeys().every((k) => k.length === 0), 'look: Record on and no turn: nothing is written, and no undo step is left',
     `${anim().undoStack.length - lookUndo} steps, keys ${lookKeys().map((k) => k.length)}`);
 // A pass of 300 frames, ten seconds, in the app's own order: the timeline's tick shows a frame, then
@@ -667,6 +674,9 @@ for (let f = 0; f < 300; f++) {
 // At frame 150 the frames 0 (the one before the pass began) to 149 are written: a frame is sampled when the next one is shown.
 check(anim().currentFrame === 300 && anim().isPlaying && denseAt150 === 150, 'look: while a pass runs every played frame is a key on each of the three tracks', `frame ${anim().currentFrame}, ${denseAt150} keys at frame 150`);
 anim().pause();
+check(armedAfterNoTurn && !anim().isRecording, 'look: Record stays on after a playback with no turn, and goes off when playback stops after a recorded pass (this app\'s rule, A4)',
+    `on after no turn ${armedAfterNoTurn}, on after the pass ${anim().isRecording}`);
+anim().toggleRecording();                                            // on again, for the passes below
 const thinned = lookKeys().map((k) => k.length);
 check(anim().undoStack.length === lookUndo + 1 && thinned.every((c) => c >= 2 && c < 60),
     `look: a recorded pass writes keys on the three tracks, thinned when it ends, in one undo step (${thinned.join(', ')} keys for 301 frames, ten seconds)`,
@@ -698,6 +708,7 @@ scrubRouteTo(100);
 anim().play();
 for (let f = 100; f < 160; f++) passFrame((frame) => { const was = turnAt(frame); return [was[0] + 0.2 * Math.sin(Math.PI * (frame - 100) / 60), was[1], was[2]]; });
 anim().pause();
+anim().toggleRecording();                                            // (Record went off with the pass: on again, as the lines below had it)
 const panAt130 = animationEngine.evaluateTrack(anim().sequence.tracks[LOOK_TRACKS[0]], 130);
 check(outside(lookKeys()) === before2 && Math.abs(panAt130 - (turnAt(130)[0] + 0.2)) <= LOOK_FIT_TOLERANCE * 1.02 && JSON.stringify(depthKeys()) === routeHeld,
     'look: a second pass over part of the first replaces the keys in its span and leaves every key outside it at its frame and value',

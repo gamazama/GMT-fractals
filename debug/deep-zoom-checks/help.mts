@@ -160,6 +160,7 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Import', 'deep-zoom/components/LocationText.tsx', '>Import</button>'],
     ['Route', 'deep-zoom/panels.ts', "id: 'Route'"],
     ['Add keyframe', 'deep-zoom/components/RoutePanel.tsx', '/> Add keyframe'],
+    ['Replace keyframe', 'deep-zoom/components/RoutePanel.tsx', '/> Replace keyframe'],
     ['Play', 'deep-zoom/components/RoutePanel.tsx', "'Pause' : 'Play'"],
     ['Render', 'deep-zoom/components/RoutePanel.tsx', '/> Render'],
     ['Trail', 'deep-zoom/components/RoutePanel.tsx', '/> Trail'],
