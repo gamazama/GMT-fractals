@@ -88,7 +88,11 @@
  *     moved far enough and none for a turn alone.
  *   - A DIVE MOVES THE CAMERA INSIDE THE HOST, where neither call sees it: while one is in flight
  *     this tick asks the trail to follow, every frame (`followTrail`: a camera string read and a
- *     subtraction, no ray).
+ *     subtraction, no ray). And while one is in flight the view is read SETTLED (`DZ_LOOK_ASKS`,
+ *     deep-zoom/depthNow.ts): read with one ask, the Surface card's dive showed the nearest surface
+ *     standing in (2.1e-5, the camera looking at 1.07e-6) for its last ten seconds, the trail took
+ *     those depths, and a route cut from it ended on a leg of one frame that fell 1.3 decades in
+ *     place (2026-10-17). Measured then: 3.2 ms a reading against 2.1 ms (2.3 asks), the same fps.
  *   - A MOVE STOPS A TIMELINE THAT IS PLAYING A ROUTE (`stopRoutePlayback`): a fly key that travels
  *     or the move stick, in Fly mode (`moveHeld`, asked on the hook's session: its begin and each
  *     frame after it, so a key already held when Play was pressed, or added to a look, counts), an orbit press
@@ -175,7 +179,7 @@ import type { DzOrientation } from './host/DeepZoomHost';
 import { getTelemetry } from './host/telemetry';
 import { createFlyCamera } from './flyCamera';
 import { DZ_NAV_STRIDE_SHARE, createPace, paceReading } from './flyPace';
-import { readDepth } from './depthNow';
+import { DZ_LOOK_ASKS, readDepth } from './depthNow';
 import type { DepthReading } from './depthNow';
 import { stopDive, useDive } from './diveControl';
 import { flightBegan, flightEnded } from './locations';
@@ -552,7 +556,7 @@ export const DeepZoomNavigation: React.FC = () => {
             // The view's bundle, at most once a frame, only when something asks for it. (Held in
             // an object: the compiler does not follow an assignment made inside a closure.)
             const got: { read: DepthReading | null; moved: boolean } = { read: null, moved: false };
-            const view = (): DepthReading => (got.read ??= readDepth(host));
+            const view = (): DepthReading => (got.read ??= readDepth(host, useDive.getState().dive ? DZ_LOOK_ASKS : 1));
 
             let pivotMark: { pivot: OrbitPivot; height: number; held: boolean } | null = null;
             if (inOrbit && !locked) pivotMark = orbitFrame(now);

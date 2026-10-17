@@ -12,9 +12,10 @@
  *     with `mode: 'deep'`); the f32 baseline, which has no light or colour input, shows only until
  *     the deep shader has compiled. SINCE 2026-10-11 THAT SHADER IS THE RAY MARCH'S PROGRAM, the
  *     only one the Mandelbulb has: there is no Ray march switch and no other march to compare it
- *     with, `ctx.boot()` returns when it is built, and Step size is the Mandelbox's row. The start view sits exactly on the bulb's z axis, where the
- *     deep path used to draw one flat colour: the renderer's POLE GUARD keeps the camera off it,
- *     and one step here looks at that picture. Far ground (every hit of a shallow view) takes the
+ *     with, `ctx.boot()` returns when it is built, and Step size is the Mandelbox's row. The renderer's own first view sits exactly on the bulb's z
+ *     axis, where the deep path used to draw one flat colour: the renderer's POLE GUARD keeps the
+ *     camera off it, and one step here puts the camera there and looks at that picture (the app
+ *     booted there until 2026-10-17; it opens on the Start view since, deep-zoom/locations.ts). Far ground (every hit of a shallow view) takes the
  *     palette too, because the shell asks for it (`farLook: true`); that step checks it.
  *   - Two thumbnails of one unchanged view are not byte-identical (the still restarts and the
  *     samples are jittered), so picture steps compare mean colour and carry a control: the same
@@ -246,7 +247,9 @@ export const stage: DzStage = {
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 await ctx.page.locator('button[data-gx-mode-tab="Light"]').click();
-                // The start view: depth about 1.2, where f32 used to draw, and exactly on the z axis.
+                // The renderer's own first view: depth about 1.2, where f32 used to draw, and exactly on the z axis. The app
+                // boots on the Start view since 2026-10-17 (F7), off the axis, so the camera is put there by hand.
+                await ctx.withHost("host.setView({ ...host.getView(), cam: ['0', '0', String(BigInt(Math.round(2.6 * 2 ** 40)) << 216n)], yaw: -Math.PI / 2, pitch: 0 }); return true;");
                 ctx.check((await ctx.untilHost("host.telemetry().mode === 'deep'", 20_000, 50)) >= 0, 'at the start view the picture is the deep path (depth ' + (await ctx.host<number>('telemetry().depth')).toFixed(2) + ')');
                 ctx.check((await ctx.until("!document.querySelector('[data-dz-mode-notice]')", 5000)) >= 0, 'and the "still starting" notice is not shown');
                 await settle(ctx);

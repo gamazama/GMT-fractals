@@ -142,6 +142,12 @@
  *       is a bundle ..."; host: the nothing-ahead test removed (`return s.near`) -> 1: "dive:
  *       nothing ahead at all ..."; host: the ask-on loop removed -> 2: "dive: unfinished rays are
  *       asked on ...", "dive: and the dive then flies ..."
+ *     (2026-10-17, the grown limit and how a dive ended; one break a run in dive.ts, restored byte
+ *       for byte, sha-256) `diveTimeLimitMs` answering 45 s whatever is asked -> 1: "dive: one
+ *       asked for 20 decades gives up after 100 s ..."; Escape said as a fly key -> 1: "dive:
+ *       Escape ends it (stopped)"; arrival said as 'stopped' -> 1: "dive: six head-on dives each
+ *       land ... and say they arrived". The other end lines ('key', 'time', 'nothing', the host's
+ *       'stopped' before ready) pass and were not broken on purpose.
  *   input (2026-10-09)
  *     `sense: (axis, opt) => dz.sense(null, opt)` -> 1: "input: sense hands the module the axis
  *       ..."; `freeDistance` answering a constant -> 1: "input: freeDistance is the module's own ray";
@@ -1040,7 +1046,7 @@ console.log('[8] dive      dive.ts alone, then through the host');
         const done = r.dive.start(target);
         fly(r);
         const resolved = await stateOf(done, 5) === 'resolved';
-        const ok = resolved && r.s.depth <= target && r.s.depth >= target * 0.95 * (1 - 1e-9);
+        const ok = resolved && await done === 'arrived' && r.s.depth <= target && r.s.depth >= target * 0.95 * (1 - 1e-9);
         if (ok) landings++;
         landed.push(`${target} -> ${r.s.depth.toExponential(4)}${resolved ? '' : ' (not resolved)'}`);
         for (const m of r.s.moves) {
@@ -1052,7 +1058,7 @@ console.log('[8] dive      dive.ts alone, then through the host');
         movedAfter += r.s.moves.length - n;
         if (r.keys.count('keydown') !== 0) straight = false;
     }
-    check(landings === 6, 'dive: six head-on dives each land between 0.95 x target and target', landed.join(' | '));
+    check(landings === 6, 'dive: six head-on dives each land between 0.95 x target and target, and say they arrived', landed.join(' | '));
     check(biggestShare <= 0.2 + 1e-12 && biggestShare > 0.05, 'dive: no move is more than a fifth of the distance at that moment', `largest ${biggestShare}`);
     check(straight, 'dive: every move is forward (yaw 0, pitch 0 -> +x) by a positive distance, and the key listener is gone at the end');
     check(movedAfter === 0, 'dive: nothing moves after the dive has resolved', `${movedAfter} moves`);
@@ -1108,8 +1114,8 @@ console.log('[8] dive      dive.ts alone, then through the host');
     {
         const r = rigOf(0.5);
         const done = r.dive.start(1);
-        check(await stateOf(done, 5) === 'resolved' && !r.dive.active && r.keys.count('keydown') === 0 && r.s.moves.length === 0,
-            'dive: already that deep resolves at once, moves nothing and listens to nothing');
+        check(await stateOf(done, 5) === 'resolved' && await done === 'arrived' && !r.dive.active && r.keys.count('keydown') === 0 && r.s.moves.length === 0,
+            'dive: already that deep resolves at once, arrived, moves nothing and listens to nothing');
     }
     {
         const r = rigOf(1);
@@ -1119,8 +1125,8 @@ console.log('[8] dive      dive.ts alone, then through the host');
         check(n > 0 && await stateOf(done, 5) === 'pending' && r.keys.count('keydown') === 1, 'dive: a dive in flight is pending and listens for keys');
         r.dive.cancel();
         for (let t = 500; t < 1000; t += 100) r.dive.advance(t);
-        check(await stateOf(done, 5) === 'resolved' && r.s.moves.length === n && r.keys.count('keydown') === 0 && r.s.depth > 1e-9,
-            'dive: cancel() resolves it, stops the moves short of the target and removes the key listener', `${r.s.moves.length - n} moves after`);
+        check(await stateOf(done, 5) === 'resolved' && await done === 'stopped' && r.s.moves.length === n && r.keys.count('keydown') === 0 && r.s.depth > 1e-9,
+            'dive: cancel() resolves it (stopped), stops the moves short of the target and removes the key listener', `${r.s.moves.length - n} moves after`);
     }
     {
         const r = rigOf(1);
@@ -1130,22 +1136,28 @@ console.log('[8] dive      dive.ts alone, then through the host');
         key(r.keys, 'Space');
         const stillFlying = r.dive.active;
         key(r.keys, 'KeyW');
-        check(stillFlying && !r.dive.active && await stateOf(done, 5) === 'resolved', 'dive: a fly key ends it; B and Space do not');
+        check(stillFlying && !r.dive.active && await stateOf(done, 5) === 'resolved' && await done === 'key', 'dive: a fly key ends it (key); B and Space do not');
         const again = r.dive.start(1e-9);
         key(r.keys, 'Escape');
-        check(await stateOf(again, 5) === 'resolved', 'dive: Escape ends it');
+        check(await stateOf(again, 5) === 'resolved' && await again === 'stopped', 'dive: Escape ends it (stopped)');
         const older = r.dive.start(1e-9);
         const newer = r.dive.start(1e-6);
-        check(await stateOf(older, 5) === 'resolved' && await stateOf(newer, 5) === 'pending' && r.keys.count('keydown') === 1,
-            'dive: a newer dive ends the one in flight');
+        check(await stateOf(older, 5) === 'resolved' && await older === 'stopped' && await stateOf(newer, 5) === 'pending' && r.keys.count('keydown') === 1,
+            'dive: a newer dive ends the one in flight (stopped)');
         r.dive.cancel();
     }
     {
         const r = rigOf(1, true);   // a ray that never gets closer
         const done = r.dive.start(1e-9);
         const endedAt = fly(r);
-        check(DZ_DIVE_TIME_LIMIT_MS === 45_000 && await stateOf(done, 5) === 'resolved' && endedAt > 45_000 && endedAt <= 45_200,
-            'dive: a dive that never arrives gives up after 45 s of flight', `ended at ${endedAt} ms`);
+        check(DZ_DIVE_TIME_LIMIT_MS === 45_000 && await stateOf(done, 5) === 'resolved' && await done === 'time' && endedAt > 45_000 && endedAt <= 45_200,
+            'dive: a dive that never arrives gives up after 45 s of flight (time) when 9 decades are asked', `ended at ${endedAt} ms`);
+        // The limit grows with the decades asked: 5 s a decade, so 20 decades are given 100 s.
+        const far = rigOf(1, true);
+        const farDone = far.dive.start(1e-20);
+        const farEnded = fly(far, 300_000);
+        check(await stateOf(farDone, 5) === 'resolved' && await farDone === 'time' && farEnded > 100_000 && farEnded <= 100_200,
+            'dive: one asked for 20 decades gives up after 100 s of flight (5 s a decade)', `ended at ${farEnded} ms`);
         const r2 = rigOf(1, true);
         void r2.dive.start(1e-9);
         r2.dive.advance(0);
@@ -1162,7 +1174,7 @@ console.log('[8] dive      dive.ts alone, then through the host');
     host.step(0);
     const early = host.diveTo(1e-6);
     host.step(200);
-    check(await stateOf(early, 5) === 'resolved' && rig.count('moveAlong') === 0, 'dive: before ready the host gives up at once and moves nothing');
+    check(await stateOf(early, 5) === 'resolved' && await early === 'stopped' && rig.count('moveAlong') === 0, 'dive: before ready the host gives up at once (stopped) and moves nothing');
     rig.state.ready = true;
     host.step(400);
 
@@ -1228,7 +1240,7 @@ console.log('[8] dive      dive.ts alone, then through the host');
         const movesBefore = r2.count('moveAlong');
         const none = h2.diveTo(1e-6);
         for (let t = 30_016; t <= 30_200; t += 16) h2.step(t);
-        check(await stateOf(none, 5) === 'resolved' && r2.count('moveAlong') === movesBefore, 'dive: nothing ahead at all ends it at once, without a move');
+        check(await stateOf(none, 5) === 'resolved' && await none === 'nothing' && r2.count('moveAlong') === movesBefore, 'dive: nothing ahead at all ends it at once (nothing), without a move');
         // Rays that ran out of steps are a lower bound - here 1e-30, far under the target - and not a
         // distance: the dive asks on until the bundle is read through, and only then reads 1 and flies.
         r2.state.ahead = null;

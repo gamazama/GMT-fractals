@@ -8,14 +8,21 @@
  *
  * PITFALLS
  *   - No target below 1e-77 (the floor) is ever sent.
- *   - `host.diveTo` does not say how it ended (arrival, a fly key, the time limit): the depth is
- *     read afterwards and the toast says "Arrived" only within a decade of the target.
+ *   - THE TOAST SAYS HOW IT ENDED, from the dive's own end (`DzDiveEnd`, host/dive.ts): "Arrived at"
+ *     on arrival, otherwise "Stopped at" with the reason in a few words (`END_WORDS`); Stop and
+ *     Escape need none. Until 2026-10-17 the host did not say, and "Arrived" was guessed from the
+ *     depth: within a decade of the target.
+ *   - The depth in the toast is read SETTLED, its unfinished rays asked on (`DZ_LOOK_ASKS`,
+ *     `deep-zoom/depthNow.ts`). Read once at landing, the Surface card said "Stopped at 2.11e-5"
+ *     where it had arrived at 1.07e-6.
  *   - A dive flies straight along the view, and closes on the nearest of the rays about the view
  *     axis (`aheadOf` in host/moduleHost.ts). The depth read here is the depth the app shows (the
- *     second nearest of the same rays, `deep-zoom/depthNow.ts`), so "Arrived at" can read a
- *     little above the target. With nothing ahead at all the dive ends at once.
- *   - From a view that grazes the surface it closes slowly and can end on the host's time limit
- *     well short of the target.
+ *     second nearest of the same rays), so "Arrived at" can read a little above the target. With
+ *     nothing ahead at all the dive ends at once.
+ *   - DIVE AGAIN TO GO ON. The time limit grows with the decades asked (5 s a decade, at least 45 s);
+ *     a dive it stops is gone on with by the same target from where the camera is - the readout's
+ *     field keeps its number. From a view that grazes the surface a dive closes slowly and can
+ *     still end on the limit well short of the target.
  *   - The host can be replaced while a dive is in flight (a context loss): the result is read from
  *     whichever host is mounted when the promise resolves.
  *   - A dive moves the camera inside the host, where the navigation's own bookkeeping does not see
@@ -26,9 +33,11 @@
  */
 import { create } from 'zustand';
 import { getHost } from './host/current';
+import type { DzDiveEnd } from './host/DeepZoomHost';
+import { diveTimeLimitMs } from './host/dive';
 import { showToast } from '../engine/store/toastStore';
 import { FLOOR_DEPTH, formatDepth, validDepth } from './components/depthFormat';
-import { depthNow } from './depthNow';
+import { DZ_LOOK_ASKS, depthNow } from './depthNow';
 import { diveBegan } from './route';
 
 export interface DiveInFlight {
@@ -38,6 +47,12 @@ export interface DiveInFlight {
 
 /** null when no dive is in flight. */
 export const useDive = create<{ dive: DiveInFlight | null }>(() => ({ dive: null }));
+
+/** What "Stopped at <depth>" goes on with, by how the dive ended. */
+const END_WORDS: Record<Exclude<DzDiveEnd, 'time'>, string> = { arrived: '', stopped: '', key: ': a fly key', nothing: ': nothing ahead' };
+
+/** "45 s", "1.7 min". */
+const limitText = (ms: number): string => (ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${(ms / 60_000).toFixed(1).replace(/\.0$/, '')} min`);
 
 /** Fly straight ahead to `target`. Resolves when the dive ends, however it ends. */
 export async function diveTo(target: number): Promise<void> {
@@ -56,13 +71,15 @@ export async function diveTo(target: number): Promise<void> {
     // A dive is the hands' as a fly key is: the timeline stops, the route lets the camera go, and
     // what the dive flew along is the heading of a keyframe set next (deep-zoom/route.ts).
     const landed = diveBegan();
+    let end: DzDiveEnd = 'stopped';
     try {
-        await host.diveTo(to);
+        end = await host.diveTo(to);
     } finally {
         landed();
         if (useDive.getState().dive === mine) useDive.setState({ dive: null });
-        const depth = depthNow();
-        if (validDepth(depth)) showToast(`${depth <= to * 10 ? 'Arrived at' : 'Stopped at'} ${formatDepth(depth)}`, 'info');
+        const depth = depthNow(getHost(), DZ_LOOK_ASKS);
+        const why = end === 'time' ? `: the time limit (${limitText(diveTimeLimitMs(from, to))}). Dive again to go on` : END_WORDS[end];
+        if (validDepth(depth)) showToast(`${end === 'arrived' ? 'Arrived at' : 'Stopped at'} ${formatDepth(depth)}${why}`, 'info', end === 'time' ? 6000 : undefined);
     }
 }
 

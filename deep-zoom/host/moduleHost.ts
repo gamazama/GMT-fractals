@@ -572,7 +572,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             // Not before the deep shader: until then the module flies on its f32 distance, good to
             // about 1e-13, and the prototype's loop never ran in that state (its bridge did not
             // exist before ready). The dive gives up at once; the caller sees the depth unchanged.
-            if (disposed || !isReady) return Promise.resolve();
+            if (disposed || !isReady) return Promise.resolve('stopped');
             return dive.start(depth);
         },
         // gradient: texels straight to the module's strip, at once. The colour mode is not touched

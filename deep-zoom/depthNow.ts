@@ -14,6 +14,13 @@
  *     publishes the result to `deep-zoom/navigationState.ts`, 8 times a second, for the readouts.
  *   - `depthNow()` is for code that needs the number at this moment and not up to 125 ms late: a
  *     saved location, a copied one, a scene file, the dive's "from" and its closing toast.
+ *   - `asks` (both): how often rays that ran out of steps are asked on, the camera standing, before
+ *     the answer is read - as the dive's own reading does (`aheadOf` in host/moduleHost.ts). With
+ *     more than one, the bundle is marched afresh from where the camera is (a kept one, shortened by
+ *     a move, is not gone on with: asked 16 times it stays unfinished). The dive's closing toast
+ *     asks up to `DZ_LOOK_ASKS` times: at the Surface card's landing one ask left a ray unfinished,
+ *     and the nearest surface standing in read 2.11e-5 where the camera looked at 1.07e-6
+ *     (2026-10-17).
  *   - One slot name for every such reading (`DZ_LOOK_SLOT`): the renderer keeps the bundle, so a
  *     second ask with the camera where it stood marches nothing.
  *
@@ -29,6 +36,8 @@ import { lookDistance } from './flyPace';
 
 /** The slot the view's bundle is kept under in the renderer. */
 export const DZ_LOOK_SLOT = 'look';
+/** Asks for a reading that must be settled: 64 steps an ask, as the dive's (16 carry a ray 1000 steps). */
+export const DZ_LOOK_ASKS = 16;
 
 export interface DepthReading {
     /** What is looked at; the nearest surface when nothing is. 0 when neither is known. */
@@ -39,8 +48,10 @@ export interface DepthReading {
     sense: DzSense;
 }
 
-export function readDepth(host: DeepZoomHost): DepthReading {
-    const sense = host.sense(null, { slot: DZ_LOOK_SLOT });
+export function readDepth(host: DeepZoomHost, asks = 1): DepthReading {
+    const opt = asks > 1 ? { slot: DZ_LOOK_SLOT, reuse: 1e-9 } : { slot: DZ_LOOK_SLOT };
+    let sense = host.sense(null, opt);
+    for (let i = 1; i < asks && sense.open > 0 && !sense.inside; i++) sense = host.sense(null, opt);
     const look = lookDistance(sense);
     if (look > 0) return { depth: look, isLook: true, sense };
     const nearest = host.telemetry().depth;
@@ -48,6 +59,6 @@ export function readDepth(host: DeepZoomHost): DepthReading {
 }
 
 /** The depth the app shows, now. 0 when no renderer is mounted or nothing is known. */
-export function depthNow(host: DeepZoomHost | null = getHost()): number {
-    return host ? readDepth(host).depth : 0;
+export function depthNow(host: DeepZoomHost | null = getHost(), asks = 1): number {
+    return host ? readDepth(host, asks).depth : 0;
 }

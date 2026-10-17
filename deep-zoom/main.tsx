@@ -61,7 +61,7 @@ import { DepthReadout } from './components/DepthReadout';
 import { hud } from '../engine/plugins/Hud';
 import { installModulation } from '../engine/animation/modulationTick';
 import { startMilestones } from './milestones';
-import { installLocations } from './locations';
+import { installLocations, startAtStartView } from './locations';
 import { installBoxScaleRule } from './boxScale';
 import { registerDeepZoomHotkeys } from './hotkeys';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
@@ -235,7 +235,9 @@ try {
     // The session, last: with Settings > Files > Autosave on, the scene as it was left comes
     // back here - unless a link just opened, which is what was asked for on this load - and is
     // kept from here on. Off (the default) this restores nothing and writes nothing.
-    installDzSession({ preempted: linkOpened });
+    const session = installDzSession({ preempted: linkOpened });
+    // Neither: a fresh start opens on the formula's Start view (deep-zoom/locations.ts, F7).
+    if (!linkOpened && session !== 'restore') startAtStartView();
     // The first-run guide: the engine's tutorial card, lesson 1, "The first dive". On a first
     // visit it starts by itself when the deep renderer is ready - not on a visit that opened a
     // link, whose place is what was asked for. <TutorialRunner /> and <TutorialOverlay /> are

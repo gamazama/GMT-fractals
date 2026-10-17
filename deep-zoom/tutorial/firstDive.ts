@@ -62,12 +62,12 @@
  *     uiSlice.ts, grep `showHints: false`). Somebody who had switched the hints off and asks for
  *     the intro again has them on afterwards, until the next reload (the stored choice is not
  *     touched). GMT's lessons behave the same; it is not put right here.
- *   - THE FIRST CARD'S DIVE IS THE STARTER "Surface", AND THAT STARTER'S OWN TOAST SAYS "Stopped
- *     at 2.1e-5" THOUGH IT ARRIVES, with or without a lesson (measured 2026-10-12, three runs of
- *     the card alone: 12.8 s each, the toast "Stopped at 2.11e-5" or "2.12e-5", the readout on
- *     1.08e-6 once the camera had stood for a moment). The toast reads the depth at the instant
- *     of landing (deep-zoom/diveControl.ts). Not put right here: it is the dive's own line, and
- *     the starter's. The button says "Dive to 1e-6" because that is where the dive goes.
+ *   - THE FIRST CARD'S DIVE IS THE STARTER "Surface", whose start view is the Start view a fresh
+ *     start opens on (deep-zoom/locations.ts, `startAtStartView`): the button's jump moves nothing
+ *     and the dive takes off at once. Its toast said "Stopped at 2.11e-5" though it arrived, until
+ *     the dive said how it ended and the toast read the depth settled (deep-zoom/diveControl.ts,
+ *     2026-10-17): "Arrived at 1.07e-6". The button says "Dive to 1e-6" because that is where the
+ *     dive goes.
  *
  * @assumption The lesson runs as THE SEAM and WHEN IT SHOWS say. No standing guard drives it: on
  *   2026-10-12 a clean profile was driven through all seven cards in the app, each advancing on

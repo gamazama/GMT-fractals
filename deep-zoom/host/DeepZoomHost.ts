@@ -268,6 +268,10 @@ export interface DzTelemetry {
     exporting: boolean;
 }
 
+/** How a dive ended (`DeepZoomHost.diveTo`): at its target (or inside the solid); Stop, Escape, a
+ *  newer dive, a jump or the host going; a fly key; its time limit; nothing ahead to close on. */
+export type DzDiveEnd = 'arrived' | 'stopped' | 'key' | 'time' | 'nothing';
+
 /** What a bundle of rays read (`DeepZoomHost.sense`). Distances are in world units from the camera. */
 export interface DzSense {
     /** The nearest of the seven rays: what one frame's move along the axis must stay inside. */
@@ -467,12 +471,12 @@ export interface DeepZoomHost {
     /** An exact move of `distance` world units along the unit direction `dir`. */
     moveAlong(dir: [number, number, number], distance: number): void;
     /**
-     * Fly straight ahead until the surface distance is about `depth`. Resolves on arrival, on a fly
-     * key or Escape, on a newer dive or `setView`, on `cancel()`, or when it gives up. It does not
-     * say which: compare `telemetry().depth` afterwards. Also ended by `renderFrameBlob` and
-     * `dispose`. Before `ready` it resolves at once and moves nothing.
+     * Fly straight ahead until the surface distance is about `depth`. Resolves with how it ended
+     * (`DzDiveEnd`): on arrival; on Escape, a newer dive, `setView`, `cancel()`, `renderFrameBlob`
+     * or `dispose`; on a fly key; on its time limit (`diveTimeLimitMs` in host/dive.ts); with
+     * nothing ahead. Before `ready` it resolves at once, 'stopped', and moves nothing.
      */
-    diveTo(depth: number): Promise<void>;
+    diveTo(depth: number): Promise<DzDiveEnd>;
     /**
      * Who flies the camera: 'module' (its own keys and captured-mouse look) or 'host' (the shell's
      * navigation moves it with `moveAlong` and turns it with `setOrientation`; the module then

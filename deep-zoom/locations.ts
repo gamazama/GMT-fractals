@@ -438,6 +438,26 @@ export function flightEnded(): void {
     lastFlight = { entry: after[after.length - 1], landedAt: performance.now() };
 }
 
+/** A fresh start (no restored session, no link) opens on the Start view (`startAtStartView`). */
+let startFresh = false;
+
+/**
+ * This load opens on the formula's Start view (`formulaHome`), the view "Start view" goes to - not
+ * on the renderer's own first view (the bulb from 2.6 off its centre, 1.58e0). The owner, F7,
+ * 2026-10-17. main.tsx calls it when no link opened and no session was restored; each host mounted
+ * until the first is ready is handed the camera BEFORE ITS FIRST FRAME (`adoptHome`), so nothing
+ * jumps, nothing is parked (a parked view puts up the large loading card) and nothing builds twice.
+ * Home is then that view, as `rememberHome` reads it at ready.
+ * @assumption Seen once in the app, 2026-10-17 (debug/scratch/streamline2/try-f7.mjs, git-ignored): a
+ *   fresh profile's host held the Start view from its frame 0, the depth read 2.13e0 and Home came
+ *   back to it; a restored session and a link still parked their view over the renderer's own first
+ *   view and opened on it. No standing check boots a page for this (the smoke boots clean profiles
+ *   and passes either way).
+ */
+export function startAtStartView(): void {
+    startFresh = true;
+}
+
 /** Remember the view the renderer started with, once. */
 export function rememberHome(view: DzView): void {
     if (!homeView) homeView = { view, formula: formulaChoiceNow() };
@@ -454,11 +474,9 @@ export function jumpHome(): void {
  * formula, its power, phase and iteration floor, Julia mode and the constant all stay. A jump like
  * any other (`jumpTo`): one undo step, the trail ends, Back returns.
  * NOT THE HOME KEY: Home (`jumpHome`) goes to the view the app started with, which after a restored
- * session is the restored place, and brings that view's formula with it. EVEN ON A FRESH START
- * THE TWO ARE NOT ONE VIEW: the app starts on the renderer's own first view (the bulb from 2.6
- * off its centre) and a switch of formula shows `formulaHome`'s (the bulb from 3.23: the first
- * starter card's). Seen in the app 2026-10-12. Which of the two a fresh start should show is the
- * owner's to say; this button goes where a switch of formula goes.
+ * session or a link is that place, and brings that view's formula with it. On a fresh start the two
+ * are one view: the app opens here (`startAtStartView`; the owner, F7, 2026-10-17 - until then it
+ * opened on the renderer's own first view, the bulb from 2.6 off its centre).
  */
 export function jumpStart(): void {
     const host = getHost();
@@ -696,11 +714,16 @@ export function installLocations(): void {
         else host.setView(viewForHost(formulaHome(formulaChoiceNow())));
     });
 
-    // Home is the view the renderer started with, read once at the first ready.
+    // Home is the view the renderer started with, read once at the first ready. On a fresh start that is the
+    // Start view, handed over here: a host is put in the holder before its first frame (DeepZoomSurface.tsx).
     const adoptHome = (): void => {
         const host = getHost();
         if (!host) return;
-        void host.ready.then(() => { if (getHost() === host) rememberHome(host.getView()); }, () => undefined);
+        if (startFresh) {
+            const { cam, yaw, pitch } = formulaHome(formulaChoiceNow());
+            host.setView({ ...host.getView(), cam, yaw, pitch });   // the camera only: the renderer's look stays its own
+        }
+        void host.ready.then(() => { if (getHost() === host) { startFresh = false; rememberHome(host.getView()); } }, () => undefined);
     };
     subscribeHost(adoptHome);
     adoptHome();

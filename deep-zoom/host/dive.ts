@@ -28,9 +28,10 @@
  *     from `host.step`, and returns early while a render owns the context (grep `if (exporting)`
  *     in `function frame`): a loop on the browser's animation frames would fly on, unseen, through
  *     a stopped engine loop or between a render's rows.
- *   - It ends, and the promise resolves, on: arrival (`depth <= target`, which also covers a
- *     camera that got inside, where the depth reads 0); `cancel()`; a newer `start()`; W, A, S, D
- *     or Escape on the key target; `DZ_DIVE_TIME_LIMIT_MS` of flight. It does not say which.
+ *   - It ends, and the promise resolves with how (`DzDiveEnd`), on: arrival, 'arrived' (`depth <=
+ *     target`, which also covers a camera that got inside, where the depth reads 0); `cancel()`, a
+ *     newer `start()` or Escape on the key target, 'stopped'; W, A, S or D there, 'key'; the time
+ *     limit, 'time'; nothing ahead at all, 'nothing'.
  *
  * PITFALLS
  *   - Call `advance` only after a frame that ran. A second call for the same frame moves again on
@@ -39,6 +40,12 @@
  *     pending until the loop runs again, `cancel()`, or the host is disposed (which cancels).
  *   - The time limit counts flight, not the wall clock: the gap between two advances counts for at
  *     most a second, so a tab left in the background does not use the dive up.
+ *   - THE TIME LIMIT GROWS WITH THE DECADES ASKED (the owner, 2026-10-17): `diveTimeLimitMs`, 5 s a
+ *     decade from the distance at take-off, never under 45 s. A dive flies a few tenths of a decade
+ *     a second (0.36 from the Start view to 1e-13, 0.15 beyond); under the fixed 45 s of before, one
+ *     from the Start view to 1e-20 ran out at 1.2e-16, and now arrives in 87 s of its 102. There is
+ *     no second stop rule: a dive that crawls (a grazing view) crawls until the limit - from the
+ *     renderer's own first view to 1e-20, 1.45e-3 after 10 s and 1.22e-4 at the limit (2026-10-17).
  *   - The target is never below `DZ_DIVE_MIN_DEPTH` (1e-77): the camera is 256-bit fixed point,
  *     about 77 digits, and a move smaller than one step of it is no move.
  *   - The direction is read every frame, so the mouse can steer during a dive. The formula must
@@ -46,13 +53,19 @@
  *     very direction, so it is not read.
  *   - The first advance after `start` moves nothing: it only takes the timestamp.
  *
- * @invariant A head-on dive lands between 0.95 x target and target, takes at most a fifth of the
- *   distance per frame, stops moving on `cancel()`, ends on a fly key and after 45 s of flight (a
- *   gap between two advances counting for a second at most), and never aims below 1e-77 - proven
- *   by: npx tsx debug/deep-zoom-checks/module-host.mts ("dive: six head-on dives each land ...",
- *   "dive: no move is more than a fifth ...", "dive: cancel() resolves it ...", "dive: a fly key
- *   ends it ...", "dive: a dive that never arrives ...", "dive: a ten-minute gap ...", "dive: a
- *   target below 1e-77 ..."). Falsified 2026-10-08: the "dive" group in the check's header.
+ * @invariant A head-on dive lands between 0.95 x target and target and says it arrived, takes at
+ *   most a fifth of the distance per frame, stops moving on `cancel()`, ends on a fly key, says
+ *   'stopped' on Escape, ends after max(45 s, 5 s a decade asked) of flight (a gap between two
+ *   advances counting for a second at most), and never aims below 1e-77 - proven by: npx tsx
+ *   debug/deep-zoom-checks/module-host.mts ("dive: six head-on dives each land ...", "dive: no move
+ *   is more than a fifth ...", "dive: cancel() resolves it ...", "dive: a fly key ends it ...",
+ *   "dive: Escape ends it (stopped)", "dive: a dive that never arrives ...", "dive: one asked for 20
+ *   decades ...", "dive: a ten-minute gap ...", "dive: a target below 1e-77 ..."). Falsified
+ *   2026-10-08: the "dive" group in the check's header; the grown limit, Escape and arrival
+ *   2026-10-17, the same group.
+ * @assumption The other ends - 'key' for W, A, S, D, 'time' at the limit, 'nothing' with nothing
+ *   ahead, 'stopped' on `cancel()` and a newer dive - are as written: the same check's lines read
+ *   each of them and pass; none was broken on purpose.
  * @assumption A fifth of the free distance ahead per frame cannot pass the surface. True as far as
  *   the rays are: the ray probe never ended past an independent referee's surface on the saved
  *   views (`npm run check:deep-zoom-ray-probe`), which is a measurement on those views, not a proof.
@@ -60,8 +73,10 @@
 
 /** The deepest target a dive accepts. */
 export const DZ_DIVE_MIN_DEPTH = 1e-77;
-/** A dive gives up after this much flight; the caller compares the depth and may dive again. */
+/** The least flight a dive is given before it gives up ('time'); the caller may dive again. */
 export const DZ_DIVE_TIME_LIMIT_MS = 45_000;
+/** The flight a dive is given for each decade asked, when that comes to more. */
+export const DZ_DIVE_MS_PER_DECADE = 5_000;
 /** The largest share of the distance one frame may fly once within a decade of the target. */
 export const DZ_DIVE_NEAR_SHARE = 0.05;
 /** How many frames in a row must read at or under the target before the dive has arrived. */
@@ -72,6 +87,10 @@ const MAX_COUNTED_GAP_MS = 1000;
 /** The keys that take the camera back: the four that move it, and Escape. Not Q and E: they roll
  *  (deep-zoom/DeepZoomNavigation.tsx), and a roll, like a look drag, steers a dive. */
 const CANCEL_KEYS: ReadonlySet<string> = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Escape']);
+
+/** How a dive ended: the contract's `DzDiveEnd` (host/DeepZoomHost.ts), spelled again because this file
+ *  imports nothing (the "seam:" lines of the check); moduleHost.ts hands one on as the other. */
+export type DzDiveEnd = 'arrived' | 'stopped' | 'key' | 'time' | 'nothing';
 
 /** Where the fly keys arrive: the module's key target (`#dz-frame`). */
 export type DiveKeyTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
@@ -90,12 +109,17 @@ export interface DiveDeps {
 
 export interface Dive {
     /** Begin a dive; one already in flight ends first. Resolves at once when already that deep. */
-    start(depth: number): Promise<void>;
+    start(depth: number): Promise<DzDiveEnd>;
     /** One step. Call once after each frame the renderer ran; `now` is that frame's timestamp in ms. */
     advance(now: number): void;
     /** End the dive in flight (its promise resolves). Nothing to end is fine. */
     cancel(): void;
     readonly active: boolean;
+}
+
+/** The flight a dive from `from` to `target` is given (see PITFALLS: THE TIME LIMIT GROWS). */
+export function diveTimeLimitMs(from: number, target: number): number {
+    return Math.max(DZ_DIVE_TIME_LIMIT_MS, DZ_DIVE_MS_PER_DECADE * Math.log10(from / target));
 }
 
 /** The unit look direction, exactly as the module builds it (grep `function basis` in core.js). */
@@ -109,40 +133,43 @@ export function createDive(deps: DiveDeps): Dive {
         target: number;
         /** e-folds of distance per second. */
         rate: number;
+        limitMs: number;
         flownMs: number;
         /** The timestamp of the previous advance; null until the first one. */
         prev: number | null;
         /** Frames in a row whose distance was at or under the target. */
         arrived: number;
-        resolve(): void;
+        resolve(end: DzDiveEnd): void;
     }
     let run: Run | null = null;
 
-    function finish(): void {
+    function finish(end: DzDiveEnd): void {
         const r = run;
         if (!r) return;
         run = null;
         deps.keyTarget?.removeEventListener('keydown', onKey);
-        r.resolve();
+        r.resolve(end);
     }
 
     function onKey(e: Event): void {
-        if (CANCEL_KEYS.has((e as KeyboardEvent).code)) finish();
+        const code = (e as KeyboardEvent).code;
+        if (CANCEL_KEYS.has(code)) finish(code === 'Escape' ? 'stopped' : 'key');
     }
 
     return {
         get active() { return run !== null; },
 
         start(depth) {
-            finish();
+            finish('stopped');
             const target = Math.max(DZ_DIVE_MIN_DEPTH, +depth || 1e-6);
             const d0 = deps.depth();
-            if (!Number.isFinite(d0) || d0 <= target) return Promise.resolve();
+            if (!Number.isFinite(d0)) return Promise.resolve('nothing');
+            if (d0 <= target) return Promise.resolve('arrived');
             // The pace: the whole way in 0.6 s a decade, no less than 3 s and no more than 40 s.
             const decades = Math.max(1, Math.log10(d0 / target));
             const rate = (Math.LN10 * decades) / Math.min(40, Math.max(3, decades * 0.6));
-            return new Promise<void>((resolve) => {
-                run = { target, rate, flownMs: 0, prev: null, arrived: 0, resolve };
+            return new Promise<DzDiveEnd>((resolve) => {
+                run = { target, rate, limitMs: diveTimeLimitMs(d0, target), flownMs: 0, prev: null, arrived: 0, resolve };
                 deps.keyTarget?.addEventListener('keydown', onKey);
             });
         },
@@ -155,12 +182,14 @@ export function createDive(deps: DiveDeps): Dive {
             r.flownMs += Math.min(gapMs, MAX_COUNTED_GAP_MS);
             const d = deps.depth();
             // A distance of 0 means the camera is inside the surface: that ends it at once.
-            if (!Number.isFinite(d) || d <= 0 || r.flownMs > DZ_DIVE_TIME_LIMIT_MS) { finish(); return; }
+            if (!Number.isFinite(d)) { finish('nothing'); return; }
+            if (d <= 0) { finish('arrived'); return; }
+            if (r.flownMs > r.limitMs) { finish('time'); return; }
             // One frame at or under the target is not arrival: where the module switches between its
             // f32 and deep paths (near 1e-4) the distance can read hundreds of times too small for a
             // single frame (measured 2026-10-08: 3.35e-7 for one frame at a true 2.5e-4).
             if (d <= r.target) {
-                if (++r.arrived >= DZ_DIVE_ARRIVAL_FRAMES) finish();
+                if (++r.arrived >= DZ_DIVE_ARRIVAL_FRAMES) finish('arrived');
                 return;
             }
             r.arrived = 0;
@@ -178,6 +207,6 @@ export function createDive(deps: DiveDeps): Dive {
             }
         },
 
-        cancel: finish,
+        cancel: () => finish('stopped'),
     };
 }
