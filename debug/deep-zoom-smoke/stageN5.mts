@@ -10,8 +10,10 @@
  *   - A move is read off the camera strings as a DIRECTION: the difference of two 256-bit
  *     integers per axis, as a float (their scale cancels), against the renderer's own forward
  *     for the current yaw and pitch (`function basis()` in renderer/core.js).
- *   - The fly speed is a preference in `localStorage['gmt.deepZoom.flySpeed']` and the last line
- *     of the depth readout (`[data-dz-fly-speed]`).
+ *   - The fly speed is a preference in `localStorage['gmt.deepZoom.flySpeed']` and the navigation
+ *     store's `flySpeed`; the depth readout shows it (`[data-dz-fly-speed]`) only for 1.5 s after it
+ *     changes, since 2026-10-17. The speed scale (the distance the speed is multiplied by, the
+ *     readout's "pace" line until then) is the navigation store's `pace` and Diagnostics' "Speed scale".
  *   - The maths of the adapter (basis, the turn about the camera's own axes, the roll, zero
  *     floors) is pinned in node by `npm run check:deep-zoom-fly-camera`; these steps prove it is
  *     WIRED. They turn the camera on one axis at a time from a level start, where a yaw and a
@@ -85,6 +87,8 @@ async function enterWallBehind(ctx: DzCtx): Promise<boolean> {
 const fx = (v: number): string => (Number.isFinite(v) ? v.toFixed(4) : String(v));
 const speedText = (ctx: DzCtx) => ctx.ev<string>("(document.querySelector('[data-dz-fly-speed]') || { textContent: '' }).textContent.trim()");
 const storedSpeed = (ctx: DzCtx) => ctx.ev<number>("Number(localStorage.getItem('gmt.deepZoom.flySpeed'))");
+/** A value of the navigation store, read through the app's own module (it is not on `window`). */
+const nav = <T,>(ctx: DzCtx, key: string) => ctx.ev<T>(`(async () => (await import('/deep-zoom/navigationState.ts')).useDzNavigation.getState()[${JSON.stringify(key)}])()`);
 
 /** Press and hold the left button at the picture's centre, move by (dx, dy) pixels, hold, release. */
 async function lookDrag(ctx: DzCtx, dx: number, dy: number, holdMs: number, during?: () => Promise<void>): Promise<void> {
@@ -165,24 +169,28 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'the wheel changes the fly speed by a tenth a notch, within its range, and it is remembered',
-            owner: 'N5',
-            falsified: "2026-10-08, two breaks, one run each: `wheelStep: dzWheelStep` removed (the engine's additive law applies) -> red, one notch gave 3.58 and the notches up stopped far short of the top; the `localStorage.setItem` line removed from deep-zoom/navigationState.ts -> red, nothing stored and 3.6 again after the reload.",
+            // 2026-10-17: the readout shows the speed only while the wheel changes it (STREAMLINE.md stage 4); the speed at
+            // rest and after the reload are read from the navigation store, where the readout read them before.
+            name: 'the wheel changes the fly speed by a tenth a notch, within its range, and it is remembered; the readout shows it only while it changes',
+            owner: 'N5; the readout: streamline stage 4',
+            falsified: "2026-10-08, two breaks, one run each: `wheelStep: dzWheelStep` removed (the engine's additive law applies) -> red, one notch gave 3.58 and the notches up stopped far short of the top; the `localStorage.setItem` line removed from deep-zoom/navigationState.ts -> red, nothing stored and 3.6 again after the reload. The readout's lines (2026-10-17) not seen red.",
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
-                ctx.check((await speedText(ctx)).includes('3.6'), 'the readout starts at the default speed ("' + (await speedText(ctx)) + '")');
+                ctx.check((await speedText(ctx)) === '' && (await nav<number>(ctx, 'flySpeed')) === 3.6, 'at rest the readout shows no speed, and the speed is the default 3.6 (' + (await nav<number>(ctx, 'flySpeed')) + ')');
                 const c = await ctx.pictureCentre();
                 await ctx.page.mouse.move(c.x, c.y);
                 await ctx.page.mouse.wheel(0, 100);
                 await ctx.sleep(200);
                 const one = await storedSpeed(ctx);
                 ctx.check(Math.abs(one - 3.6 / 1.1) < 1e-9, 'one notch down: 3.6 -> 3.6 / 1.1 (' + one + ')');
-                ctx.check((await speedText(ctx)).includes('3.3'), 'the readout follows ("' + (await speedText(ctx)) + '")');
+                ctx.check((await speedText(ctx)).includes('3.3'), 'the readout shows it while it changes ("' + (await speedText(ctx)) + '")');
+                const gone = await ctx.until("!document.querySelector('[data-dz-fly-speed]')", 4000, 100);
+                ctx.check(gone >= 0, 'and lets it go again (' + gone + ' ms after)');
                 for (let i = 0; i < 12; i++) { await ctx.page.mouse.wheel(0, -100); await ctx.sleep(60); }
                 await ctx.sleep(200);
                 ctx.check((await storedSpeed(ctx)) === 8, 'twelve notches up stop at the top of the range, 8 (' + (await storedSpeed(ctx)) + ')');
                 await ctx.boot();
-                ctx.check((await speedText(ctx)).includes('8.0'), 'after a reload the speed is still 8 ("' + (await speedText(ctx)) + '")');
+                ctx.check((await nav<number>(ctx, 'flySpeed')) === 8, 'after a reload the speed is still 8 (' + (await nav<number>(ctx, 'flySpeed')) + ')');
                 await ctx.ev("(() => { localStorage.removeItem('gmt.deepZoom.flySpeed'); return true; })()");
             },
         },
@@ -384,8 +392,9 @@ export const stage: DzStage = {
                 ctx.check(moved < looked.second, 'and not as far as what it flies at (' + looked.second.toExponential(2) + ')');
                 const after = await ctx.host<{ inside: boolean }>('sense(null)');
                 ctx.check(!after.inside && (await ctx.host<number>('rawDistance()')) > 0, 'the camera is not inside the solid');
-                const pace = await readoutText(ctx, 'data-dz-pace');
-                ctx.check(/^pace \de-\d+$/.test(pace), 'the readout shows the pace ("' + pace + '")');
+                // The readout's "pace" line until 2026-10-17; the number is the navigation store's (Diagnostics' "Speed scale").
+                const pace = await nav<number>(ctx, 'pace');
+                ctx.check(pace > 0 && pace < 1e-50, 'the speed scale is set, at this depth (' + pace.toExponential(1) + ')');
             },
         },
         {
@@ -471,10 +480,12 @@ export const stage: DzStage = {
                 // THE ROW WORKS: it is how fast the pace climbs. Turn to the wall behind (the pace falls
                 // to it at once), then back to the scene 20 decades farther away: at 0.5 decades a
                 // second the pace has hardly left the wall after two seconds; at 16 it is at the scene.
-                const pace = async (): Promise<number> => Number((await readoutText(ctx, 'data-dz-pace')).replace(/^pace\s*/, ''));
+                // The pace (the speed scale) is the navigation store's: the readout's "pace" line until 2026-10-17 showed it to one digit.
+                const pace = (): Promise<number> => nav<number>(ctx, 'pace');
+                await ctx.ev("(async () => { window.__dzNav = (await import('/deep-zoom/navigationState.ts')).useDzNavigation; return true; })()");
                 const l0 = await look(ctx);
                 await ctx.withHost(`host.setOrientation(${l0.yaw + Math.PI}, ${-l0.pitch}, ${l0.roll}); return true;`);
-                const fell = await ctx.until("/^pace \\de-7[4-7]$/.test((document.querySelector('[data-dz-pace]') || { textContent: '' }).textContent.trim())", 10_000, 50);
+                const fell = await ctx.until('window.__dzNav.getState().pace < 1e-73', 10_000, 50);
                 const atWall = await pace();
                 if (!ctx.check(fell >= 0, 'turned to the wall behind, the pace falls to it (' + atWall.toExponential(1) + (fell >= 0 ? ', after ' + fell + ' ms)' : ', not after 10 s)'))) return;
                 await row('deep-zoom.speed-rise-limit', '0.5');

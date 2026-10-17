@@ -3,7 +3,9 @@
  *
  * "Depth" is the distance from the camera to the surface, in the bulb's own units: 1 at the
  * start view, 1e-77 where the 256-bit reference ends. Everything that prints a depth goes
- * through here so the top bar, the readout, the scale and a saved place agree to the digit.
+ * through here so the readout, the scale, Diagnostics and a saved place agree to the digit.
+ * (The yardsticks passed and the speed in decades a second went with their lines of the depth
+ * box, 2026-10-17.)
  * Pure: no React, no store. Checked by `debug/deep-zoom-checks/depth-format.mts`.
  *
  * The two honest lines of the range, used by the scale and by Help (a third, "1e-4: perturbation
@@ -49,33 +51,8 @@ export function depthAtFraction(fraction: number): number {
     return Math.pow(10, -exp);
 }
 
-/** Sizes for comparison if the whole bulb were as wide as the observable universe (8.8e26 m). */
-export const YARDSTICKS: ReadonlyArray<{ exp: number; name: string }> = [
-    { exp: 6, name: 'Milky Way' },
-    { exp: 14, name: "Neptune's orbit" },
-    { exp: 20, name: 'Earth' },
-    { exp: 30, name: 'grain of sand' },
-    { exp: 37, name: 'atom' },
-    { exp: 42, name: 'proton' },
-    { exp: 62, name: 'Planck length' },
-];
-export const YARDSTICK_NOTE = 'If the bulb were the observable universe (8.8e26 m across).';
-
-/** The smallest yardstick the view has passed, or '' above the first. */
-export function yardstickFor(d: number): string {
-    let name = '';
-    for (const y of YARDSTICKS) if (d <= Math.pow(10, -y.exp)) name = y.name;
-    return name;
-}
-
 /** The fixed marks of the range. */
 export const RANGE_MARKS: ReadonlyArray<{ exp: number; label: string }> = [
     { exp: 50, label: '1e-50 checked' },
     { exp: 77, label: '1e-77 floor' },
 ];
-
-/** Speed along the scale from two samples: decades per second, positive when going deeper. */
-export function decadesPerSecond(depthBefore: number, depthNow: number, seconds: number): number {
-    if (!validDepth(depthBefore) || !validDepth(depthNow) || !(seconds > 0)) return 0;
-    return Math.log10(depthBefore / depthNow) / seconds;
-}

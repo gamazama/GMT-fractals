@@ -28,10 +28,11 @@
  * (<TimelineHost/>, the feature overlay host and <SceneFileDropZone/> came with stages 2 and 3,
  * the tutorial's two with the first-run guide; all are mounted below.)
  *
- * ONE SELECTOR HERE IS FOR ITS RE-RENDER ONLY: `advancedMode`. The Diagnostics tab is in the dock
- * in Advanced mode only (panels.ts), and the engine's <Dock> works out which tabs to draw when it
- * renders; it subscribes to nothing that the switch changes. This component renders the docks, so
- * selecting the flag here is what makes the tab come and go at the switch.
+ * `advancedMode` IS SELECTED HERE FOR TWO THINGS. The Diagnostics tab is in the dock in Advanced
+ * mode only (panels.ts), and the engine's <Dock> works out which tabs to draw when it renders; it
+ * subscribes to nothing that the switch changes. This component renders the docks, so selecting
+ * the flag here is what makes the tab come and go at the switch. And Settings' raw storage list
+ * (`<SettingsHost storage>`) is shown in Advanced mode only (STREAMLINE.md stage 5).
  *
  * Where the renderer is: this file does not know. The host lives in `deep-zoom/host/current.ts`
  * and only DeepZoomSurface.tsx creates one; `deep-zoom/renderer` is loaded by `deep-zoom/host/`
@@ -84,8 +85,9 @@ export const DeepZoomApp: React.FC = () => {
     // Selected for its re-render alone: the Diagnostics tab is in the dock in Advanced mode only
     // (`showIf: 'advancedMode'`, panels.ts). The engine's <Dock> reads a tab's `showIf` when it
     // renders and subscribes to nothing that the switch changes, so without this the tab came and
-    // went only at the next thing that happened to render the dock (seen 2026-10-12).
-    useEngineStore((s) => s.advancedMode);
+    // went only at the next thing that happened to render the dock (seen 2026-10-12). Settings'
+    // raw storage list is shown in Advanced mode only too (STREAMLINE.md stage 5).
+    const advancedMode = useEngineStore((s) => s.advancedMode);
 
     // Preference-aware (Force Mobile UI counts): what is mounted, not how it is painted.
     const { isMobile } = useMobileLayout();
@@ -154,7 +156,7 @@ export const DeepZoomApp: React.FC = () => {
             <TutorialRunner />
             <TutorialOverlay />
 
-            <SettingsHost />
+            <SettingsHost storage={advancedMode} />
 
             <ToastHost />
 

@@ -113,7 +113,7 @@ const depthText = (v: unknown): string => {
 };
 
 function one(x: unknown): { state: DzLocationState; label?: string } | string {
-    if (!x || typeof x !== 'object' || Array.isArray(x)) return 'it is not a location';
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return 'it is not a place';
     const o = x as Record<string, unknown>;
     // a whole saved row
     if (o.state && typeof o.state === 'object') {
@@ -143,7 +143,7 @@ export function parseLocationText(text: string): ParsedLocations {
     const r = parseLocationList(text);
     if (!r.ok) return r;
     const bad = r.refused[0];
-    if (bad) return { ok: false, reason: `That text is not a location: ${r.total > 1 ? `item ${bad.item}: ` : ''}${bad.reason}.` };
+    if (bad) return { ok: false, reason: `That text is not a place: ${r.total > 1 ? `item ${bad.item}: ` : ''}${bad.reason}.` };
     return { ok: true, locations: r.locations, labels: r.labels };
 }
 
@@ -217,11 +217,11 @@ export function parseLocationList(text: string): ParsedLocationList {
     try {
         data = JSON.parse(trimmed);
     } catch {
-        return { ok: false, reason: 'That text is not a location (it is not JSON).' };
+        return { ok: false, reason: 'That text is not a place (it is not JSON).' };
     }
     const list = Array.isArray(data);
     const items: unknown[] = list ? data as unknown[] : [data];
-    if (items.length === 0) return { ok: false, reason: 'That list holds no locations.' };
+    if (items.length === 0) return { ok: false, reason: 'That list holds no places.' };
     const locations: DzLocationState[] = [];
     const labels: Array<string | undefined> = [];
     const refused: Array<{ item: number; reason: string }> = [];
@@ -234,7 +234,7 @@ export function parseLocationList(text: string): ParsedLocationList {
     if (locations.length === 0) {
         const first = refused[0];
         const detail = `${items.length > 1 ? `item ${first.item}: ` : ''}${first.reason}`;
-        return { ok: false, reason: `That text is not a location: ${detail}.`, detail };
+        return { ok: false, reason: `That text is not a place: ${detail}.`, detail };
     }
     return { ok: true, list, total: items.length, locations, labels, refused };
 }
@@ -288,10 +288,10 @@ export function newLocations(have: readonly DzLocationState[], incoming: readonl
     return { fresh, skipped: incoming.length - fresh.length };
 }
 
-/** What an import did, in the words the app says it in. */
+/** What an import did, in the words the app says it in ("place", the owner's word on screen). */
 export function importSummary(n: { added: number; skipped: number; refused: number }): string {
-    const parts = [`${n.added} location${n.added === 1 ? '' : 's'} added`];
-    if (n.skipped > 0) parts.push(`${n.skipped} skipped (already in My locations)`);
+    const parts = [`${n.added} place${n.added === 1 ? '' : 's'} added`];
+    if (n.skipped > 0) parts.push(`${n.skipped} skipped (already in My places)`);
     if (n.refused > 0) parts.push(`${n.refused} could not be read`);
     return parts.join(', ');
 }

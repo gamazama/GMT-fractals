@@ -7,7 +7,9 @@
  *   colour or gradient, no detail, no march setting (the owner, 2026-10-10: "a place shouldnt
  *   store light and colour - this will make it hard to improve the lighting and color system").
  *   A jump leaves all of those as they are. They live in the engine's state library
- *   (`savedLocations`): thumbnails, labels, nine slots, the Locations menu. `jumpTo` is the single
+ *   (`savedLocations`): thumbnails, labels, nine slots (no top-bar menu since 2026-10-17, F15: the
+ *   Places tab and the slot keys are the ways in). On screen a location is a "place" (F12, the
+ *   owner's word); the code, the storage key and the file formats keep "location". `jumpTo` is the single
  *   path for every jump - a saved place, a slot key, Home, Back, the readout's "Start view"
  *   (`jumpStart`), a starter dive's start, a pasted location or link, the end of the previous trail
  *   under its own formula (`jumpToTrailEnd`) - so each one is one undo step and
@@ -108,7 +110,10 @@
  *   ..."), which is not known to go red for a jump that forgets them.
  */
 import { useEngineStore } from '../store/engineStore';
+import React from 'react';
 import { installStateLibrary } from '../engine/store/installStateLibrary';
+import { StateLibraryToast } from '../engine/components/StateLibraryToast';
+import { topbar } from '../engine/plugins/TopBar';
 import type { StateSnapshot, StateLibrarySavedToast } from '../engine/store/createStateLibrarySlice';
 import { registerHistoryProvider } from '../store/slices/historySlice';
 import { showToast } from '../engine/store/toastStore';
@@ -516,7 +521,7 @@ export function jumpToTrailEnd(trail: readonly TrailSample[], flownIn: TrailForm
 /** Back to the view before the last jump. */
 export function jumpBack(): void {
     const back = backStack.pop();
-    if (!back) { showToast('No earlier view to go back to', 'info'); return; }
+    if (!back) { showToast('No earlier place to go back to', 'info'); return; }
     jumpTo({ view: back.view, formula: back.formula, depth: '' }, { noBack: true });
 }
 
@@ -589,7 +594,7 @@ function readLegacy(): DzLocation[] {
             const depth = typeof row.depth === 'number' && validDepth(row.depth) ? String(row.depth) : '';
             out.push({
                 id: typeof row.id === 'string' ? row.id : `legacy-${out.length}-${Date.now()}`,
-                label: typeof row.name === 'string' ? row.name : (depth ? formatDepth(Number(depth)) : 'Location'),
+                label: typeof row.name === 'string' ? row.name : (depth ? formatDepth(Number(depth)) : 'Place'),
                 createdAt: typeof row.createdAt === 'number' ? row.createdAt : Date.now(),
                 state: { view: row.view as DzView, depth },
                 // last week's PNG thumbnails are left behind: they are what filled the quota
@@ -608,9 +613,9 @@ function writeStored(rows: DzLocation[]): void {
         try {
             // Over the quota: keep the places, drop the pictures.
             localStorage.setItem(DZ_LOCATIONS_STORAGE_KEY, JSON.stringify(rows.map(({ thumbnail: _dropped, ...rest }) => rest)));
-            showToast('Storage is full: locations were saved without their thumbnails', 'warning', 5000);
+            showToast('Storage is full: places were saved without their thumbnails', 'warning', 5000);
         } catch {
-            showToast('Storage is full: locations could not be saved for the next visit', 'warning', 5000);
+            showToast('Storage is full: places could not be saved for the next visit', 'warning', 5000);
         }
     }
 }
@@ -638,7 +643,7 @@ export function installLocations(): void {
             saveToSlot: 'saveLocationToSlot',
             reset: 'resetLocation',
         },
-        defaultLabelPrefix: 'Location',
+        defaultLabelPrefix: 'Place',
         capture: captureLocation,
         apply: (state) => { jumpTo(state); },
         captureThumbnail,
@@ -651,21 +656,15 @@ export function installLocations(): void {
         // Digits recall and Ctrl+digit saves - not while a fly key or a look drag is held: a
         // finger slipping from W onto 1 must not throw the camera to another place. The two
         // prefixes are what Help's shortcuts page prints for these keys (it is written from the
-        // registry: deep-zoom/help/shortcutsPage.ts): "Go to location 1 to 9".
-        slotShortcuts: { count: 9, category: 'Locations', when: () => !isFlying(), savePrefix: 'Save this view as location', recallPrefix: 'Go to location' },
-        menu: {
-            menuId: 'locations',
-            slot: 'left',
-            order: 20,
-            label: 'Locations',
-            title: 'Saved locations',
-            align: 'start',
-            width: 'w-52',
-            openItem: { label: 'Locations panel…', title: 'Open the Locations panel' },
-            resetItem: { label: 'Home', title: 'Jump to the view the app started with' },
-            slotLabelPrefix: 'Location',
-        },
+        // registry: deep-zoom/help/shortcutsPage.ts): "Go to place 1 to 9".
+        slotShortcuts: { count: 9, category: 'Places', when: () => !isFlying(), savePrefix: 'Save here as place', recallPrefix: 'Go to place' },
+        // No top-bar menu (F15, 2026-10-17): the Places tab holds the list, and the menu's rows were the
+        // slot keys and Home again. Without it the library mounts no saved-toast, so it is mounted below,
+        // after My Gradients (at the menu's place its pill ran off the window). Ctrl+1-9 said nothing until
+        // it was. (`saveLocationHere`, B and the tab's button, says "Place saved" itself.)
+        menu: null,
     });
+    topbar.register({ id: 'savedLocations-saved-toast', slot: 'left', order: 40.5, component: () => React.createElement(StateLibraryToast, { arrayKey: 'savedLocations' }) });
 
     // A jump, and a flight that moved the camera, is one undo entry holding the exact view on both
     // sides. `flightPending` is the take-off view, for the one capture that opens a flight's entry.
@@ -739,8 +738,8 @@ export async function saveLocationHere(): Promise<void> {
     if (!getHost()) return;
     try {
         await useEngineStore.getState().addLocation();
-        showToast('Location saved', 'success');
+        showToast('Place saved', 'success');
     } catch (err) {
-        showToast(err instanceof Error ? err.message : 'The location could not be saved', 'error');
+        showToast(err instanceof Error ? err.message : 'The place could not be saved', 'error');
     }
 }

@@ -482,3 +482,4 @@ section."** Nothing is open. S1 is with a builder (session started 2026-10-16).
 Delete a line when he answers.
 - F14, the light rig's readback flood (your kernel): reading the buffer before deleting the fence (`pollRig`, the one change as written) left it as it was: 256 "READ-usage buffer" warnings in a dive to 1e-9, then "too many errors" (`debug/scratch/streamline/rig-warnings.mjs` in the deep-zoom worktree, headless on the GPU, before and after). `requestRig` already re-arms only once the fence is gone, so the warning comes from something else. Reverted; what do you want to try?
 - A6: a lesson now puts the hints back as they were, but on a first visit they are ON before it (the stored choice is unset), so the first lesson still ends with every right-dock row doubled. Should the deep zoomer start with hints off?
+- F6: the "Whole bulb · 1e-3" card now jumps to a close view at 1e-3 (every card jumps), not to the whole bulb: what should it be called?

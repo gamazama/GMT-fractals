@@ -122,6 +122,12 @@ export type PanelItem =
            *  under different names in different panel contexts (e.g.
            *  atmosphere.fogColor as 'Sky Color' vs 'Fog Color'). */
           labelOverrides?: Record<string, string>;
+          /** Per-param live readings drawn after the row's label (key → widget id in
+           *  componentRegistry, rendered with no props). For a number that belongs to
+           *  one row and changes outside the store - the count in use beside a floor,
+           *  the size drawn beside the size asked - so it reads on that row instead of
+           *  on a row of its own. Sliders, dropdowns and switches carry it. */
+          labelSuffixes?: Record<string, string>;
           /** Opt children of this parent param in as roots (AutoFeaturePanel
            *  liftChildrenOf) — lets a whitelist item surface a param that is
            *  normally nested under another control elsewhere. */
@@ -155,9 +161,11 @@ export type PanelItem =
       })
     | (PanelItemHelp & {
           /** A roll-up group with a clickable label. Children render
-           *  inside an animated container; closed by default unless
-           *  `defaultOpen: true`. Children can be any PanelItem,
-           *  including nested collapsibles. */
+           *  inside an animated container; OPEN by default (CollapsibleSection's
+           *  own default, which an absent `defaultOpen` falls through to - GMT's
+           *  Effects roll-up relies on it); `defaultOpen: false` closes it.
+           *  (Corrected 2026-10-17: this said "closed by default".) Children can
+           *  be any PanelItem, including nested collapsibles. */
           type: 'collapsible';
           label: string;
           items: PanelItem[];

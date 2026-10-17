@@ -93,6 +93,8 @@ interface AutoFeaturePanelProps {
     excludeParams?: string[];
     whitelistParams?: string[]; // New: Render ONLY these params, ignore group
     labelOverrides?: Record<string, string>; // Override labels for specific params by key
+    /** Param key → componentRegistry widget drawn after that row's label (PanelItem `labelSuffixes`). */
+    labelSuffixes?: Record<string, string>;
     variant?: 'default' | 'dense';
     // New Props for Engine Panel Interception
     forcedState?: any;
@@ -207,7 +209,7 @@ const RangePairPad: React.FC<{
 };
 
 export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
-    featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], labelOverrides = {}, variant = 'default',
+    featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], labelOverrides = {}, labelSuffixes, variant = 'default',
     forcedState, onChangeOverride, pendingChanges, liftChildrenOf, ignoreDynamicVisible = false, hints, keyframes = true
 }) => {
     const feature = featureRegistry.get(featureId);
@@ -355,6 +357,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             val = sliceState[key] ?? config.default;
         }
         const isParamDisabled = isDisabled || disabledParams.includes(key);
+        // A live reading after the label (PanelItem `labelSuffixes`), joined to whatever suffix the row has of its own.
+        const Reading = labelSuffixes?.[key] ? componentRegistry.get(labelSuffixes[key]) as React.FC | undefined : undefined;
+        const withReading = (own: React.ReactNode): React.ReactNode => (Reading ? <>{own}<Reading /></> : own);
         
         // Engine Panel Dense Rendering Logic
         if (variant === 'dense') {
@@ -429,7 +434,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             if (config.ui === 'checkbox') {
                  return (
                      <div className={isParamDisabled ? 'opacity-30 pointer-events-none' : ''}>
-                        <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} variant="dense" labelSuffix={boolCompileIndicator} />
+                        <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} variant="dense" labelSuffix={withReading(boolCompileIndicator)} />
                      </div>
                  );
             }
@@ -437,7 +442,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             // UI: TOGGLE SWITCH (Default)
             return (
                 <div>
-                    <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} options={config.options} disabled={isParamDisabled} labelSuffix={boolCompileIndicator} />
+                    <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} options={config.options} disabled={isParamDisabled} labelSuffix={withReading(boolCompileIndicator)} />
                 </div>
             );
         }
@@ -471,7 +476,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                             onChange={(v) => handleUpdate(key, v)}
                             options={renderedOptions}
                             fullWidth
-                            labelSuffix={compileIndicator}
+                            labelSuffix={withReading(compileIndicator)}
                         />
                         {/* Per-option hint uses the shared <Hint> chip so enum
                             captions match every other panel hint (and self-gate
@@ -537,7 +542,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const isHighlighted = val !== config.default || !!config.condition;
             // Conditional params: skip entry animation to prevent grey-box on re-mount (CSS animation restart issue)
             const conditionalClass = config.condition ? '!animate-none !overflow-visible' : '';
-            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={isHighlighted} trackId={trackId} liveValue={liveValue} defaultValue={config.default} mapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} className={conditionalClass} /></div>;
+            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={isHighlighted} trackId={trackId} liveValue={liveValue} defaultValue={config.default} mapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={withReading(compileIndicator)} className={conditionalClass} /></div>;
         }
 
         // Vec2/3/4 all share the same binding derivation + live-value

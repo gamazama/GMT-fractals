@@ -69,6 +69,7 @@ import { LocationsPanel } from './components/LocationsPanel';
 import { RoutePanel } from './components/RoutePanel';
 import { installRoute } from './route';
 import { installRouteRender } from './routeRender';
+import { openRenderPopup } from '../engine/animation/renderPopupRegistry';
 import { BoxStarters, KaliStarters, KeptPlaces, StarterDives } from './components/StarterDives';
 import { LocationText } from './components/LocationText';
 import { JuliaHere } from './components/JuliaHere';
@@ -146,10 +147,16 @@ try {
     // ready (and keeps toggle rows fresh); Help registers the one menu so far.
     installMenu();
 
-    // @engine/scene-io — File menu: Save / Load scene, Save PNG (the scene is embedded in the
-    // PNG), Alt+S. The canvas getter must be passed at this first call or the PNG rows never
-    // appear; `sceneCanvas` draws a frame and copies it at save time.
-    installSceneIO({ getCanvas: sceneCanvas });
+    // @engine/scene-io — File menu: Open scene, Save scene, Save picture (a PNG with the scene in
+    // it; Alt+S). The canvas getter must be passed at this first call or the PNG rows never
+    // appear; `sceneCanvas` reads the picture back at save time. The menu's words are this app's
+    // (STREAMLINE.md stage 5): the File menu is Open scene..., Save scene..., Save picture and
+    // Render route... (below), and nothing else.
+    installSceneIO({ getCanvas: sceneCanvas, labels: { load: 'Open scene…', saveScene: 'Save scene…', savePng: 'Save picture' } });
+    // One door to a still, not three (F15): the menu row and Alt+S stay, the top bar's picture icon
+    // goes, and so does Save Image (JPG), a PNG without the scene in it.
+    topbar.unregister('scene-snapshot');
+    menu.unregisterItem('file', 'save-jpg');
     // Its two autosave rows are app-gmt's mechanism: the "Autosave" switch writes app-gmt's
     // preference (`gmt-autosave-enabled`) and nothing in this app reads it, and "Restore Last
     // Session" would load whatever scene app-gmt left in its recovery slot. This app's autosave
@@ -182,13 +189,13 @@ try {
     // registered with the app's other keys (hotkeys.ts).
     installDeepZoomHelp();
 
-    // The renderer's state in the top bar's centre: engine badge + depth.
-    // Store-free (it reads the telemetry store beside the host), registered
+    // The top bar's centre: "still 37 / 64" while the picture gathers, and the programs
+    // being built. Store-free (it reads the telemetry store beside the host), registered
     // here with the other top-bar items.
     topbar.register({ id: 'deep-zoom.status', slot: 'center', order: 0, component: StatusChip });
 
-    // Saved locations on the engine's state library (list, thumbnails, slots 1-9, the
-    // Locations menu), the jump undo provider, and this app's keys. The two widgets read
+    // Saved places on the engine's state library (list, thumbnails, slots 1-9; no top-bar
+    // menu since F15), the jump undo provider, and this app's keys. The two widgets read
     // the store, so they are registered here and not in registerFeatures.ts.
     installLocations();
     // The Mandelbox's Scale never rests inside the band the renderer cannot draw (deep-zoom/boxScale.ts).
@@ -201,6 +208,9 @@ try {
     // The render dialog: the route (or the timeline as it is) as PNG frames into a folder. It
     // registers the timeline toolbar's Render button; the Route tab has one too.
     installRouteRender();
+    // ... and the File menu's last row opens that dialog too (the Route tab's Render button does the same).
+    menu.registerItem('file', { id: 'file-sep-render', type: 'separator', order: 23 });
+    menu.registerItem('file', { id: 'render-route', type: 'button', label: 'Render route…', title: 'Render the route as PNG frames or a video file', order: 24, onSelect: openRenderPopup });
     registerDeepZoomHotkeys();
     componentRegistry.register('dz-locations', LocationsPanel);
     componentRegistry.register('dz-route', RoutePanel);
@@ -216,8 +226,8 @@ try {
 
     // Scenes carry the saved places as a document; a share link carries the look and the view.
     installShare();
-    // A FILE of locations dropped on the app or picked in File > Load Scene is added to My
-    // locations instead of being read as a scene (deep-zoom/claims.ts).
+    // A FILE of places dropped on the app or picked in File > Open scene is added to My
+    // places instead of being read as a scene (deep-zoom/claims.ts).
     installLocationsFileClaim();
 
     // My Gradients in the top bar (the panel itself is an entry of the manifest, setup.ts), and

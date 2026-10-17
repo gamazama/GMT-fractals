@@ -15,15 +15,25 @@
  *
  * `Tab` switches the camera mode, Fly and Orbit: GMT's key, writing GMT's store field
  * (`cameraMode`), which the navigation reads every frame and the timeline's Space binding tests.
+ * ONLY WHILE THE PICTURE HAS FOCUS (`#dz-frame`, which a click on the picture and a dive focus;
+ * STREAMLINE.md A10 / F10). Anywhere else Tab is the browser's: it moves the focus, and the
+ * dispatcher leaves it alone because its `when` says no (engine/plugins/Shortcuts.ts: a key whose
+ * `when` fails is not consumed). Until 2026-10-17 it was global, and after the Dive button every
+ * Tab switched the mode and toasted. The depth box's mode pill switches it by a click
+ * (`toggleCameraMode`, exported for it).
+ * @assumption Tab with the focus on the page body, in the Dive field or on the Dive button leaves the
+ *   mode alone and toasts nothing; with the picture focused it switches. Seen in the app on 2026-10-17
+ *   (debug/scratch/stage45/try-more.mjs, git-ignored); the stage-N5 Orbit steps press Tab on the focused
+ *   picture, and no step presses it elsewhere.
  *
  * WHAT IS REGISTERED HERE (`registerDeepZoomHotkeys`, the list a reader can check against the code):
- *   Locations   B / Shift+B save this view; Home the view the app started with (NOT the readout's
+ *   Places      B / Shift+B save this place; Home the place the app started with (NOT the readout's
  *               "Start view" button: `jumpStart` in locations.ts); Backspace back; J the Dive field;
  *               Escape stops a dive (only while one flies).
  *   Route       K / Shift+K add a keyframe (or give the one under the playhead this view).
  *   Look        F G detail; [ ] iterations; I auto iterations; - = power; V colouring; L light type;
  *               O overlays.
- *   View        ` Advanced mode; Tab Fly / Orbit.
+ *   View        ` Advanced mode; Tab Fly / Orbit (the picture focused).
  *   Help        / opens Help on its first topic, and closes it when it is open.
  * Help's own Keyboard Shortcuts page is WRITTEN FROM THIS REGISTRY when it is read
  * (deep-zoom/help/shortcutsPage.ts): a key added here is on it with its `description` and under
@@ -46,6 +56,7 @@ import { shortcuts } from '../engine/plugins/Shortcuts';
 import { useEngineStore } from '../store/engineStore';
 import { showToast } from '../engine/store/toastStore';
 import { DZ_MODE_FLY, DZ_MODE_ORBIT, cameraModeOf } from './navigationState';
+import { DZ_FRAME_ID } from './host/current';
 import { jumpBack, jumpHome, saveLocationHere } from './locations';
 import { setKeyframe } from './route';
 import { stopDive, useDive } from './diveControl';
@@ -82,8 +93,9 @@ const nextLightType = (): void => store().setDzLight({ lightType: (store().dzLig
 const nextOverlays = (): void => store().setDzInspect({ overlays: (store().dzInspect.overlays + 1) % OVERLAYS_OPTIONS.length });
 const toggleAdvancedMode = (): void => store().setAdvancedMode(!store().advancedMode);
 /** Fly <-> Orbit: GMT's own key and its own store field (grep `gmt.toggleCameraMode` in
- *  app-gmt/main.tsx). What each mode's hands do is in the header of deep-zoom/DeepZoomNavigation.tsx. */
-const toggleCameraMode = (): void => {
+ *  app-gmt/main.tsx). What each mode's hands do is in the header of deep-zoom/DeepZoomNavigation.tsx.
+ *  Also the depth box's mode pill (components/DepthReadout.tsx). */
+export const toggleCameraMode = (): void => {
     const next = cameraModeOf(store()) === DZ_MODE_ORBIT ? DZ_MODE_FLY : DZ_MODE_ORBIT;
     useEngineStore.setState({ cameraMode: next } as Partial<ReturnType<typeof useEngineStore.getState>>);
     showToast(next === DZ_MODE_ORBIT
@@ -108,12 +120,12 @@ export function registerDeepZoomHotkeys(): void {
         shortcuts.register({ id: `deep-zoom.${id}`, key, handler, description, category, ...extra });
 
     const save = (): void => { void saveLocationHere(); };
-    add('save-location', 'b', save, 'Save this view to My locations', 'Locations');
-    add('save-location.shift', 'Shift+b', save, 'Save this view to My locations (with Shift held for speed)', 'Locations');
-    add('home', 'Home', jumpHome, 'Jump to the view the app started with', 'Locations');
-    add('back', 'Backspace', jumpBack, 'Back to the view before the last jump', 'Locations');
-    add('dive', 'j', focusDiveField, 'Go to the "Dive to 1e-" field', 'Locations');
-    add('cancel', 'Escape', stopDive, 'Stop the dive in flight', 'Locations', { when: () => useDive.getState().dive !== null });
+    add('save-location', 'b', save, 'Save this place to My places', 'Places');
+    add('save-location.shift', 'Shift+b', save, 'Save this place to My places (with Shift held for speed)', 'Places');
+    add('home', 'Home', jumpHome, 'Jump to the place the app started with', 'Places');
+    add('back', 'Backspace', jumpBack, 'Back to the place before the last jump', 'Places');
+    add('dive', 'j', focusDiveField, 'Go to the "Dive to 1e-" field', 'Places');
+    add('cancel', 'Escape', stopDive, 'Stop the dive in flight', 'Places', { when: () => useDive.getState().dive !== null });
 
     const keyframe = (): void => { setKeyframe(); };
     add('keyframe', 'k', keyframe, 'Add a keyframe to the route, after the last one (with the playhead on an earlier keyframe: that one takes this view)', 'Route');
@@ -133,7 +145,8 @@ export function registerDeepZoomHotkeys(): void {
     // GMT's own key for it (grep `gmt.toggleAdvancedMode` in app-gmt/main.tsx). The same flag has
     // a row in Settings (deep-zoom/settings.ts): a key alone is a switch nobody can find.
     add('advanced-mode', '`', toggleAdvancedMode, 'Advanced mode on / off (shows the advanced rows of each tab and the Diagnostics tab)', 'View');
-    add('camera-mode', 'Tab', toggleCameraMode, 'Camera mode: Fly / Orbit', 'View');
+    add('camera-mode', 'Tab', toggleCameraMode, 'Camera mode: Fly / Orbit (with the picture focused: click it first)', 'View',
+        { when: () => document.activeElement?.id === DZ_FRAME_ID });
 
     add('help', '/', toggleHelp, 'Help: open it, or close it', 'Help');
 }

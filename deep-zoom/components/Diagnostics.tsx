@@ -13,9 +13,13 @@
  *   stay reachable for measuring without becoming things a scene can hold.
  *
  * THE ROWS, from the top
- *   Now       which path draws, the state of the Mandelbulb's program and of the selected formula's,
- *             the size drawn, the iterations in force, the still's progress, how long each program
- *             took to build, and the accuracy gate's last reading (pass under 1e-3).
+ *   Now       which path draws (deep or plain), the depth, the speed scale (the distance the fly
+ *             speed is multiplied by: deep-zoom/flyPace.ts), the state of the Mandelbulb's program
+ *             and of the selected formula's, the size drawn, the iterations in force, the still's
+ *             progress, how long each program took to build, and the accuracy gate's last reading
+ *             (pass under 1e-3). The path, the depth, the iterations and the size were the top
+ *             bar's chip until 2026-10-17 (STREAMLINE.md, stage 4), the speed scale the depth box's
+ *             "pace" line: one word, pace, now means decades a second and nothing else.
  *   Levers    Accuracy gate (the renderer checks one pixel against a CPU referee twice a second
  *             while a still gathers; it is ON in the renderer from the start, and this is the only
  *             switch for it); Path (Deep is the shell's; Auto draws the plain single-precision
@@ -57,6 +61,8 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
 import { useHost } from '../host/current';
 import { useDzTelemetry } from '../host/telemetry';
+import { useDzNavigation } from '../navigationState';
+import { formatDepth, formatDepthCompact, validDepth } from './depthFormat';
 import type { DeepZoomHost, DzDiagnostics, DzLeverPatch, DzLevers, DzRayLevers } from '../host/DeepZoomHost';
 
 const ROW = 'flex items-baseline justify-between gap-3 px-3 py-0.5 text-[10px] text-fg-tertiary';
@@ -111,6 +117,8 @@ export const Diagnostics: React.FC = () => {
     const iters = useDzTelemetry((t) => t.iters);
     const accumN = useDzTelemetry((t) => t.accumN);
     const accumMax = useDzTelemetry((t) => t.accumMax);
+    const depth = useDzNavigation((s) => formatDepth(s.depth));
+    const speedScale = useDzNavigation((s) => (validDepth(s.pace) ? formatDepthCompact(s.pace) : '-'));
     // The read-back as text: the component renders only when it differs (see PITFALLS).
     const [answer, setAnswer] = useState('');
 
@@ -141,6 +149,8 @@ export const Diagnostics: React.FC = () => {
         <div data-dz-diagnostics className="flex flex-col pb-2">
             <div className="px-2 pt-2"><SectionLabel>Now</SectionLabel></div>
             <Readout label="Path" id="path">{!live ? '-' : path === 'deep' ? 'deep' : 'plain (single precision)'}</Readout>
+            <Readout label="Depth" id="depth">{live ? depth : '-'}</Readout>
+            <Readout label="Speed scale" id="pace">{speedScale}</Readout>
             <Readout label="Mandelbulb program" id="ray">{now.rayMarch}</Readout>
             <Readout label="Selected formula's program" id="formula">{now.formula}</Readout>
             <Readout label="Drawn" id="frame">{live ? `${frameW} x ${frameH}` : '-'}</Readout>

@@ -154,6 +154,7 @@ const renderItem = (
                     groupFilter={item.groupFilter}
                     whitelistParams={item.whitelistParams}
                     labelOverrides={item.labelOverrides}
+                    labelSuffixes={item.labelSuffixes}
                     liftChildrenOf={item.liftChildrenOf}
                     excludeParams={item.excludeParams}
                     className={item.className}

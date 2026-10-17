@@ -75,9 +75,15 @@ export interface InstallSceneIOOptions {
      *  triggered mid-movement reflects the live view rather than the last
      *  debounced sample. */
     onBeforeSerialize?: () => void;
+    /** The File menu's words, where an app has its own: Load, Save Scene, Save PNG. Each
+     *  left out keeps the default ("Load Scene (PNG/JSON)", "Save Scene (JSON)",
+     *  "Save Scene (PNG)"). Like `fileExtension`, the two Save rows take the FIRST
+     *  install's words; the Load row reads them when it draws. */
+    labels?: { load?: string; saveScene?: string; savePng?: string };
 }
 
 let _installed = false;
+let _labels: NonNullable<InstallSceneIOOptions['labels']> = {};
 let _getCanvas: (() => HTMLCanvasElement | null) | undefined;
 let _parseScene: SceneParser | undefined;
 let _serializeScene: SceneSerializer | undefined;
@@ -117,6 +123,7 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     if (options.fileExtension) _fileExtension = options.fileExtension;
     if (options.snapshotAnchor) _snapshotAnchor = options.snapshotAnchor;
     if (options.onBeforeSerialize) _onBeforeSerialize = options.onBeforeSerialize;
+    if (options.labels) _labels = options.labels;
     if (_installed) return;
     _installed = true;
 
@@ -150,7 +157,7 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     menu.registerItem('file', {
         id: 'save-scene',
         type: 'button',
-        label: `Save Scene (${_fileExtension.toUpperCase()})`,
+        label: _labels.saveScene ?? `Save Scene (${_fileExtension.toUpperCase()})`,
         order: 20,
         onSelect: () => { saveScene(); },
     });
@@ -158,7 +165,7 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
         menu.registerItem('file', {
             id: 'save-png',
             type: 'button',
-            label: 'Save Scene (PNG)',
+            label: _labels.savePng ?? 'Save Scene (PNG)',
             shortcut: 'Alt+S',
             order: 21,
             onSelect: () => { void saveScenePng(); },
@@ -227,6 +234,7 @@ export const uninstallSceneIO = () => {
     _fileExtension = 'json';
     _snapshotAnchor = undefined;
     _onBeforeSerialize = undefined;
+    _labels = {};
     _installed = false;
 };
 
@@ -508,7 +516,7 @@ const LoadSceneMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
                 className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-fg-tertiary hover:text-fg hover:bg-line/10 transition-colors"
             >
                 <span className="flex items-center gap-2 min-w-0">
-                    <span className="truncate">Load Scene (PNG/{_fileExtension.toUpperCase()})</span>
+                    <span className="truncate">{_labels.load ?? `Load Scene (PNG/${_fileExtension.toUpperCase()})`}</span>
                 </span>
             </button>
         </>

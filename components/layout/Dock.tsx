@@ -145,8 +145,11 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                      {side === 'left' ? <ChevronRight /> : <ChevronLeft />}
                  </button>
                  <div className="flex-1 flex flex-col items-center py-2 gap-2">
+                     {/* Buttons, as the open dock's tabs are: the same `data-gx-mode-tab` selector finds a tab
+                         folded or open, and the keyboard reaches it. A click opens the dock on that tab. */}
                      {dockPanels.map(p => (
-                         <div
+                         <button
+                             type="button"
                              key={p.id}
                              data-gx-mode-tab={p.id}
                              onClick={() => togglePanel(p.id, true)}
@@ -154,7 +157,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                              title={panelLabel(p.id)}
                          >
                              <span className="text-[10px] font-bold">{panelLabel(p.id).charAt(0)}</span>
-                         </div>
+                         </button>
                      ))}
                  </div>
             </div>

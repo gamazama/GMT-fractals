@@ -9,8 +9,19 @@
  *
  * Also opens the left dock by default. The shared uiSlice default is
  * `isLeftDockCollapsed: true`; this app's left dock holds where-am-I panels
- * (locations, formula, flight) that are worth seeing at first run. With no
- * left panel yet (stage 1) the call changes nothing on screen.
+ * (places, route, formula) that are worth seeing at first run.
+ *
+ * THE RIGHT DOCK IS FOLDED ON A FIRST VISIT (F2, the owner, 2026-10-17): its icon strip only, so the
+ * picture takes the room (74 % of a 1600 x 1000 window against 54 %). Once it is opened it is
+ * remembered open, and folded again remembered folded: the dock's own `isRightDockCollapsed`,
+ * mirrored to THIS APP's key (`DZ_RIGHT_DOCK_KEY`). Not through `setDockCollapsed`: that writes the
+ * engine's `gmt.isRightDockCollapsed`, which every GMT app on the origin reads, and folding it here
+ * would fold GMT's right dock as well. (The dock's own chevron still writes that key, as in every app.)
+ *
+ * @assumption A fresh profile opens with the right dock folded (the picture 1248 x 944 of a 1600 x 1000
+ *   window, 73.6 %), a click on a folded tab's icon opens it on that tab, and a reload keeps it open -
+ *   seen once in the app, 2026-10-17 (debug/scratch/stage45/try-first.mjs, git-ignored). No smoke step
+ *   asserts it; the stage smokes open a right tab through the same icon (`button[data-gx-mode-tab]`).
  *
  * And it puts the store's `cameraMode` on 'Fly' (stage N5), so the timeline leaves Space to the
  * navigation.
@@ -23,6 +34,7 @@
 
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { useEngineStore } from '../store/engineStore';
+import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { DeepZoomPanels } from './panels';
 import { feedbackPanelEntry } from '../engine-gmt/feedback';
 import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
@@ -31,6 +43,8 @@ import { gradientStudioPanelEntry, mountGradientStudio } from '../palette/instal
 /** This app's own key for where the My Gradients window sits. Without one it would read and
  *  write app-gmt's (the favourites themselves are shared across the apps on purpose). */
 export const DZ_FAVIENTS_PANEL_KEY = 'deep-zoom.favients.panel';
+/** '1' once the right dock has been left open in this app, '0' once left folded; absent on a first visit. */
+const DZ_RIGHT_DOCK_KEY = 'gmt.deepZoom.rightDockOpen';
 
 export const setupDeepZoom = () => {
     // Feedback panel is shared GMT plumbing (Help-menu "Send Feedback"); spread
@@ -51,6 +65,9 @@ export const setupDeepZoom = () => {
     mountFavientsPanel({ storageKey: DZ_FAVIENTS_PANEL_KEY, paletteFilters: false, open: false, float: { x: 336 } });
     mountGradientStudio();
     useEngineStore.getState().setDockCollapsed('left', false);
+    // F2: folded on a first visit, then as it was left (see the header for why not `setDockCollapsed`).
+    useEngineStore.setState({ isRightDockCollapsed: safeLocalGet(DZ_RIGHT_DOCK_KEY) !== '1' });
+    useEngineStore.subscribe((s) => s.isRightDockCollapsed, (folded) => { safeLocalSet(DZ_RIGHT_DOCK_KEY, folded ? '0' : '1'); });
     // This app always flies. `cameraMode` is the field the timeline's Space binding tests so
     // that Space stays fly-up (grep `toggle-play` in components/TimelineHost.tsx); with the
     // pointer over the timeline Space still plays. The engine's store type does not declare the

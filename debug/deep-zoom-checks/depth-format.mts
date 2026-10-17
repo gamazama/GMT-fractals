@@ -4,14 +4,14 @@
  *
  *   npx tsx debug/deep-zoom-checks/depth-format.mts
  *
- * The smoke's status-chip step matches the depth text against `/^\d\.\d\de-?\d+$/`; the first
+ * The smoke's depth-readout step matches the depth text against `/^\d\.\d\de-?\d+$/`; the first
  * lines here pin that the formatter can only produce that shape.
  *
  * FALSIFICATION RECORD, 2026-10-08: `.replace('e+', 'e')` removed from `formatDepth` -> 2 red
  * ("1.5 is written 1.50e0", "every sampled depth matches the smoke's pattern").
  */
 import {
-    FLOOR_EXP, decadesPerSecond, decadesToFloor, depthAtFraction, formatDepth, formatDepthCompact, scaleFraction, validDepth, yardstickFor,
+    FLOOR_EXP, decadesToFloor, depthAtFraction, formatDepth, formatDepthCompact, scaleFraction, validDepth,
 } from '../../deep-zoom/components/depthFormat.ts';
 
 let failed = 0;
@@ -35,10 +35,6 @@ check(near(decadesToFloor(1), 77) && near(decadesToFloor(1e-77), 0) && decadesTo
 check(scaleFraction(1) === 0 && near(scaleFraction(1e-77), 1) && scaleFraction(10) === 0 && scaleFraction(1e-99) === 1, 'the scale runs 0 at 1e0 to 1 at the floor and is clamped');
 check(depthAtFraction(0) === 1 && depthAtFraction(1) === 1e-77 && depthAtFraction(2) === 1e-77 && depthAtFraction(30 / FLOOR_EXP) === 1e-30,
     'a click on the scale gives a whole decade, never below 1e-77');
-
-check(yardstickFor(1) === '' && yardstickFor(1e-30) === 'grain of sand' && yardstickFor(1e-70) === 'Planck length', 'the yardstick is the smallest one passed');
-check(near(decadesPerSecond(1e-10, 1e-12, 2), 1) && near(decadesPerSecond(1e-12, 1e-10, 2), -1), 'speed: positive going deeper, in decades per second');
-check(decadesPerSecond(0, 1e-3, 1) === 0 && decadesPerSecond(1e-3, 1e-4, 0) === 0, 'speed: 0 for a missing depth or no time');
 
 console.log(failed === 0 ? 'depth-format: all green' : `depth-format: ${failed} FAILED`);
 process.exit(failed === 0 ? 0 : 1);

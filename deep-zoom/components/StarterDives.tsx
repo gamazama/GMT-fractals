@@ -1,22 +1,32 @@
 /**
- * deep-zoom/components/StarterDives.tsx - six ready dives: a start view and a depth to fly to.
+ * deep-zoom/components/StarterDives.tsx - the ready-made cards of the Places tab: four widgets, one
+ * look, and every card a JUMP (F6, the owner, 2026-10-17: "all jump (2-3 s) rather than some diving
+ * (13-16 s)"; the Dive field and the first lesson teach diving).
  *
- * A card jumps to its start view (one undo step, through `jumpTo`) and then dives straight ahead
- * to its target depth. The data is `data/starters.ts`. Names and numbers only on the cards; the
+ *   `dz-starters`       the Mandelbulb's six (data/starters.ts). Five of them are dives in the data -
+ *                       a start view and a depth - and the card jumps to where that dive arrives
+ *                       (`place`, recorded on the GPU); the sixth is a place already.
+ *   `dz-box-starters`   the Mandelbox's (data/boxStarters.ts): a jump that also switches the formula.
+ *   `dz-kali-starters`  KaliBox's (data/kaliStarters.ts), likewise.
+ *   `dz-places`         the owner's kept places (data/places.ts), starred: his.
+ * Each jump goes through `jumpTo` (one undo step; Backspace comes back), and a card pressed while
+ * Julia mode is on switches it off in the same jump: every card is a place in Mandelbrot mode, but
+ * for GMT's KaliBox preset, which carries its own.
+ *
+ * A card's title is its name with its depth, once ("Grain of sand · 1e-30"); a card whose second
+ * part is not a depth - "scale -1.5", "Detail 1" - has it as a subtitle (`sub` in the data). The
  * longer line is the card's tooltip.
  *
- * A dive flies straight along the view, so a start view has to face the surface. These six do
- * (frames of a recorded dive); a card whose dive ends early says "Stopped at ..." through the
- * usual toast, and pressing it again continues from where it stopped only if the view is kept -
- * a second press starts over from the card's own start view.
+ * The cards carry `data-dz-starter` (the Mandelbulb's, by target depth: the stage smoke counts six),
+ * `data-dz-box-starter`, `data-dz-kali-starter` and `data-dz-place` (by name).
  *
- * Every card here is a place in MANDELBROT mode: pressed while Julia mode is on it switches that off
- * in the same jump, as a Mandelbox card pressed from the bulb switches the formula (`jumpTo`).
+ * `runStarter` is the first lesson's: its first card has a button that runs the "Surface" dive from
+ * its start view (deep-zoom/tutorial/steps.tsx). The lesson's own dive stays (F6).
  *
- * Registered as `dz-starters` in main.tsx; panels.ts places it at the top of Locations.
- *
- * `runStarter` is exported for the first-dive lesson, whose first card has a button that runs one
- * of these cards (deep-zoom/tutorial/steps.tsx): the same jump and the same dive, not a copy.
+ * @assumption Each recorded `place` is at the depth on its card. The 1e-30 card is checked by the stage-3
+ *   smoke step "a Mandelbulb card jumps to its place ..." (the nearest ray ahead within a factor 2); the
+ *   others were measured when recorded (1.06e-3, 1.08e-6, 1.03e-15, 1.04e-50) and the 1e-50 card again in
+ *   the app on 2026-10-17, gathered in 0.7 s (debug/scratch/stage45/try-more.mjs, git-ignored).
  */
 import React from 'react';
 import { STARTERS } from '../data/starters';
@@ -25,18 +35,23 @@ import { BOX_STARTERS } from '../data/boxStarters';
 import { KALI_STARTERS } from '../data/kaliStarters';
 import type { Starter } from '../data/starters';
 import { jumpTo } from '../locations';
+import type { DzLocationState } from '../locations';
 import { diveTo, useDive } from '../diveControl';
 import { getHost } from '../host/current';
 
 /** Frames to let the renderer draw the start view before the dive reads its distance. */
 const SETTLE_FRAMES = 6;
 
-/** A card's whole action: the jump to its start view, then the dive to its depth (a place: the jump alone). */
+/** Where a card jumps: where its dive arrives when it has one recorded, else its own view. */
+function starterPlace(starter: Starter): DzLocationState {
+    const view = starter.place ?? starter.view;
+    const depth = String(starter.place ? starter.depth : starter.startDepth);
+    return starter.look ? { view, look: starter.look, depth } : starter.formula ? { view, formula: starter.formula, depth } : { view, depth };
+}
+
+/** The first lesson's dive: the jump to a starter's START view, then the dive to its depth. */
 export async function runStarter(starter: Starter): Promise<void> {
-    const target = starter.look ? { view: starter.view, look: starter.look, depth: String(starter.startDepth) }
-        : starter.formula ? { view: starter.view, formula: starter.formula, depth: String(starter.startDepth) }
-        : starter.view;
-    if (!jumpTo(target)) return;
+    if (!jumpTo(starterPlace({ ...starter, place: undefined }))) return;
     if (!(starter.depth < starter.startDepth)) return;   // a place, not a dive
     const host = getHost();
     if (!host) return;
@@ -54,103 +69,35 @@ export async function runStarter(starter: Starter): Promise<void> {
     await diveTo(starter.depth);
 }
 
-export const StarterDives: React.FC = () => {
+interface Card { key: string; data: Record<string, string>; title: string; sub?: string; tooltip: string; starred?: boolean; jump: () => void }
+
+const CARD = 'text-left px-2 py-1.5 rounded border border-line/15 bg-line/[0.04] hover:bg-line/10 hover:border-line/30 disabled:opacity-40 text-[10px] leading-tight text-fg-secondary';
+
+const Cards: React.FC<{ cards: Card[]; data: Record<string, string> }> = ({ cards, data }) => {
     const diving = useDive((s) => s.dive !== null);
     return (
-        <div data-dz-starters className="grid grid-cols-2 gap-1 px-2 pb-2">
-            {STARTERS.map((starter) => (
-                <button
-                    key={starter.name}
-                    type="button"
-                    data-dz-starter={starter.depth.toExponential(0)}
-                    disabled={diving}
-                    title={starter.blurb}
-                    onClick={() => { void runStarter(starter); }}
-                    className="text-left px-2 py-1.5 rounded border border-line/15 bg-line/[0.04] hover:bg-line/10 hover:border-line/30 disabled:opacity-40 text-[10px] leading-tight text-fg-secondary"
-                >
-                    {starter.name}
+        <div {...data} className="grid grid-cols-2 gap-1 px-2 pb-2">
+            {cards.map((c) => (
+                <button key={c.key} type="button" {...c.data} disabled={diving} title={c.tooltip} onClick={c.jump} className={CARD}>
+                    {c.starred && <span className="text-accent-400 mr-1" aria-label="kept">★</span>}
+                    {c.title}
+                    {c.sub && <span className="block text-[9px] text-fg-faint">{c.sub}</span>}
                 </button>
             ))}
         </div>
     );
 };
 
-/**
- * The Mandelbox's starter places (deep-zoom/data/boxStarters.ts): a card is a jump to a place of
- * that formula, which switches the formula in the same undo step. Registered as `dz-box-starters`;
- * panels.ts puts it on the Locations tab under its own heading. Its cards carry `data-dz-box-starter`,
- * not `data-dz-starter`: the six cards above are counted by the stage smoke.
- */
-export const BoxStarters: React.FC = () => {
-    const diving = useDive((s) => s.dive !== null);
-    return (
-        <div data-dz-box-starters className="grid grid-cols-2 gap-1 px-2 pb-2">
-            {BOX_STARTERS.map((starter) => (
-                <button
-                    key={starter.name}
-                    type="button"
-                    data-dz-box-starter={starter.name}
-                    disabled={diving}
-                    title={starter.blurb}
-                    onClick={() => { void runStarter(starter); }}
-                    className="text-left px-2 py-1.5 rounded border border-line/15 bg-line/[0.04] hover:bg-line/10 hover:border-line/30 disabled:opacity-40 text-[10px] leading-tight text-fg-secondary"
-                >
-                    {starter.name}
-                </button>
-            ))}
-        </div>
-    );
-};
+const starterCard = (attr: string, value: (s: Starter) => string) => (s: Starter): Card => ({
+    key: s.name, data: { [attr]: value(s) }, title: s.name, sub: s.sub, tooltip: s.blurb, jump: () => { jumpTo(starterPlace(s)); },
+});
 
-/**
- * KaliBox's starter places (deep-zoom/data/kaliStarters.ts), as the Mandelbox's above: a card is a jump to
- * a place of that formula, which switches the formula - and for GMT's preset, Julia mode and its constant -
- * in the same undo step. Registered as `dz-kali-starters`; panels.ts puts it on the Locations tab under its
- * own heading. Its cards carry `data-dz-kali-starter`.
- */
-export const KaliStarters: React.FC = () => {
-    const diving = useDive((s) => s.dive !== null);
-    return (
-        <div data-dz-kali-starters className="grid grid-cols-2 gap-1 px-2 pb-2">
-            {KALI_STARTERS.map((starter) => (
-                <button
-                    key={starter.name}
-                    type="button"
-                    data-dz-kali-starter={starter.name}
-                    disabled={diving}
-                    title={starter.blurb}
-                    onClick={() => { void runStarter(starter); }}
-                    className="text-left px-2 py-1.5 rounded border border-line/15 bg-line/[0.04] hover:bg-line/10 hover:border-line/30 disabled:opacity-40 text-[10px] leading-tight text-fg-secondary"
-                >
-                    {starter.name}
-                </button>
-            ))}
-        </div>
-    );
-};
-
-/**
- * The kept places (deep-zoom/data/places.ts): the owner's own, which are also the quality tooling's
- * hard cases. A card is a jump - the camera and the formula, as for any place - never a dive.
- * Registered as `dz-places`; panels.ts puts it on the Locations tab.
- */
-export const KeptPlaces: React.FC = () => {
-    const diving = useDive((s) => s.dive !== null);
-    return (
-        <div data-dz-places className="grid grid-cols-2 gap-1 px-2 pb-2">
-            {PLACES.map((place) => (
-                <button
-                    key={place.name}
-                    type="button"
-                    data-dz-place={place.name}
-                    disabled={diving}
-                    title={place.note}
-                    onClick={() => { jumpTo(place.state); }}
-                    className="text-left px-2 py-1.5 rounded border border-line/15 bg-line/[0.04] hover:bg-line/10 hover:border-line/30 disabled:opacity-40 text-[10px] leading-tight text-fg-secondary"
-                >
-                    {place.name}
-                </button>
-            ))}
-        </div>
-    );
-};
+export const StarterDives: React.FC = () => <Cards data={{ 'data-dz-starters': '' }} cards={STARTERS.map(starterCard('data-dz-starter', (s) => s.depth.toExponential(0)))} />;
+export const BoxStarters: React.FC = () => <Cards data={{ 'data-dz-box-starters': '' }} cards={BOX_STARTERS.map(starterCard('data-dz-box-starter', (s) => s.name))} />;
+export const KaliStarters: React.FC = () => <Cards data={{ 'data-dz-kali-starters': '' }} cards={KALI_STARTERS.map(starterCard('data-dz-kali-starter', (s) => s.name))} />;
+export const KeptPlaces: React.FC = () => (
+    <Cards
+        data={{ 'data-dz-places': '' }}
+        cards={PLACES.map((p) => ({ key: p.name, data: { 'data-dz-place': p.name }, title: p.name, tooltip: p.note, starred: true, jump: () => { jumpTo(p.state); } }))}
+    />
+);

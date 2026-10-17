@@ -4,9 +4,11 @@
  * A thin shell over `components/StateLibraryPanel.tsx`, as fluid-toy's saved views are: the
  * engine panel does the rows, the rename, the thumbnails and the menus. Two of its options carry
  * what a deep zoomer needs to see: `sortBy` puts the list in depth order (shallow to deep, places
- * with no depth last) and `renderMeta` writes the depth under each name, so a renamed place still
- * says how deep it is. While `sortBy` is set the engine panel turns drag-reorder off; the stored
- * order, and so each row's slot number, is untouched.
+ * with no depth last) and `renderMeta` writes the depth under the name, so a renamed place still
+ * says how deep it is - ONCE: a place whose name is its depth (the default name) has no second
+ * line (STREAMLINE.md, stage 5: "a card's title is its depth or its name, once"). While `sortBy`
+ * is set the engine panel turns drag-reorder off; the stored order, and so each row's slot number,
+ * is untouched. On screen these are "My places" (F12); the store keeps `savedLocations`.
  *
  * Registered as `dz-locations` in main.tsx (it reads the store); panels.ts places it.
  */
@@ -26,10 +28,11 @@ const byDepth = (a: DzLocation, b: DzLocation): number => {
     return db - da;
 };
 
-/** The depth, and "Julia" for a place saved in Julia mode: such a place is of another object than the
- *  formula's own, and its row says so before it is clicked. */
+/** The depth, unless the name already is it, and "Julia" for a place saved in Julia mode: such a place is
+ *  of another object than the formula's own, and its row says so before it is clicked. */
 const depthLine = (snap: DzLocation): React.ReactNode => {
-    const d = locationDepth(snap);
+    const named = locationDepth(snap);
+    const d = formatDepth(named) === snap.label ? NaN : named;
     const julia = snap.state?.look?.dzFormula?.juliaMode === true;
     if (Number.isNaN(d) && !julia) return null;
     return (
@@ -53,7 +56,7 @@ export const LocationsPanel: React.FC = () => {
     const onUpdate = useCallback((id: string) => updateLocation?.(id), [updateLocation]);
 
     if (!selectLocation) {
-        return <div className="p-3 text-[10px] text-fg-faint italic">The location library is not installed.</div>;
+        return <div className="p-3 text-[10px] text-fg-faint italic">The place library is not installed.</div>;
     }
     return (
         <StateLibraryPanel<DzLocationState>
@@ -68,17 +71,17 @@ export const LocationsPanel: React.FC = () => {
             onReorder={reorderLocations}
             sortBy={byDepth}
             renderMeta={depthLine}
-            emptyState="No saved locations yet. Press B to save this view."
+            emptyState="No saved places yet. Press B to save this place."
             toolbarBefore={
                 <div className="px-2 pb-2">
                     <button
                         type="button"
                         data-dz-save-location
                         onClick={() => { void saveLocationHere(); }}
-                        title="Save this view to My locations (B)"
+                        title="Save this place to My places (B)"
                         className="w-full bg-accent-900/40 hover:bg-accent-800 text-accent-300 border border-accent-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1"
                     >
-                        <PlusIcon /> Save this view
+                        <PlusIcon /> Save this place
                     </button>
                 </div>
             }

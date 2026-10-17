@@ -6,10 +6,11 @@
  *   The engine's tutorial card (engine/plugins/tutorial/Overlay.tsx) draws a step's `text` and
  *   `subtext` and waits. The first-dive lesson opens with a card that also DOES something: one
  *   button that runs the starter dive "Surface" (the jump to its start view, then the dive to its
- *   depth) - the same `runStarter` the card on the Locations tab runs, so the lesson cannot drift
- *   from what a starter card does. The step itself still advances on the deed, not on the click:
- *   its trigger waits for `dz.dive.ended` (./hostEvents.ts), so a dive started from the Locations
- *   tab or the Dive field advances it too.
+ *   depth: `runStarter`, from the starter's own data). The card of that name on the Places tab
+ *   jumps to where this dive arrives since 2026-10-17 (F6: every card jumps); the lesson's dive
+ *   stays, it is how diving is taught. The step itself still advances on the deed, not on the
+ *   click: its trigger waits for `dz.dive.ended` (./hostEvents.ts), so a dive started from the
+ *   Dive field advances it too.
  *
  * THE SEAM
  *   `registerDeepZoomStepKinds()` once, from ./firstDive.ts: it registers the kind with the

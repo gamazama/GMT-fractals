@@ -111,8 +111,8 @@ export const firstDiveLesson: TutorialLesson = {
         },
         {
             id: 'save',
-            text: 'Found a view you like? Press B to save it.',
-            subtext: 'It is kept under My locations on the Locations tab, with a picture.',
+            text: 'Found a place you like? Press B to save it.',
+            subtext: 'It is kept under My places on the Places tab, with a picture.',
             showKeys: ['B'],
             trigger: action(DZ_ACTION.locationSaved),
         },

@@ -207,6 +207,7 @@ export function defaultParams(): Record<DzParamId, DzParamValue> {
  */
 export const DZ_DEFAULTS_NOT_THE_MODULES: Readonly<Record<DzParamId, string>> = {
     'dzQuality.hitLanding': 'on, the owner picked it (2026-10-17, STREAMLINE.md F16); the module starts with it off',
+    'dzQuality.frameSize': '640, the owner picked it (2026-10-17, STREAMLINE.md F1); the module starts at 320',
 };
 
 /** What the module holds now, as the store would hold it, for every row that can be read back. */

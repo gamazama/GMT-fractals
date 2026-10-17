@@ -41,7 +41,8 @@ import { FORMULA_KALI } from '../features/formula';
 
 export const KALI_STARTERS: Starter[] = [
     {
-        name: "Tip · scale 1.8",
+        name: "Tip",
+        sub: "scale 1.8",
         blurb: "KaliBox at Scale 1.8, from outside: the tip of a solid that has no end. Where a switch to KaliBox lands.",
         depth: 4.3,
         startDepth: 4.3,
@@ -73,7 +74,8 @@ export const KALI_STARTERS: Starter[] = [
         view: {"cam":["-74747350392315720865738580605046445502908764133038979080088539304219289583616","12188174895392308750288540400627247724961143899150722489557601653869911212032","-80085642220346928931837117080060035986362046417089747631529768687801825492992"],"yaw":-2.308800110686097,"pitch":-0.43674493555299115,"iters":136,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},
     },
     {
-        name: "GMT's preset · Detail 1",
+        name: "GMT's preset",
+        sub: "Detail 1",
         blurb: "GMT's own KaliBox, a Julia set, from outside: a tower. It has no solid inside - what is drawn is a dust one pixel fat - so it holds these shapes at Detail 1 only. Raise Detail and the same view thins into finer and finer structure.",
         depth: 9.0,
         startDepth: 9.0,

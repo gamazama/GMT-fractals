@@ -1,45 +1,31 @@
 /**
- * deep-zoom/components/Readouts.tsx - two one-line readouts of what the renderer is doing now.
+ * deep-zoom/components/Readouts.tsx - two live readings, each on the row it belongs to.
  *
- *   `dz-iteration-readout`  the live iteration count beside the Iterations slider. With auto
- *                           iterations on, the slider is the floor and the renderer raises the
- *                           count with depth; this is the number actually in use.
- *   `dz-frame-readout`      the size the renderer is drawing at, against the long edge asked for
- *                           (the deep path caps the size it draws).
+ *   `dz-iteration-readout`  "in use 70" after the Iterations row's label: the count the renderer
+ *                           draws with now. With auto iterations on, the slider is the floor and
+ *                           the renderer raises the count with depth.
+ *   `dz-frame-readout`      "drawn 624 x 640" after the Frame size row's label: the size the
+ *                           renderer draws at (the deep path caps the size asked).
  *
- * Both read the telemetry store (8 samples a second), one primitive per selector, and show
- * nothing before the first sample. Registered in registerFeatures.ts; panels.ts places them.
+ * Each is a label suffix (`labelSuffixes` on the feature item in panels.ts), not a row of its own
+ * (STREAMLINE.md, stage 5). Both read the telemetry store (8 samples a second), one primitive per
+ * selector, and show nothing before the first sample. Registered in registerFeatures.ts.
  */
 import React from 'react';
-import { useEngineStore } from '../../store/engineStore';
 import { useDzTelemetry } from '../host/telemetry';
 
-const ROW = 'flex items-center justify-between px-3 py-1 text-[10px] text-fg-tertiary';
-const VALUE = 'font-mono tabular-nums text-fg-secondary';
+const READING = 'font-normal tabular-nums text-fg-faint';
 
 export const IterationReadout: React.FC = () => {
     const live = useDzTelemetry((t) => t.live);
     const iters = useDzTelemetry((t) => t.iters);
-    const auto = useEngineStore((s) => s.dzFormula?.autoIterations);
     if (!live) return null;
-    return (
-        <div data-dz-iteration-readout className={ROW}>
-            <span>In use now{auto ? ' (auto)' : ''}</span>
-            <span className={VALUE}>{iters}</span>
-        </div>
-    );
+    return <span data-dz-iteration-readout className={READING} title="The count the picture is drawn with now">· in use {iters}</span>;
 };
 
 export const FrameReadout: React.FC = () => {
     const live = useDzTelemetry((t) => t.live);
-    const w = useDzTelemetry((t) => t.frameW);
-    const h = useDzTelemetry((t) => t.frameH);
-    const asked = useEngineStore((s) => s.dzQuality?.frameSize);
+    const size = useDzTelemetry((t) => `${t.frameW} x ${t.frameH}`);
     if (!live) return null;
-    return (
-        <div data-dz-frame-readout className={ROW}>
-            <span>Drawn</span>
-            <span className={VALUE}>{w} x {h}{asked ? ` of ${asked} asked` : ''}</span>
-        </div>
-    );
+    return <span data-dz-frame-readout className={READING} title="The size the picture is drawn at: the size asked, capped to the view and as the zoom deepens">drawn {size}</span>;
 };

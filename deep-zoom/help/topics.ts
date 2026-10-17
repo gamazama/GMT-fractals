@@ -65,7 +65,7 @@ The app starts in Fly mode.
 The speed follows what is in front of you: slow near a surface, fast in open space. So one speed setting works at every depth.
 
 ## Orbit mode
-\`Tab\` switches between Fly and Orbit.
+With the picture focused (click it), \`Tab\` switches between Fly and Orbit. So does a click on the small fly / orbit pill beside the depth.
 - **Drag** turns the camera about the point under the pointer.
 - **The wheel** flies to the point under the pointer, or back from it. A middle drag does the same by hand.
 - **Right drag** drags the point under the pointer: the camera moves sideways.
@@ -73,8 +73,8 @@ The speed follows what is in front of you: slow near a surface, fast in open spa
 
 ## Getting back
 - \`Ctrl+Z\` undoes a flight: the camera goes back to where it took off.
-- \`Backspace\` goes back to the view before the last jump.
-- \`Home\` is the view the app started with.
+- \`Backspace\` goes back to the place before the last jump.
+- \`Home\` is the place the app started with.
 - **Start view**, beside Dive on the picture, shows the whole of the formula from outside. Its settings stay.
 
 > A drag that looks the wrong way up: Settings (the gear) has Invert look Y.
@@ -88,7 +88,7 @@ The speed follows what is in front of you: slow near a surface, fast in open spa
         content: `
 The number at the top left of the picture is the depth: how far the camera is from what is in the middle of the picture. The Mandelbulb is about 2 across, so a depth of 1e-6 is half a millionth of it.
 
-Each step of 1 in the exponent is ten times closer: one decade. Under the number the readout says how many decades are left, and what you have passed if the fractal were as wide as the observable universe: the Earth at 1e-20, a grain of sand at 1e-30, an atom at 1e-37.
+Each step of 1 in the exponent is ten times closer: one decade. Under the number the readout says how many decades are left to the floor.
 
 ## The scale
 The column at the right edge of the picture is the whole range, 1e0 at the top and 1e-77 at the bottom, with a marker where you are. Click it to dive to that depth.
@@ -114,21 +114,22 @@ The column at the right edge of the picture is the whole range, 1e0 at the top a
 A place is where the camera is and which formula it is in. Light, colour and quality are not part of a place: jumping to one leaves them as they are.
 
 ## Ready-made
-The **Locations** tab opens with four sets of cards.
-- **Starter dives** jump to a start view and dive from there to the depth on the card.
-- **Mandelbox**, **KaliBox** and **Kept places** are places to jump to.
+The **Places** tab opens with four sets of cards. Every card jumps to its place in a moment; to dive, use the Dive field.
+- **Mandelbulb**: the bulb from outside down to 3.4e-76, at the depth on each card.
+- **Mandelbox** and **KaliBox** switch to their formula as they jump.
+- **Kept places**, starred, are places kept for what they show.
 
 ## Your own
-- \`B\`, or **Save this view**, adds the view to **My locations**, with a picture and its depth as the name. Double-click the name to change it.
+- \`B\`, or **Save this place**, adds the place to **My places**, with a picture and its depth as the name. Double-click the name to change it.
 - Click a row to go there. The list is in order of depth.
-- The first nine you saved are numbered: \`1\` to \`9\` go to them, and \`Ctrl+1\` to \`Ctrl+9\` replace one with the view on screen. Not while you are flying.
+- The first nine you saved are numbered: \`1\` to \`9\` go to them, and \`Ctrl+1\` to \`Ctrl+9\` replace one with the place on screen. Not while you are flying.
 - Every jump is one undo step, and \`Backspace\` takes you back.
 
 ## Sharing
 At the foot of the tab:
-- **Copy location** and **Paste location** carry one place as text. Paste takes a link from **Copy link** too: its camera and formula, not its light and colour.
-- **Copy link** makes a link that opens this view with its light and colour.
-- **Export all** saves My locations as one file, and **Import** adds the places in such a file. A file dropped on the app is added the same way.
+- **Paste link or place** jumps to the place in a link from **Copy link**: its camera and formula, not its light and colour. It takes a place copied as text too.
+- **Copy link** makes a link that opens this place with its light and colour.
+- **File…** has three more: **Export** saves My places as one file, **Import** adds the places in such a file, and **Copy as text** copies the place on screen as text. A file dropped on the app is added the same way.
 `,
     }),
     topic({
@@ -175,7 +176,7 @@ While a route plays in Fly mode, a drag on the picture or \`Q\` \`E\` turns the 
         parentId: DZ_TOPIC.flying,
         title: 'Rendering',
         content: `
-**Render**, on the Route tab and on the timeline, makes the route into pictures: one for every frame from the first keyframe to the last. With no route it renders the timeline as it is.
+**Render**, on the Route tab and on the timeline (and Render route in the File menu), makes the route into pictures: one for every frame from the first keyframe to the last. With no route it renders the timeline as it is.
 
 ## Frames or video
 - **PNG sequence (folder)** writes one PNG a frame into a folder you pick. A render you stop loses nothing: the frames written stay, and a later run can go on from them. At the end the dialog gives the ffmpeg line that makes a video of them.
@@ -192,7 +193,7 @@ The dialog counts them and asks.
 - **Continue** renders only the frames that are missing. It is offered when the frames there have the same long edge.
 - **Cancel** renders nothing.
 
-The route holds the camera and nothing else, so one route can be rendered with several looks. For one still picture: **Save Scene (PNG)** in the File menu, or \`Alt+S\`.
+The route holds the camera and nothing else, so one route can be rendered with several looks. For one still picture: **Save picture** in the File menu, or \`Alt+S\`. The scene is saved inside the PNG.
 `,
     }),
     topic({
@@ -212,11 +213,11 @@ The **Formula** tab chooses what is drawn. Switching the formula shows the whole
 - **Scale** is how much each fold scales space. Negative values give another family of shapes. Between -1.02 and 1.02 there is nothing to draw, and the slider passes over that band.
 - **Min Radius**, **Folding Limit**, **Fixed Radius** and **Pre-Rotation** shape the folds.
 - The first switch to the Mandelbox takes a few seconds, while its renderer is built.
-- The **Kleinian** card on the Locations tab is the Mandelbox with no inner radius.
+- The **Kleinian** card on the Places tab is the Mandelbox with no inner radius.
 
 ## KaliBox
 - GMT's Kali Box, with its own **Scale**, **MinRad2**, **Translation** and **Rotation**. It has no whole to show: switching to it lands near its tip. The first switch takes a few seconds, while its renderer is built.
-- The **GMT's preset** card on the Locations tab is its Julia set as GMT ships it. It holds its shapes at Detail 1 only.
+- The **GMT's preset** card on the Places tab is its Julia set as GMT ships it. It holds its shapes at Detail 1 only.
 
 ## Julia mode
 - **Julia mode** on: the picture is the Julia set of one point. Switching it on brings back the last point you had and shows the whole of its set from outside. The first time, it takes the point at the centre of the view.
@@ -225,7 +226,7 @@ The **Formula** tab chooses what is drawn. Switching the formula shows the whole
 - Undo, or \`Backspace\`, brings back the place you were at.
 
 ## Iterations
-- **Iterations** is the lowest count. \`[\` \`]\` change it by 1.
+- **Iterations** is the lowest count; its row also says the count in use. \`[\` \`]\` change it by 1.
 - With **Auto iterations** on, the count rises by itself as you go deeper, and never falls. \`I\` switches it.
 `,
     }),
@@ -238,10 +239,9 @@ The **Formula** tab chooses what is drawn. Switching the formula shows the whole
 The three tabs on the right change how the picture looks, never where you are. \`H\` shows what each row does, under the row.
 
 ## Light
-- **Shading**: Classic is one light fixed to the camera, with no shadows. New has lights that follow the surface in view, with shadows.
 - **Light type**: Direct, Lamp (a light at the camera that fades with distance) or Both. \`L\` steps through them.
-- The other rows place the key light and set the shadows, the occlusion, the sky and the haze.
-- **Occlusion radius** is how far round each point the occlusion looks. **Occlusion samples**: more of them take the grain out of a picture that is moving.
+- The other rows place the key light and set the sky, the shadows, the occlusion, the surface and the haze.
+- The fold at the foot of the tab holds the rest. **Occlusion radius** is how far round each point the occlusion looks. **Occlusion samples**: more of them take the grain out of a picture that is moving. **Shading**: Classic is one light fixed to the camera, with no shadows; New, the default, has lights that follow the surface in view, with shadows.
 
 ## Colour
 - **Plain** is one colour over the whole surface. **Gradient** takes a colour from the gradient for each point.
@@ -251,9 +251,8 @@ The three tabs on the right change how the picture looks, never where you are. \
 
 ## Quality
 - When the camera stops, the picture sharpens: **Accumulate** averages up to 64 samples into it.
-- **Frame size** is the long edge of the picture in pixels. **Detail** is how close rays get to the surface; \`F\` \`G\` lower and raise it.
-- **Reach** is how far a ray travels before it gives up.
-- **Hit refine** removes cuts and slices that show on a surface before the picture has sharpened.
+- **Frame size** is the long edge of the picture in pixels; its row says the size drawn. **Detail** is how close rays get to the surface; \`F\` \`G\` lower and raise it.
+- **Accuracy**, folded, holds the finer rows. **Reach** is how far a ray travels before it gives up. **Hit refine** removes cuts and slices that show on a surface before the picture has sharpened.
 `,
     }),
     // Keyboard Shortcuts: read from the registry whenever the browser draws or searches it (./shortcutsPage.ts).

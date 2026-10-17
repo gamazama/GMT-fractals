@@ -55,7 +55,8 @@ import { FORMULA_BOX } from '../features/formula';
 
 export const BOX_STARTERS: Starter[] = [
     {
-        name: "Whole box · scale -1.5",
+        name: "Whole box",
+        sub: "scale -1.5",
         blurb: "The Mandelbox at scale -1.5, from outside.",
         depth: 6.0,
         startDepth: 6.0,
@@ -87,7 +88,8 @@ export const BOX_STARTERS: Starter[] = [
         view: {"cam":["667951163547858345227662796364357847661243279945297544068252618814681339920384","-517624135418796263310132574026070401466220011117613386313111658529175032037376","-616403708235521093231712781108458524603977757626083392057256071077627630190592"],"yaw":2.652738625702473,"pitch":0.9092279035626659,"iters":175,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},
     },
     {
-        name: "Kleinian · scale 1.8",
+        name: "Kleinian",
+        sub: "scale 1.8",
         blurb: "GMT's Kleinian: the Mandelbox with no inner radius (scale 1.8, fixed radius 1.095), from outside. A perforated cube.",
         depth: 9.6,
         startDepth: 9.6,

@@ -232,9 +232,9 @@ const EXPORTED = locationsToText(ROWS);
     const within = newLocations([], [base, state({ cam: CAM_B }, BULB), base]);
     check(within.fresh.join() === '0,1,2' && within.skipped === 0 && newLocations([base], [base, state({ cam: CAM_B }, BULB), base]).fresh.join() === '1',
         'import: a place that comes twice in one file is added twice (an exported list comes back whole); once it is in the list, neither copy is added');
-    check(importSummary({ added: 5, skipped: 0, refused: 0 }) === '5 locations added' && importSummary({ added: 1, skipped: 0, refused: 0 }) === '1 location added'
-        && importSummary({ added: 0, skipped: 5, refused: 0 }) === '0 locations added, 5 skipped (already in My locations)'
-        && importSummary({ added: 3, skipped: 1, refused: 1 }) === '3 locations added, 1 skipped (already in My locations), 1 could not be read',
+    check(importSummary({ added: 5, skipped: 0, refused: 0 }) === '5 places added' && importSummary({ added: 1, skipped: 0, refused: 0 }) === '1 place added'
+        && importSummary({ added: 0, skipped: 5, refused: 0 }) === '0 places added, 5 skipped (already in My places)'
+        && importSummary({ added: 3, skipped: 1, refused: 1 }) === '3 places added, 1 skipped (already in My places), 1 could not be read',
         'import: the toast says how many were added, how many were skipped and how many could not be read');
 }
 

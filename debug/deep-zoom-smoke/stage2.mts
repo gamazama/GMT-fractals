@@ -320,6 +320,9 @@ export const stage: DzStage = {
                 await ctx.boot({ clearStorage: true });
                 await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
                 await ctx.sleep(300);
+                // Since 2026-10-17 Hit refine is in the tab's closed "Accuracy" fold (STREAMLINE.md stage 5): open it.
+                await ctx.page.getByText('Accuracy', { exact: true }).click();
+                await ctx.sleep(200);
                 const has = (param: string) => ctx.ev<boolean>(`!!document.querySelector('[data-help-id^="dzQuality.${param} "]')`);
                 ctx.check((await ctx.store<boolean>('advancedMode')) === false, 'advanced mode starts off');
                 ctx.check(await has('hitRefine'), 'Hit refine is shown');
@@ -393,7 +396,9 @@ export const stage: DzStage = {
                 await ctx.boot({ clearStorage: true });
                 await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
                 await ctx.sleep(300);
-                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('Normal detail')"), 'the row is shown without advanced mode');
+                await ctx.page.getByText('Accuracy', { exact: true }).click();     // its fold, closed by default since 2026-10-17
+                await ctx.sleep(200);
+                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('Normal detail')"), 'the row is shown without advanced mode, in the Accuracy fold');
                 // The bulb has one program, the ray march's: once it is there nothing can change the picture under the step.
                 ctx.check((await ctx.untilHost('host.building() === null && host.telemetry().ready', 150_000, 100)) >= 0, 'the ray march\'s program is there before anything is measured');
                 if (!(await enterDeepView(ctx))) return;
@@ -433,15 +438,16 @@ export const stage: DzStage = {
                     await held.waitForFunction('!!(window.__dzHeld && window.__dzHeld.host) && window.__dzHeld.host.frameCount() > 5', undefined, { timeout: 60_000, polling: 50 });
                     // `line` is the loading notice over the picture (deep-zoom/components/BootCard.tsx), whatever its size:
                     // `size` says which, `noticeFor` which program it speaks of, `scrim` whether the picture is dimmed under it.
-                    // `shown` is the depth the app shows (the top bar's), which the size is decided by.
+                    // `shown` is the depth the app shows (the readout's on the picture, the top bar's until 2026-10-17), which the size
+                    // is decided by. `badge` was the top bar's path badge until then; the path is read from the telemetry (`mode`).
                     const STATE = `(() => { const h = window.__dzHeld.host, t = h.telemetry(), q = (s) => document.querySelector(s), n = q('[data-dz-boot="compiling"]');
                         return { building: h.building(), ready: window.__dzHeld.ready, boot: h.bootParams() !== null, mode: t.mode, telReady: t.ready, depth: t.depth, error: t.error,
                             notice: q('[data-dz-status-ray]') ? q('[data-dz-status-ray]').getAttribute('data-dz-status-ray') + ' / ' + q('[data-dz-status-ray]').textContent.trim() : '',
-                            badge: q('[data-dz-status-mode]') ? q('[data-dz-status-mode]').textContent.trim() : '', line: !!n, card: !!q('[data-dz-boot="failed"]'),
+                            line: !!n, card: !!q('[data-dz-boot="failed"]'),
                             size: n ? n.getAttribute('data-dz-notice') || '' : '', noticeFor: n ? n.getAttribute('data-dz-notice-for') || '' : '', text: n ? n.innerText.replace(/\\s+/g, ' ').trim() : '',
-                            scrim: !!q('[data-dz-boot="notice"]'), shown: Number((q('[data-dz-status-depth]') || {}).textContent || 0),
+                            scrim: !!q('[data-dz-boot="notice"]'), shown: Number((q('[data-dz-depth]') || {}).textContent || 0),
                             frames: h.frameCount(), events: window.__dzHeld.events.join() }; })()`;
-                    interface Held { building: string | null; ready: string; boot: boolean; mode: string; telReady: boolean; depth: number; error: string; notice: string; badge: string; line: boolean; card: boolean;
+                    interface Held { building: string | null; ready: string; boot: boolean; mode: string; telReady: boolean; depth: number; error: string; notice: string; line: boolean; card: boolean;
                         size: string; noticeFor: string; text: string; scrim: boolean; shown: number; frames: number; events: string }
                     const NOTICE_SHOWN = '!!document.querySelector(\'[data-dz-boot="compiling"]\')';
                     // THE START VIEW FIRST: since 2026-10-11 the bulb's baseline hits at a pixel's footprint, as the Mandelbox's does, and its
@@ -458,8 +464,8 @@ export const stage: DzStage = {
                     const during = await ev<Held>(STATE);
                     ctx.check(during.building === 'rayMarch' && during.ready === 'pending' && !during.boot && !during.telReady,
                         'while the ray march\'s shader builds: host.building() says "rayMarch", ready is pending, bootParams is null (building ' + during.building + ', ready ' + during.ready + ')');
-                    ctx.check(during.mode === 'f32' && during.badge === 'f32',
-                        'and NOTHING DEEP IS DRAWN meanwhile: sent to a deep view, the picture is the plain one (mode ' + during.mode + ', the top bar\'s badge "' + during.badge + '")');
+                    ctx.check(during.mode === 'f32',
+                        'and NOTHING DEEP IS DRAWN meanwhile: sent to a deep view, the picture is the plain one (mode ' + during.mode + ')');
                     ctx.check(during.notice === 'building / ray march: building' && during.line && during.size === 'large' && during.scrim && during.shown < 1e-10 && !during.card,
                         'the top bar says "ray march: building" and the picture carries the LARGE notice at the deep view, dimmed under it (notice "' + during.notice + '", size "' + during.size + '", depth shown ' + during.shown + ')');
                     ctx.check(/deep renderer/.test(during.text) && /the first time\./.test(during.text) && !/browser/i.test(during.text) && /ten seconds or more/.test(during.text) && /\d+ s$/.test(during.text) && !/f32|perturbation|shader/i.test(during.text),
@@ -472,7 +478,7 @@ export const stage: DzStage = {
                     const after = await ev<Held>(STATE);
                     ctx.check(waited && after.ready === 'resolved' && after.boot && after.telReady && after.error === '',
                         'then it is there: building() is null, ready resolves, bootParams is set (ready ' + after.ready + ')');
-                    ctx.check(after.mode === 'deep' && after.depth < 1e-10 && after.badge === 'perturbation',
+                    ctx.check(after.mode === 'deep' && after.depth < 1e-10,
                         'and the deep picture comes by itself, at the view that was waiting (mode ' + after.mode + ', depth ' + after.depth.toExponential(2) + ')');
                     ctx.check(after.notice === '' && !after.line && !after.scrim, 'the top bar\'s notice and the loading notice are gone (notice "' + after.notice + '", line ' + after.line + ')');
                     ctx.check(after.events.endsWith('rayMarch:ready,deep:ready'),
@@ -528,22 +534,24 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'the depth instruments are on the picture, and Overlays None leaves the top-bar depth',
-            owner: 'S2-5',
-            falsified: '2026-10-08: the `hud.register` of `deep-zoom.depth` removed from deep-zoom/main.tsx -> red, 3 lines (no depth text, no decades line, no readout under Depth only).',
+            // Until 2026-10-17: "... and Overlays None leaves the top-bar depth", with the magnification and the chip's
+            // iterations and size. The chip holds none of them now and the box is three lines (STREAMLINE.md stage 4).
+            name: 'the depth instruments are on the picture: the depth, the decades to the floor and the Dive row; the top-bar chip holds no reading',
+            owner: 'S2-5; the first screen: streamline stage 4',
+            falsified: '2026-10-08: the `hud.register` of `deep-zoom.depth` removed from deep-zoom/main.tsx -> red, 3 lines (no depth text, no decades line, no readout under Depth only). The lines rewritten on 2026-10-17 not seen red.',
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 const readout = await ctx.ev<string>("(document.querySelector('[data-dz-depth-readout]') || {}).innerText || ''");
                 const depthText = await ctx.ev<string>("(document.querySelector('[data-dz-depth]') || {}).textContent || ''");
                 ctx.check(DEPTH_TEXT.test(depthText.trim()), 'the readout shows the depth as ' + depthText.trim());
-                ctx.check(/decades to the 1e-77 floor/.test(readout) && /magnification 10\^\d/.test(readout), 'with the decades to the floor and the magnification');
+                ctx.check(/\d+\.\d decades to the floor/.test(readout) && !/magnification|pace /.test(readout) && !!(await ctx.ev<boolean>("!!document.querySelector('[data-dz-dive-form]')")),
+                    'with the decades to the floor and the Dive row, and no magnification or pace line ("' + readout.replace(/\s+/g, ' ') + '")');
                 ctx.check(await ctx.ev<boolean>("!!document.querySelector('[data-dz-depth-scale] [data-dz-depth-marker]')"), 'the depth scale is on the picture with its live marker');
                 const chip = await ctx.ev<string>("(document.querySelector('[data-dz-status]') || {}).innerText || ''");
-                ctx.check(/it \d+/.test(chip) && /\d+ x \d+/.test(chip), 'the top-bar chip shows iterations and the drawn size (' + chip.replace(/\s+/g, ' ') + ')');
+                ctx.check(!/\d\.\d\de|it \d|\d+ x \d+|perturbation/.test(chip), 'the top-bar chip shows no depth, iterations, size or path ("' + chip.replace(/\s+/g, ' ') + '")');
                 await ctx.ev('window.__store.getState().setDzInspect({ overlays: 2 })');
                 await ctx.sleep(250);
                 ctx.check(!(await ctx.ev<boolean>("!!document.querySelector('[data-dz-depth-readout]') || !!document.querySelector('[data-dz-depth-scale]')")), 'Overlays None: the readout and the scale are gone');
-                ctx.check(DEPTH_TEXT.test((await ctx.ev<string>("(document.querySelector('[data-dz-status-depth]') || {}).textContent || ''")).trim()), 'and the top-bar chip still shows the depth');
                 await ctx.ev('window.__store.getState().setDzInspect({ overlays: 1 })');
                 await ctx.sleep(250);
                 ctx.check(await ctx.ev<boolean>("!!document.querySelector('[data-dz-depth-readout]') && !document.querySelector('[data-dz-depth-scale]')"), 'Overlays Depth only: the readout without the scale');

@@ -146,18 +146,19 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Dive', 'deep-zoom/components/DepthReadout.tsx', '>Dive</button>'],
     ['Stop', 'deep-zoom/components/DepthReadout.tsx', '>Stop</button>'],
     ['Start view', 'deep-zoom/components/DepthReadout.tsx', 'Start view\n                    </button>'],
-    ['Locations', 'deep-zoom/panels.ts', "id: 'Locations'"],
-    ['Starter dives', 'deep-zoom/panels.ts', "label: 'Starter dives'"],
+    ['Places', 'deep-zoom/panels.ts', "label: 'Places'"],
+    ['Mandelbulb', 'deep-zoom/panels.ts', "label: 'Mandelbulb'"],
     ['Mandelbox', 'deep-zoom/panels.ts', "label: 'Mandelbox'"],
     ['KaliBox', 'deep-zoom/panels.ts', "label: 'KaliBox'"],
     ['Kept places', 'deep-zoom/panels.ts', "label: 'Kept places'"],
-    ['My locations', 'deep-zoom/panels.ts', "label: 'My locations'"],
-    ['Save this view', 'deep-zoom/components/LocationsPanel.tsx', '/> Save this view'],
-    ['Copy location', 'deep-zoom/components/LocationText.tsx', '>Copy location</button>'],
-    ['Paste location', 'deep-zoom/components/LocationText.tsx', '>Paste location</button>'],
+    ['My places', 'deep-zoom/panels.ts', "label: 'My places'"],
+    ['Save this place', 'deep-zoom/components/LocationsPanel.tsx', '/> Save this place'],
+    ['Paste link or place', 'deep-zoom/components/LocationText.tsx', '>Paste link or place</button>'],
     ['Copy link', 'deep-zoom/components/LocationText.tsx', '>Copy link</button>'],
-    ['Export all', 'deep-zoom/components/LocationText.tsx', '>Export all</button>'],
-    ['Import', 'deep-zoom/components/LocationText.tsx', '>Import</button>'],
+    ['File…', 'deep-zoom/components/LocationText.tsx', 'File…\n'],
+    ['Export', 'deep-zoom/components/LocationText.tsx', "label: 'Export'"],
+    ['Import', 'deep-zoom/components/LocationText.tsx', "label: 'Import'"],
+    ['Copy as text', 'deep-zoom/components/LocationText.tsx', "label: 'Copy as text'"],
     ['Route', 'deep-zoom/panels.ts', "id: 'Route'"],
     ['Add keyframe', 'deep-zoom/components/RoutePanel.tsx', '/> Add keyframe'],
     ['Replace keyframe', 'deep-zoom/components/RoutePanel.tsx', '/> Replace keyframe'],
@@ -183,7 +184,7 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Overwrite', 'deep-zoom/routeRender.tsx', "label: 'Overwrite'"],
     ['Continue', 'deep-zoom/routeRender.tsx', "label: 'Continue'"],
     ['Cancel', 'deep-zoom/routeRender.tsx', "label: 'Cancel'"],
-    ['Save Scene (PNG)', 'engine/plugins/SceneIO.tsx', "label: 'Save Scene (PNG)'"],
+    ['Save picture', 'deep-zoom/main.tsx', "savePng: 'Save picture'"],
     ['Formula', 'deep-zoom/panels.ts', "id: 'Formula'"],
     ['Power', 'deep-zoom/features/formula.ts', "label: 'Power'"],
     ['Phase theta', 'deep-zoom/features/formula.ts', "label: 'Phase theta'"],
@@ -217,6 +218,7 @@ const ON_SCREEN: Array<[name: string, file: string, needle?: string]> = [
     ['Frame size', 'deep-zoom/features/quality.ts', "label: 'Frame size'"],
     ['Detail', 'deep-zoom/features/quality.ts', "label: 'Detail'"],
     ['Reach', 'deep-zoom/features/quality.ts', "REACH_OPTIONS, 'Reach'"],
+    ['Accuracy', 'deep-zoom/panels.ts', "label: 'Accuracy'"],
     ['Hit refine', 'deep-zoom/features/quality.ts', "label: 'Hit refine'"],
 ];
 /** Bold that is no name: what a hand does. */
@@ -237,16 +239,16 @@ const rows = groups.flatMap((g) => g.rows);
 const stoodFor = rows.reduce((n, row) => n + row.count, 0);
 check(defs.length >= 46 && stoodFor === defs.length, `page: the rows stand for every registered shortcut (${stoodFor} of ${defs.length})`);
 const runs = rows.filter((row) => row.run);
-check(runs.length === 2 && runs.every((row) => row.count === 9) && runs.some((row) => row.keys.join() === '1,9' && row.text === 'Go to location 1 to 9')
-    && runs.some((row) => row.keys.join() === 'Ctrl+1,Ctrl+9' && row.text === 'Save this view as location 1 to 9'),
+check(runs.length === 2 && runs.every((row) => row.count === 9) && runs.some((row) => row.keys.join() === '1,9' && row.text === 'Go to place 1 to 9')
+    && runs.some((row) => row.keys.join() === 'Ctrl+1,Ctrl+9' && row.text === 'Save here as place 1 to 9'),
 'page: the eighteen slot keys are two rows, "1 to 9"', runs.map((row) => `${row.keys.join('..')} ${row.text} x${row.count}`).join(' | '));
 const page = shortcutsMarkdown();
 const printed = new Set(namedKeys(page));
 const unprinted = defs.map((d) => keyLabel(d.key)).filter((k) => !printed.has(k) && !/^(Ctrl\+)?[2-8]$/.test(k));
 check(unprinted.length === 0, 'page: every registered key is printed, but for the middles of the two runs', unprinted.join(', '));
-check(groups[0]?.title === 'Locations' && groups.findIndex((g) => g.title === 'Edit') > groups.findIndex((g) => g.title === 'Help'), 'page: this app\'s own groups come first, the engine\'s after',
+check(groups[0]?.title === 'Places' && groups.findIndex((g) => g.title === 'Edit') > groups.findIndex((g) => g.title === 'Help'), 'page: this app\'s own groups come first, the engine\'s after',
     groups.map((g) => g.title).join(', '));
-check(page.indexOf('## Flying') >= 0 && page.indexOf('## Flying') < page.indexOf('## Locations') && FLY_KEYS.every((g) => page.includes(`### ${g.title}`)) && FLY_KEY_NAMES.every((k) => printed.has(k)),
+check(page.indexOf('## Flying') >= 0 && page.indexOf('## Flying') < page.indexOf('## Places') && FLY_KEYS.every((g) => page.includes(`### ${g.title}`)) && FLY_KEY_NAMES.every((k) => printed.has(k)),
     'page: the fly keys\' table heads it, every group and every key of it');
 const topic = DZ_HELP_TOPICS[DZ_TOPIC.shortcuts];
 shortcuts.register({ id: 'check.late', key: 'F9', description: 'A late one', category: 'Check', handler: () => undefined });

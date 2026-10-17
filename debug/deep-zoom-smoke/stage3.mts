@@ -4,9 +4,10 @@
  *   ENGINE_URL=http://localhost:3410 npm run smoke:deep-zoom -- --stage 3
  *
  * What the steps lean on (deep-zoom/locations.ts, components/LocationsPanel.tsx, StarterDives.tsx):
- *   - The Locations tab is `button[data-gx-mode-tab="Locations"]`; a starter card is
- *     `[data-dz-starter]`; the save button is `[data-dz-save-location]`; a row's depth line is
- *     `[data-dz-location-depth]`.
+ *   - The Places tab (its panel id is still `Locations`) is `button[data-gx-mode-tab="Locations"]`; a
+ *     Mandelbulb card is `[data-dz-starter]`; the save button is `[data-dz-save-location]`; a row's
+ *     depth line is `[data-dz-location-depth]`, there only when the row's name is not that depth
+ *     (since 2026-10-17: the depth shows once). On screen a location is a "place" (F12).
  *   - The list is `store.savedLocations` (each row `{ id, label, thumbnail, state: { view, look,
  *     depth } }`) and is mirrored to `localStorage['gmt.deepZoom.locations']`.
  *   - Slot digits are positions in the STORED list (the first place saved is 1), whatever order
@@ -18,6 +19,7 @@ import fs from 'node:fs';
 import type { DzCtx, DzStage } from '../smoke-deep-zoom.mts';
 import { DEEP_VIEW, enterDeepView } from './stage1.mts';
 import { PLACES } from '../../deep-zoom/data/places.ts';
+import { STARTERS } from '../../deep-zoom/data/starters.ts';
 
 const DEPTH_TEXT = /^\d\.\d\de-?\d+$/;
 const cam = (ctx: DzCtx) => ctx.host<string[]>('getView().cam');
@@ -45,15 +47,16 @@ export const stage: DzStage = {
     title: 'locations, scene files, links',
     steps: [
         {
-            name: 'the Locations tab shows the six starter dives and an empty list',
+            // "the Locations tab shows the six starter dives ..." until 2026-10-17: the tab is Places, the cards jump.
+            name: 'the Places tab shows the six Mandelbulb cards and an empty list',
             quick: true,
             owner: 'S3-3 / S3-5',
             falsified: '2026-10-08: the `dz-starters` widget removed from the Locations panel in deep-zoom/panels.ts -> red, "six starter cards" false.',
             async run(ctx) {
                 await fresh(ctx);
                 ctx.check((await ctx.ev<number>("document.querySelectorAll('[data-dz-starter]').length")) === 6, 'six starter cards');
-                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('No saved locations yet')"), 'the list says it is empty');
-                ctx.check(await ctx.ev<boolean>("!!document.querySelector('[data-dz-save-location]')"), 'and offers Save this view');
+                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('No saved places yet')"), 'the list says it is empty');
+                ctx.check(await ctx.ev<boolean>("!!document.querySelector('[data-dz-save-location]')"), 'and offers Save this place');
             },
         },
         {
@@ -68,12 +71,13 @@ export const stage: DzStage = {
                 ctx.check(same(row.cam, live), 'the saved camera strings equal the live ones (' + row.cam.map((v) => v.length).join(', ') + ' characters)');
                 ctx.check(row.thumb.startsWith('data:image/jpeg'), 'the thumbnail is a JPEG (' + row.thumb + ')');
                 ctx.check(DEPTH_TEXT.test(row.label), 'the default name is the depth (' + row.label + ')');
+                // The depth shows ONCE (2026-10-17): as the name while the name is the depth, as a second line once renamed.
                 const line = () => ctx.ev<string>("(document.querySelector('[data-dz-location-depth]') || {}).textContent || ''");
-                ctx.check(DEPTH_TEXT.test((await line()).trim()), 'the row shows its depth (' + (await line()).trim() + ')');
+                ctx.check((await line()) === '' && await ctx.ev<boolean>('document.body.innerText.includes(' + JSON.stringify(row.label) + ')'), 'the row shows its depth once, as its name, with no second line');
                 await ctx.ev("window.__store.getState().updateLocation(" + JSON.stringify(row.id) + ", { label: 'My place' })");
                 await ctx.sleep(200);
                 ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('My place')"), 'renamed to "My place"');
-                ctx.check(DEPTH_TEXT.test((await line()).trim()), 'and the depth line is still there');
+                ctx.check(DEPTH_TEXT.test((await line()).trim()), 'and the depth line is there now (' + (await line()).trim() + ')');
                 ctx.check(await ctx.ev<boolean>("(JSON.parse(localStorage.getItem('gmt.deepZoom.locations') || '[]')[0] || {}).label === 'My place'"), 'the list is mirrored to storage');
                 await ctx.boot();
                 await openLocations(ctx);
@@ -95,6 +99,9 @@ export const stage: DzStage = {
                 if (!(await saveWithB(ctx, 2))) return;                       // slot 2: a shallow view
                 const saved = await rows(ctx);
                 ctx.check(Number(saved[0].depth) < Number(saved[1].depth), 'stored order: deep first (' + saved[0].depth + '), then shallow (' + saved[1].depth + ')');
+                // Named, so each row shows its depth line (a row named by its depth shows it once, as the name).
+                await ctx.ev('(() => { const s = window.__store.getState(); s.updateLocation(' + JSON.stringify(saved[0].id) + ", { label: 'deep' }); s.updateLocation(" + JSON.stringify(saved[1].id) + ", { label: 'shallow' }); return true; })()");
+                await ctx.sleep(200);
                 const shown = await ctx.ev<string[]>("[...document.querySelectorAll('[data-dz-location-depth]')].map((e) => e.textContent.trim())");
                 ctx.check(shown.length === 2 && Number(shown[0]) > Number(shown[1]), 'shown order: shallow above deep (' + shown.join(', ') + ')');
                 const before = await cam(ctx);
@@ -108,20 +115,23 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'a starter card jumps to its start view and dives; Home and Backspace jump back',
-            owner: 'S3-3',
-            falsified: '2026-10-08: `snapDist = true` removed from the renderer\'s setView (deep-zoom/renderer/core.js) -> red, "the depth reads the home view at once" false (4.74e-1 after 0.4 s). 2026-10-09 (the dive closes on the rays ahead since then, ADR-0134): the dive made to read the estimate at the camera again (`depth: () => dz.telemetry().depth` in deep-zoom/host/moduleHost.ts) -> red, "the dive ended on its target" false: 7.432e-35 ahead after 17.2 s.',
+            // Until 2026-10-17: "a starter card jumps to its start view and dives; ...", 13 to 16 s. Every card jumps since
+            // (F6, the owner: the Dive field and the first lesson teach diving); a dive's own arrival is stage 2's step
+            // "a dive from the Grain of sand view to 1e-30 ..." and stage N5's "Dive to 1e-60".
+            name: 'a Mandelbulb card jumps to its place, the depth on the card, and does not dive; Home and Backspace jump back',
+            owner: 'S3-3; every card jumps: streamline stage 5 (F6)',
+            falsified: '2026-10-08, as the dive step: `snapDist = true` removed from the renderer\'s setView (deep-zoom/renderer/core.js) -> red, "the depth reads the home view at once" false (4.74e-1 after 0.4 s). 2026-10-09: the dive made to read the estimate at the camera again (moduleHost.ts) -> red, "the dive ended on its target" false. The jump\'s lines (2026-10-17) not seen red.',
             timeoutMs: 90_000,
             async run(ctx) {
                 await fresh(ctx);
                 const home = await cam(ctx);
+                const card = STARTERS.find((s) => s.depth === 1e-30)!;
                 await ctx.page.locator('[data-dz-starter="1e-30"]').click();
-                ctx.check((await ctx.until("!!document.querySelector('[data-dz-diving]')", 5000)) >= 0, 'the card started a dive');
-                ctx.check(!same(await cam(ctx), home), 'from its own start view, not the home view');
-                const waited = await ctx.until("!document.querySelector('[data-dz-diving]')", 60_000, 200);
-                // The nearest ray ahead, which is what a dive closes on (see the dive step of stage 2).
+                await ctx.sleep(600);
+                ctx.check(!(await ctx.ev<boolean>("!!document.querySelector('[data-dz-diving]')")) && same(await cam(ctx), card.place!.cam), 'the card jumped to its place, byte for byte, and no dive is in flight');
+                // What is ahead, as a dive measures its arrival (the estimate at the camera reads decades off here: stage 2's dive step).
                 const ahead = await ctx.host<{ near: number; inside: boolean }>('sense(null)');
-                ctx.check(waited >= 0 && !ahead.inside && ahead.near <= 1.001e-30 && ahead.near >= 0.5e-30, 'the dive ended on its target, 1e-30, and not through the surface (' + ahead.near.toExponential(3) + ' ahead after ' + (waited / 1000).toFixed(1) + ' s)');
+                ctx.check(!ahead.inside && ahead.near > 0.5e-30 && ahead.near < 2e-30, 'at the depth on the card, 1e-30 (the nearest ray ahead ' + ahead.near.toExponential(3) + ')');
                 const deep = await cam(ctx);
                 await ctx.focusPicture();
                 await ctx.page.keyboard.press('Home');
@@ -133,7 +143,7 @@ export const stage: DzStage = {
                 ctx.check(homeDepth > 0.8, 'and the depth reads the home view at once (' + homeDepth.toExponential(2) + ' after 0.4 s)');
                 await ctx.page.keyboard.press('Backspace');
                 await ctx.sleep(400);
-                ctx.check(same(await cam(ctx), deep), 'Backspace: back where the dive ended, exactly');
+                ctx.check(same(await cam(ctx), deep), 'Backspace: back at the card\'s place, exactly');
             },
         },
         {
@@ -238,7 +248,9 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'Copy location and Paste location go through the clipboard; last week\'s text jumps too; other text is refused',
+            // Until 2026-10-17 "Copy location and Paste location ...": Copy location is File... > Copy as text since, and
+            // Paste location reads "Paste link or place" (STREAMLINE.md stage 4; the place in a link is stage 3's "share link" step).
+            name: 'File... > Copy as text and Paste link or place go through the clipboard; last week\'s text jumps too; other text is refused',
             owner: 'S3-3',
             falsified: '2026-10-08: `applyLocationText` in deep-zoom/share.ts made to return before the jump -> red, "Paste location jumped to it" and the last-week line false.',
             async run(ctx) {
@@ -246,16 +258,17 @@ export const stage: DzStage = {
                 await fresh(ctx);
                 if (!(await enterDeepView(ctx))) return;
                 await ctx.sleep(300);
-                await ctx.page.locator('[data-dz-copy-location]').click();
+                await ctx.page.locator('[data-dz-location-file]').click();
+                await ctx.page.locator('[data-dz-location-file-menu]').getByText('Copy as text', { exact: true }).click();
                 await ctx.sleep(300);
                 const text = await ctx.ev<string>('navigator.clipboard.readText()');
-                ctx.check(DEEP_VIEW.cam.every((c) => text.includes('"' + c + '"')), 'Copy location wrote the three camera strings as text');
+                ctx.check(DEEP_VIEW.cam.every((c) => text.includes('"' + c + '"')), 'Copy as text wrote the three camera strings as text');
                 await ctx.withHost('host.moveAlong([0, 1, 0], 1.5); return true;');
                 await ctx.sleep(300);
                 const away = await cam(ctx);
                 await ctx.page.locator('[data-dz-paste-location]').click();
                 await ctx.sleep(400);
-                ctx.check(same(await cam(ctx), DEEP_VIEW.cam), 'Paste location jumped to it, byte for byte');
+                ctx.check(same(await cam(ctx), DEEP_VIEW.cam), 'Paste link or place jumped to it, byte for byte');
                 await ctx.focusPicture();
                 await ctx.page.keyboard.press('Control+z');
                 await ctx.sleep(300);
@@ -271,8 +284,8 @@ export const stage: DzStage = {
                 await ctx.ev("navigator.clipboard.writeText('hello there')");
                 await ctx.page.locator('[data-dz-paste-location]').click();
                 await ctx.sleep(400);
-                ctx.check(same(await cam(ctx), before), 'text that is not a location moves nothing');
-                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('not a location')"), 'and a toast says why');
+                ctx.check(same(await cam(ctx), before), 'text that is not a place moves nothing');
+                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('not a place')"), 'and a toast says why');
             },
         },
         {

@@ -80,7 +80,7 @@ export async function importLocationFiles(files: File[]): Promise<File[]> {
     });
     if (taken.size === 0) return files;
     try {
-        if (merged.locations.length === 0) showToast(`No location in that file could be read: ${reason}`, 'warning', 6000);
+        if (merged.locations.length === 0) showToast(`No place in that file could be read: ${reason}`, 'warning', 6000);
         else importLocations(merged);
         useEngineStore.getState().togglePanel('Locations', true);
     } catch (err) {
@@ -93,7 +93,7 @@ export async function importLocationFiles(files: File[]): Promise<File[]> {
 export function installLocationsFileClaim(): void {
     registerSceneFileClaim({
         id: DZ_LOCATIONS_CLAIM_ID,
-        hint: 'a file of locations goes to My locations',
+        hint: 'a file of places goes to My places',
         take: importLocationFiles,
     });
 }

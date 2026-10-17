@@ -60,7 +60,7 @@
  *     scene's saved step size loads, shows nowhere and changes nothing.
  *   - `actualPixels` IS DECLARED BUT ITS ROW WAITS FOR M1. The id exists now so the slice key and
  *     saved scenes do not change when the handle lands. Until then the manifest keeps the row out
- *     (`excludeParams: ['actualPixels']` on the `dzQuality` item in `panels.ts`) — a row the
+ *     (no `whitelistParams` of the Quality tab in `panels.ts` names it) — a row the
  *     renderer cannot honour is not shown. It is deliberately not `hidden: true` here: that would
  *     need a second edit of this file when M1 lands.
  *   - `normals`: `api.setNormalMode` does NOT restart the still (every other setter does). Follow
@@ -73,7 +73,8 @@
  *   - `frameSize` is a REQUEST. The size drawn is `min(frameSize, cap)` in deep mode and the
  *     view's own size in f32 (grep `const longE =`); the cap is the view, then 1440 / 1080 / 720 px
  *     times `resolutionCap` below a depth of 1e-4 / 1e-12 / 1e-30. The drawn size is in
- *     `api.dz.telemetry().frameW / frameH` and is shown by a readout, never written back.
+ *     `api.dz.telemetry().frameW / frameH` and is shown on the row itself ("drawn 624 x 640",
+ *     the `dz-frame-readout` label suffix in panels.ts), never written back.
  *   - `resolutionCap` above 1 lets a deep frame run past the ~2 s GPU watchdog (grep `TDR guard`
  *     in core.js: a device reset, a frozen desktop). That is why it is `isAdvanced`.
  *   - NO PRECISION CONTROL (removed 2026-10-08, the owner: "can we do away with the f32 version").
@@ -189,7 +190,9 @@ export const DzQualityFeature = {
     params: {
         frameSize: {
             type: 'int',
-            default: 320, min: 240, max: 2560, step: 40,
+            // 640, the owner's pick (2026-10-17, STREAMLINE.md F1: 320 and 640 both settle in 0.50 s at Arches). The
+            // module starts at 320 (`let frameLong = 320` in renderer/core.js) and takes the store's value at ready.
+            default: 640, min: 240, max: 2560, step: 40,
             label: 'Frame size',
             format: (v) => `${Math.round(v)} px`,
             description: 'Long edge of the deep-mode frame, in pixels. The frame is scaled to fill the view. The size drawn can be lower: it is capped to the view, and to 1440, 1080 or 720 px as the zoom deepens.',
@@ -279,8 +282,8 @@ export const DzQualityFeature = {
             label: 'Accumulate',
             description: 'While the view is still, averages up to 64 jittered samples into the picture.',
         },
-        // Declared now, shown from module package M1: see the header. Until then `panels.ts` keeps
-        // this row out with `excludeParams: ['actualPixels']`.
+        // Declared now, shown from module package M1: see the header. Until then no whitelist of
+        // `panels.ts` names it.
         actualPixels: {
             type: 'boolean',
             default: false,

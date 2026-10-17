@@ -43,7 +43,8 @@ export const UndoButton: React.FC = () => {
     const peek = useEngineStore((s) => s.peekUndo('param'));
     const undo = useEngineStore((s) => s.undo);
 
-    const label = peek ? `Undo: ${peek.label ?? peek.scope}` : 'Nothing to undo';
+    // A transaction's label when it has one; its scope id ("param") is not a word for the user.
+    const label = peek ? (peek.label ? `Undo: ${peek.label}` : 'Undo') : 'Nothing to undo';
     return (
         <button
             onClick={() => undo('param')}
@@ -61,7 +62,7 @@ export const RedoButton: React.FC = () => {
     const peek = useEngineStore((s) => s.peekRedo('param'));
     const redo = useEngineStore((s) => s.redo);
 
-    const label = peek ? `Redo: ${peek.label ?? peek.scope}` : 'Nothing to redo';
+    const label = peek ? (peek.label ? `Redo: ${peek.label}` : 'Redo') : 'Nothing to redo';
     return (
         <button
             onClick={() => redo('param')}

@@ -214,19 +214,23 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'the status chip shows a depth that matches /^\\d\\.\\d\\de-?\\d+$/',
-            owner: 'S1-2',
-            falsified: '2026-10-08: `.replace(\'e+\', \'e\')` dropped from `formatDepth` in components/StatusChip.tsx -> \'its depth text is "1.11e+0"\'. With the tick removed: "the chip is in the header" red.',
+            // Until 2026-10-17 this was "the status chip shows a depth that matches ...": the chip held the depth, the
+            // path, the iterations and the size drawn. They went to Diagnostics and the depth to the picture
+            // (STREAMLINE.md stage 4); the chip says only how far the still has gathered.
+            name: 'the depth on the picture matches /^\\d\\.\\d\\de-?\\d+$/, and the top-bar chip says only how far the still has gathered',
+            owner: 'S1-2; the chip: streamline stage 4',
+            falsified: '2026-10-08, as the chip\'s step: `.replace(\'e+\', \'e\')` dropped from `formatDepth` -> \'its depth text is "1.11e+0"\'. With the tick removed: "the chip is in the header" red. As rewritten (2026-10-17) not seen red: the depth line is the same formatter\'s.',
             async run(ctx) {
-                const waited = await ctx.until("document.querySelector('header [data-dz-status-depth]')", 4000, 100);
-                const chip = await ctx.ev<{ depth: string; mode: string } | null>(
-                    "(() => { const d = document.querySelector('header [data-dz-status-depth]'); const m = document.querySelector('header [data-dz-status-mode]');"
-                    + ' return d ? { depth: d.innerText.trim(), mode: m ? m.innerText.trim() : "" } : null; })()',
-                );
-                ctx.check(waited >= 0 && chip !== null, 'the chip is in the header');
-                if (!chip) return;
-                ctx.check(DEPTH_TEXT.test(chip.depth), 'its depth text is "' + chip.depth + '"');
-                ctx.check(chip.mode === 'f32' || chip.mode === 'perturbation', 'its engine badge is "' + chip.mode + '"');
+                const waited = await ctx.until("document.querySelector('[data-dz-depth]')", 4000, 100);
+                const depth = (await ctx.ev<string>("(document.querySelector('[data-dz-depth]') || { textContent: '' }).textContent")).trim();
+                ctx.check(waited >= 0 && DEPTH_TEXT.test(depth), 'the depth on the picture is "' + depth + '"');
+                // A move restarts the still: the chip shows its progress, and nothing once it is gathered.
+                await ctx.withHost('host.moveAlong([0, 1, 0], 1e-3); return true;');
+                const chip = "(document.querySelector('header [data-dz-status]') || { innerText: '' }).innerText.trim()";
+                const gathering = await ctx.until('/^still \\d+ \\/ \\d+$/.test(' + chip + ')', 3000, 10);
+                ctx.check(gathering >= 0, 'while the still gathers the chip reads "still n / 64" and nothing else');
+                const done = await ctx.until("!document.querySelector('header [data-dz-status-still]')", 15_000, 100);
+                ctx.check(done >= 0, 'once it is gathered the chip shows nothing ("' + (await ctx.ev<string>(chip)) + '")');
             },
         },
         {

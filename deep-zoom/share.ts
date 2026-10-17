@@ -1,7 +1,9 @@
 /**
  * deep-zoom/share.ts - a place as text, a scene as a link, and the saved places inside a scene file.
+ * The buttons are the Places tab's foot (components/LocationText.tsx; renamed 2026-10-17: Copy location
+ * is File... > Copy as text, Paste location is "Paste link or place", Export all is File... > Export).
  *
- *   Copy location / Paste location   one place as JSON on the clipboard: the camera (in Julia
+ *   Copy as text / Paste             one place as JSON on the clipboard: the camera (in Julia
  *                                    mode with its Julia constant: three more strings) and the
  *                                    formula, as a saved place holds them (`captureLocation` in
  *                                    locations.ts; `locationParse.ts` reads it back, and last
@@ -10,16 +12,16 @@
  *                                    its `#s=` part: the place in it, its camera and formula,
  *                                    and not its look (`shareStringOf` / `linkLocation` in
  *                                    locationParse.ts; opening the link loads the whole scene).
- *   Export all / a pasted LIST       `exportAllLocations` downloads every saved location as one
+ *   Export / a pasted LIST           `exportAllLocations` downloads every saved location as one
  *                                    JSON file, in the stored order, thumbnails left out
  *                                    (`deep-zoom-locations.json`, the name the old prototype's
  *                                    export had, whose files import too). A pasted text that
  *                                    holds SEVERAL locations is not a jump: `importLocations`
- *                                    ADDS them to My locations, skips the ones already there
+ *                                    ADDS them to My places, skips the ones already there
  *                                    (`locationKey` in locationParse.ts: the same camera strings
  *                                    and formula) and says how many of each in a toast. A FILE
  *                                    of locations is always added, one entry or forty: opened
- *                                    with the tab's "Import" button, through File > Load Scene,
+ *                                    with the tab's File... > Import, through File > Open scene,
  *                                    or dropped on the app (`deep-zoom/claims.ts`).
  *   Copy link                      `<this page>#s=<share string>`: the engine's share encoder
  *                                    over the scene - the look and the view (`dzView` preset
@@ -43,7 +45,7 @@
  *   - An imported place has no picture: thumbnails are not in the file, and drawing one would mean
  *     jumping to every place. Its row shows the engine list's empty square until it is updated.
  *
- * @invariant Paste location takes the link Copy link writes, whole or its `#s=` part: a jump (one
+ * @invariant Paste (the "Paste link or place" button) takes the link Copy link writes, whole or its `#s=` part: a jump (one
  *   undo step) to its camera and Julia constant byte for byte, its angles to the digit, and its
  *   formula - proven by: npm run check:deep-zoom-scene-roundtrip ("link: Paste takes the link Copy
  *   link writes ...", "link: its #s= part alone does the same ..."). Falsified 2026-10-17:
@@ -100,7 +102,7 @@ async function writeClipboard(text: string, done: string): Promise<void> {
 }
 
 export async function copyLocation(): Promise<void> {
-    if (getHost()) await writeClipboard(locationToText(captureLocation()), 'Location copied');
+    if (getHost()) await writeClipboard(locationToText(captureLocation()), 'Place copied as text');
 }
 
 export async function pasteLocation(): Promise<void> {
@@ -115,8 +117,8 @@ export async function pasteLocation(): Promise<void> {
 }
 
 /**
- * What "Paste location" does with a text. ONE location, or a link: jump to it (one undo step).
- * SEVERAL: add them to My locations and stay where the camera is. Says why when it can do neither.
+ * What "Paste link or place" does with a text. ONE location, or a link: jump to it (one undo step).
+ * SEVERAL: add them to My places and stay where the camera is. Says why when it can do neither.
  * Returns whether it jumped.
  */
 export function applyLocationText(text: string): boolean {
@@ -132,17 +134,17 @@ export function applyLocationText(text: string): boolean {
     if (!parsed.ok) { showToast(parsed.reason, 'warning', 5000); return false; }
     if (parsed.total > 1) { importLocations(parsed); return false; }
     if (!jumpTo(parsed.locations[0])) return false;
-    showToast('Jumped to the pasted location', 'info');
+    showToast('Jumped to the pasted place', 'info');
     return true;
 }
 
-/** "Export all": every saved location as one JSON file, in the stored order (so each keeps its
+/** File... > Export: every saved location as one JSON file, in the stored order (so each keeps its
  *  slot number when the file is imported into an empty list), without thumbnails. */
 export function exportAllLocations(): void {
     const rows = useEngineStore.getState().savedLocations ?? [];
-    if (rows.length === 0) { showToast('No saved locations to export', 'info'); return; }
+    if (rows.length === 0) { showToast('No saved places to export', 'info'); return; }
     downloadBlob(new Blob([locationsToText(rows)], { type: 'application/json' }), DZ_LOCATIONS_FILE);
-    showToast(`${rows.length} location${rows.length === 1 ? '' : 's'} exported (thumbnails left out)`, 'success');
+    showToast(`${rows.length} place${rows.length === 1 ? '' : 's'} exported (thumbnails left out)`, 'success');
 }
 
 /**
@@ -159,7 +161,7 @@ export function importLocations(parsed: Extract<ParsedLocationList, { ok: true }
         const depth = Number(state.depth);
         return {
             id: nanoid(),
-            label: parsed.labels[i] || (validDepth(depth) ? formatDepth(depth) : `Location ${have.length + n + 1}`),
+            label: parsed.labels[i] || (validDepth(depth) ? formatDepth(depth) : `Place ${have.length + n + 1}`),
             createdAt: now,
             state,
         };

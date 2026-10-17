@@ -16,8 +16,9 @@ import { validDepth } from './components/depthFormat';
 import { routeDrives } from './route';
 
 export const MILESTONES: ReadonlyArray<{ depth: number; text: string }> = [
-    { depth: 1e-4, text: 'Perturbation on at 1e-4' },
-    { depth: 1e-13, text: 'Past f64 precision at 1e-13' },
+    // (No line at 1e-4 since 2026-10-17: "Perturbation on" there was untrue from 2026-10-08, when the deep
+    // renderer began to draw at every depth.)
+    { depth: 1e-13, text: 'Past plain numbers at 1e-13' },
     { depth: 1e-30, text: 'Grain of sand at 1e-30' },
     { depth: 1e-50, text: 'Past the checked depth, 1e-50' },
     { depth: 1e-62, text: 'Planck length at 1e-62' },
