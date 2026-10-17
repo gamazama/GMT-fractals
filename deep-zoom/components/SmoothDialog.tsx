@@ -23,7 +23,10 @@
  *
  * THE SEAM: `RoutePanel` mounts it while it is open and hands it the rows selected. A DraggableWindow, as
  * the render dialog is: the route, the timeline and the Route tab stay usable beside it (Play, select rows,
- * undo on the timeline), and it follows whatever the route becomes.
+ * undo on the timeline), and it follows whatever the route becomes. ESCAPE CLOSES IT, except while a pass
+ * runs (Cancel is for that), and it is never open beside the render dialog: opening either closes the
+ * other (`RoutePanel`). The owner, STREAMLINE.md A11 / F answers, 2026-10-17. Its settings start afresh
+ * when it opens again, as they always did.
  *
  * PITFALLS
  *   - IT LIVES IN THE ROUTE TAB: the dock showing another tab unmounts it, and that is Cancel (a pass stopped
@@ -278,7 +281,7 @@ export const SmoothDialog: React.FC<{ picked: readonly string[]; onClose: () => 
     const off = busy || rendering;
 
     return (
-        <DraggableWindow title="Smooth the route" onClose={onClose} initialPos={{ x: 300, y: 64 }} zIndex={z('tool')}
+        <DraggableWindow title="Smooth the route" onClose={onClose} dismissOnEscape={!busy} initialPos={{ x: 300, y: 64 }} zIndex={z('tool')}
             initialSize={{ width: 396, height: Math.max(420, Math.min(780, window.innerHeight - 96)) }}>
             <div data-dz-smooth className="flex flex-col h-full text-[10px] text-fg-tertiary">
                 <div className="flex-1 overflow-y-auto custom-scroll p-2 space-y-2.5">

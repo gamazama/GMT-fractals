@@ -26,7 +26,9 @@
  *      hold a registration of this app's own (an id that starts `deep-zoom.`) come first, then
  *      the engine's; inside each half, in the order the categories first appear in the registry.
  *   2. Entries of one group with the same description and the same scope are one row with every
- *      key (Redo: two keys).
+ *      key (Redo: two keys). And entries with the same key and the same description in DIFFERENT
+ *      scopes are one row, printed without scope words: the description says when it acts (the
+ *      timeline's two Space bindings, components/TimelineHost.tsx; STREAMLINE.md A12).
  *   3. A run of entries whose description and key end in the same digit, 1 2 3 ..., is one row:
  *      "1 to 9". The location slots are 18 registrations and two rows.
  *   An entry bound to a SCOPE acts only while that scope is active; the row says so: in the
@@ -146,10 +148,11 @@ export function shortcutGroups(defs: readonly ShortcutDef[] = shortcuts.list()):
                     continue;
                 }
             }
-            // Rule 2: every entry of the group that says the same thing in the same scope.
-            const same = list.filter((d) => !used.has(d) && rowText(d) === rowText(def));
+            // Rule 2: every entry of the group that says the same thing in the same scope, or with the same key in another.
+            const same = list.filter((d) => !used.has(d) && (rowText(d) === rowText(def) || (d.key === def.key && describe(d) === describe(def))));
             same.forEach((d) => used.add(d));
-            rows.push({ keys: [...new Set(same.map((d) => keyLabel(d.key)))], run: false, text: rowText(def), count: same.length });
+            const scopes = new Set(same.map(scopeOf));
+            rows.push({ keys: [...new Set(same.map((d) => keyLabel(d.key)))], run: false, text: scopes.size > 1 ? describe(def) : rowText(def), count: same.length });
         }
         return { title, rows };
     });

@@ -120,7 +120,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
 import { CheckeredFlagIcon, PauseIcon, PinIcon, PlayIcon, PlusIcon, SaveIcon, TrashIcon } from '../../components/Icons';
-import { openRenderPopup } from '../../engine/animation/renderPopupRegistry';
+import { closeRenderPopup, isRenderPopupOpen, openRenderPopup, subscribeRenderPopup } from '../../engine/animation/renderPopupRegistry';
 import { BaseSlider } from '../../components/Slider';
 import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
 import { Modal } from '../../components/ui/Modal';
@@ -257,8 +257,9 @@ export const RoutePanel: React.FC = () => {
     /** The rows picked (key ids), and the row a Shift-click takes its range from. */
     const [picked, setPicked] = useState<readonly string[]>([]);
     const rangeFrom = useRef<string | null>(null);
-    /** The Smooth... dialog is open. */
+    /** The Smooth... dialog is open. One dialog at a time: the render dialog opening closes it, and it closes that. */
     const [smoothing, setSmoothing] = useState(false);
+    useEffect(() => subscribeRenderPopup(() => { if (isRenderPopupOpen()) setSmoothing(false); }), []);
     /** The pointer is over the tab: it counts as over the timeline (THE POINTER OVER THE TAB in the header). */
     const [hovered, setHovered] = useState(false);
     useShortcutScope('timeline-hover', hovered);
@@ -406,7 +407,7 @@ export const RoutePanel: React.FC = () => {
                         type="button"
                         data-dz-route-smooth
                         aria-pressed={smoothing}
-                        onClick={() => setSmoothing(true)}
+                        onClick={() => { closeRenderPopup(); setSmoothing(true); }}
                         title="Smooth the route's pace and turn: the whole route or the legs selected, with a graph of the pace before and after. Positions never move. One undo on the timeline brings it back."
                         className={`${plainButton} flex-1`}
                     >

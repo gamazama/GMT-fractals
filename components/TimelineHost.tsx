@@ -62,10 +62,14 @@ export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) =>
         if (isPlaying) pause();
         else play();
     }, []);
+    // ONE DESCRIPTION FOR BOTH Space bindings, saying when each acts: a help page that lists the
+    // registry shows them as one row (the deep zoomer's listed Space twice as "Play / pause
+    // animation" and never said it flies up; STREAMLINE.md A12, 2026-10-17).
+    const playDescription = 'Play / pause the animation (in Fly mode Space flies up instead, unless the pointer is over the timeline)';
     useShortcut({
         id: 'engine.timeline.toggle-play',
         key: 'Space',
-        description: 'Play / pause animation',
+        description: playDescription,
         category: 'Timeline',
         handler: togglePlay,
         when: () => {
@@ -78,7 +82,7 @@ export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) =>
         key: 'Space',
         scope: 'timeline-hover',
         priority: 10,
-        description: 'Play / pause animation',
+        description: playDescription,
         category: 'Timeline',
         handler: togglePlay,
     });

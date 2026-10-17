@@ -57,11 +57,11 @@
  *     table. (They do not light up when pressed: the engine lights them from its own `keypress`
  *     trigger alone, and these steps wait for the deed.)
  *   - The card's own words "Tutorial 1", "Skip Tutorial" and "Finish" are the engine's.
- *   - HINTS GO OFF WHILE A LESSON IS UP AND ON WHEN IT ENDS, whatever they were: the engine's
- *     `startTutorial` / `skipTutorial` / `completeTutorial` set `showHints` so (store/slices/
- *     uiSlice.ts, grep `showHints: false`). Somebody who had switched the hints off and asks for
- *     the intro again has them on afterwards, until the next reload (the stored choice is not
- *     touched). GMT's lessons behave the same; it is not put right here.
+ *   - HINTS GO OFF WHILE A LESSON IS UP AND COME BACK AS THEY WERE WHEN IT ENDS: the engine's
+ *     `startTutorial` keeps them and `skipTutorial` / `completeTutorial` put them back (store/slices/
+ *     uiSlice.ts, `hintsBeforeLesson`; STREAMLINE.md A6, 2026-10-17 - until then they came back on,
+ *     whatever they had been, in GMT's lessons too). On a first visit that is ON: the stored choice
+ *     is unset and reads true.
  *   - THE FIRST CARD'S DIVE IS THE STARTER "Surface", whose start view is the Start view a fresh
  *     start opens on (deep-zoom/locations.ts, `startAtStartView`): the button's jump moves nothing
  *     and the dive takes off at once. Its toast said "Stopped at 2.11e-5" though it arrived, until

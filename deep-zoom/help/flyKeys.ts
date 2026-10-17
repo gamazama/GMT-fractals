@@ -37,7 +37,7 @@ export interface FlyKeyGroup {
 export const FLY_KEYS: readonly FlyKeyGroup[] = [
     {
         title: 'Fly mode',
-        note: 'The mode the app starts in. With the pointer over the timeline these keys do nothing, and Space plays it.',
+        note: 'The mode the app starts in. With the pointer over the timeline or the Route tab these keys do nothing, and Space plays the route.',
         rows: [
             { keys: ['W', 'A', 'S', 'D'], does: 'forward, left, back, right' },
             { keys: ['Space', 'C'], does: 'up, down' },

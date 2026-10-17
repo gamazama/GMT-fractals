@@ -165,6 +165,11 @@ const getUrlParam = (key: string) => {
 // an app-specific initial state into the Zustand creator.
 const DEFAULT_PANELS: Record<string, PanelState> = {};
 
+/** The hints as they were when a lesson started: put back when it ends, skipped or completed. A lesson
+ *  turns them off while its card is up. Until 2026-10-17 its end turned them ON whatever they had been,
+ *  and the right dock's rows doubled after the deep zoomer's first lesson (STREAMLINE.md A6). */
+let hintsBeforeLesson: boolean | null = null;
+
 export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
     showLightGizmo: true,
     interactionMode: 'none',
@@ -488,21 +493,24 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     }),
 
     // --- TUTORIAL ACTIONS ---
-    startTutorial: (lessonId) => set({
-        tutorialActive: true,
-        tutorialLessonId: lessonId,
-        tutorialStepIndex: 0,
-        showHints: false,
+    startTutorial: (lessonId) => set((state) => {
+        if (!state.tutorialActive) hintsBeforeLesson = state.showHints;   // a lesson started over another keeps the first one's
+        return {
+            tutorialActive: true,
+            tutorialLessonId: lessonId,
+            tutorialStepIndex: 0,
+            showHints: false,
+        };
     }),
     advanceTutorialStep: () => set(state => ({
         tutorialStepIndex: state.tutorialStepIndex + 1
     })),
-    skipTutorial: () => set({
+    skipTutorial: () => set(() => ({
         tutorialActive: false,
         tutorialLessonId: null,
         tutorialStepIndex: 0,
-        showHints: true,
-    }),
+        showHints: hintsAfterLesson(),
+    })),
     completeTutorial: () => set(state => {
         const completed = state.tutorialLessonId !== null && !state.tutorialCompleted.includes(state.tutorialLessonId)
             ? [...state.tutorialCompleted, state.tutorialLessonId]
@@ -513,7 +521,14 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
             tutorialLessonId: null,
             tutorialStepIndex: 0,
             tutorialCompleted: completed,
-            showHints: true,
+            showHints: hintsAfterLesson(),
         };
     }),
 });
+
+/** What the hints go back to when a lesson ends (`hintsBeforeLesson`); on when no start was seen. */
+function hintsAfterLesson(): boolean {
+    const was = hintsBeforeLesson ?? true;
+    hintsBeforeLesson = null;
+    return was;
+}
