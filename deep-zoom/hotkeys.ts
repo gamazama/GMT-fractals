@@ -20,9 +20,7 @@
  *   Locations   B / Shift+B save this view; Home the view the app started with (NOT the readout's
  *               "Start view" button: `jumpStart` in locations.ts); Backspace back; J the Dive field;
  *               Escape stops a dive (only while one flies).
- *   Route       K / Shift+K add a keyframe (or give the one under the playhead this view);
- *               Ctrl+Z / Ctrl+Y with the pointer over the Route tab undo and redo the route's edits
- *               (the animation stack), under this app's scope `DZ_ROUTE_HOVER`, which the tab pushes.
+ *   Route       K / Shift+K add a keyframe (or give the one under the playhead this view).
  *   Look        F G detail; [ ] iterations; I auto iterations; - = power; V colouring; L light type;
  *               O overlays.
  *   View        ` Advanced mode; Tab Fly / Orbit.
@@ -34,7 +32,8 @@
  * Keys that act in this app and are registered elsewhere: the slot digits (1-9 recall, Ctrl+1-9
  * save: the state library's own, installed in locations.ts), Alt+S (save a PNG: the engine's scene
  * plugin), Ctrl+Z / Ctrl+Y (the engine's undo), H (hints: the engine's help), T (the timeline) and,
- * with the pointer over the timeline, Space (play): the timeline's own.
+ * with the pointer over the timeline or the Route tab, Space (play) and Ctrl+Z / Ctrl+Y on the route:
+ * the timeline's own ('timeline-hover', which the Route tab pushes as the timeline does).
  *
  * DELIBERATELY NOT A KEY (each was one in the old page or in the plan, and the plan's "Flight tab"
  * they were to arrive with was never built - the Route tab took its place):
@@ -45,7 +44,6 @@
  */
 import { shortcuts } from '../engine/plugins/Shortcuts';
 import { useEngineStore } from '../store/engineStore';
-import { useAnimationStore } from '../store/animationStore';
 import { showToast } from '../engine/store/toastStore';
 import { DZ_MODE_FLY, DZ_MODE_ORBIT, cameraModeOf } from './navigationState';
 import { jumpBack, jumpHome, saveLocationHere } from './locations';
@@ -104,15 +102,9 @@ const focusDiveField = (): void => {
     field?.select();
 };
 
-/** The scope the Route tab pushes while the pointer is over it (components/RoutePanel.tsx): Ctrl+Z /
- *  Ctrl+Y undo the route's edits there. NOT the engine's 'timeline-hover', which also binds Space to
- *  play: Space is a fly key the navigation hears on the window, so one press played the route and
- *  flew up, which stopped it and left the camera off the route (seen 2026-10-17). */
-export const DZ_ROUTE_HOVER = 'dz-route-hover';
-
 /** Call once, after `installShortcuts()` and `installLocations()`. */
 export function registerDeepZoomHotkeys(): void {
-    const add = (id: string, key: string, handler: () => void, description: string, category: string, extra: { when?: () => boolean; scope?: string; priority?: number } = {}): void =>
+    const add = (id: string, key: string, handler: () => void, description: string, category: string, extra: { when?: () => boolean } = {}): void =>
         shortcuts.register({ id: `deep-zoom.${id}`, key, handler, description, category, ...extra });
 
     const save = (): void => { void saveLocationHere(); };
@@ -126,9 +118,6 @@ export function registerDeepZoomHotkeys(): void {
     const keyframe = (): void => { setKeyframe(); };
     add('keyframe', 'k', keyframe, 'Add a keyframe to the route, after the last one (with the playhead on an earlier keyframe: that one takes this view)', 'Route');
     add('keyframe.shift', 'Shift+k', keyframe, 'Add a keyframe to the route (with Shift held for speed)', 'Route');
-    const route = { scope: DZ_ROUTE_HOVER, priority: 10 };
-    add('route-undo', 'Mod+Z', () => useAnimationStore.getState().undo(), 'Undo a route edit (the pointer over the Route tab)', 'Route', route);
-    add('route-redo', 'Mod+Y', () => useAnimationStore.getState().redo(), 'Redo a route edit (the pointer over the Route tab)', 'Route', route);
 
     add('detail-down', 'f', undoable(detail(1 / 1.5)), 'Detail down (divide by 1.5)', 'Look');
     add('detail-up', 'g', undoable(detail(1.5)), 'Detail up (times 1.5)', 'Look');

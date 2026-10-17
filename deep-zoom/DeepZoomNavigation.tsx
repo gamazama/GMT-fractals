@@ -113,8 +113,9 @@
  *     "next colouring" and moved to `V` (deep-zoom/hotkeys.ts).
  *   - Space is fly-up only while the store's `cameraMode` is 'Fly': that is the predicate the
  *     timeline's own Space binding tests (grep `toggle-play` in components/TimelineHost.tsx). In
- *     Orbit mode Space plays the timeline, as in GMT. With the pointer over the timeline Space
- *     plays in either mode, and the fly keys are ignored (`isTimelineHovered`).
+ *     Orbit mode Space plays the timeline, as in GMT. With the pointer over the timeline (or the
+ *     Route tab, which counts as it: components/RoutePanel.tsx) Space plays in either mode, and the
+ *     fly keys are ignored (`isTimelineHovered`).
  *   - A fly letter pressed with Ctrl, Alt or Cmd is refused (`keysSuppressed`): those chords are
  *     shortcuts here. Without that, Alt+S saved the scene AND flew backwards (seen 2026-10-08).
  *     So this shell has no Alt "precise" modifier (in GMT it slows the roll to a tenth).
@@ -236,7 +237,7 @@ const navigationLocked = (): boolean => {
     const t = getTelemetry();
     return t.exporting || routeRendering();
 };
-/** A key that is not a move: the pointer is over the timeline (GMT's rule), or the key comes with
+/** A key that is not a move: the pointer is over the timeline or the Route tab (GMT's rule), or the key comes with
  *  Ctrl / Alt / Cmd - a shortcut (Alt+S saves the scene, Ctrl+Z undoes), never a fly key. */
 const keysSuppressed = (e: KeyboardEvent): boolean =>
     e.ctrlKey || e.altKey || e.metaKey || !!useEngineStore.getState().isTimelineHovered;

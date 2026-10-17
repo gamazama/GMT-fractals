@@ -51,14 +51,16 @@
  * selection is this panel's own state: ids that are no longer keyframes (a delete, an undo, a route
  * cut again) drop out of it by themselves.
  * When the camera is not where the playhead says, one line says so and "Return" puts it back.
- * UNDO OVER THE TAB IS THE TIMELINE'S: with the pointer over it, this app's `DZ_ROUTE_HOVER` scope
- * is pushed (deep-zoom/hotkeys.ts), so Ctrl+Z / Ctrl+Y undo the animation stack, where every edit
- * made here is; anywhere else they undo the app's own stack (a jump, a flight, a slider), and Ctrl+Z
- * after "Clear route" put the camera and the formula back by a jump and left the route cleared.
- * "Over the tab" is over the scroll box the panel lives in (the dock's), not over the panel's own
- * box, which ends where its content does: after "Clear route" the pointer stands below it (seen
- * 2026-10-17). NOT the engine's 'timeline-hover' scope the timeline pushes: it binds Space to play as
- * well, and Space is a fly key. The engine's `isTimelineHovered` is NOT set: it silences the fly keys.
+ * THE POINTER OVER THE TAB IS THE POINTER OVER THE TIMELINE (GMT's rule, the owner 2026-10-17): the
+ * engine's 'timeline-hover' scope is pushed and the store's `isTimelineHovered` set, as the timeline
+ * does (components/Timeline.tsx). So Ctrl+Z / Ctrl+Y undo the animation stack, where every edit made
+ * here is (anywhere else they undo the app's own stack - a jump, a flight, a slider - and Ctrl+Z after
+ * "Clear route" put the camera and the formula back by a jump and left the route cleared); Space
+ * plays and pauses the route in either camera mode; and the fly keys are ignored (`keysSuppressed`
+ * in deep-zoom/DeepZoomNavigation.tsx). With the scope alone, one Space both played the route and
+ * flew up, which stopped it and left the camera off the route (seen 2026-10-17). "Over the tab" is
+ * over the scroll box the panel lives in (the dock's), not over the panel's own box, which ends
+ * where its content does: after "Clear route" the pointer stands below it (seen 2026-10-17).
  *
  * THE TAB ENDS WITH ROOM FOR THE TIMELINE'S TOGGLE. The engine's round button that opens the
  * timeline ("Animate" while hints are on; `fixed bottom-4 left-4` in components/TimelineHost.tsx)
@@ -123,7 +125,7 @@ import { BaseSlider } from '../../components/Slider';
 import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
 import { Modal } from '../../components/ui/Modal';
 import { useShortcutScope } from '../../engine/plugins/Shortcuts';
-import { DZ_ROUTE_HOVER } from '../hotkeys';
+import { useEngineStore } from '../../store/engineStore';
 import { useDzNavigation } from '../navigationState';
 import {
     ROUTE_SMOOTHING, ROUTE_TRACK, ROUTE_TYPED_LEG_SECONDS, cameraOnRoute, clearLook, clearRoute, deleteKeyframe, deleteKeyframes, lookKeyed, pauseRoute, pinKeyframe,
@@ -257,9 +259,9 @@ export const RoutePanel: React.FC = () => {
     const rangeFrom = useRef<string | null>(null);
     /** The Smooth... dialog is open. */
     const [smoothing, setSmoothing] = useState(false);
-    /** The pointer is over the tab: Ctrl+Z / Ctrl+Y are the timeline's (UNDO OVER THE TAB in the header). */
+    /** The pointer is over the tab: it counts as over the timeline (THE POINTER OVER THE TAB in the header). */
     const [hovered, setHovered] = useState(false);
-    useShortcutScope(DZ_ROUTE_HOVER, hovered);
+    useShortcutScope('timeline-hover', hovered);
     const rootRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         // The TAB is the scroll box this panel lives in (the dock's, a window's), not the panel's own box:
@@ -268,11 +270,12 @@ export const RoutePanel: React.FC = () => {
         while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
         const area = box ?? rootRef.current;
         if (!area) return undefined;
-        const enter = (): void => setHovered(true), leave = (): void => setHovered(false);
+        const hover = (on: boolean): void => { setHovered(on); useEngineStore.getState().setIsTimelineHovered(on); };
+        const enter = (): void => hover(true), leave = (): void => hover(false);
         area.addEventListener('pointerenter', enter);
         area.addEventListener('pointerleave', leave);
-        setHovered(area.matches(':hover'));
-        return () => { area.removeEventListener('pointerenter', enter); area.removeEventListener('pointerleave', leave); };
+        if (area.matches(':hover')) hover(true);
+        return () => { area.removeEventListener('pointerenter', enter); area.removeEventListener('pointerleave', leave); hover(false); };
     }, []);
 
     const keys = routeKeys();

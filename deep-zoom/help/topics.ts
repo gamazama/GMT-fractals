@@ -145,6 +145,7 @@ A route is a camera move through keyframes: views you set along the way. It is k
 - With the playhead stopped on a keyframe before the last, \`K\` gives that keyframe the view on screen: the button then reads **Replace keyframe**.
 - A row is red when its leg passes through the solid. Move one of its two keyframes, or add one between them.
 - \`T\` opens the timeline, where a keyframe can be moved in time.
+- With the pointer over the Route tab, as over the timeline, \`Space\` plays and pauses the route and \`Ctrl+Z\` undoes its edits; the fly keys wait until the pointer leaves.
 
 ## From the trail
 The app remembers how you fly. That is the trail, and its line on the Route tab says how deep and how long it is.
