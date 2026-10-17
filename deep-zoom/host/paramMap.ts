@@ -198,6 +198,17 @@ export function defaultParams(): Record<DzParamId, DzParamValue> {
     return out;
 }
 
+/**
+ * Feature defaults that differ ON PURPOSE from what the module starts with: the owner's picks for
+ * the shell, which the module takes at ready (deep-zoom/useHostSync.ts: the store wins). The two
+ * guards that compare the defaults with the module skip these and nothing else: check:deep-zoom-
+ * param-map ("read: with the module at its defaults ...", which also checks each one still differs)
+ * and the stage-2 smoke step "every mapped feature default equals what the module holds at ready".
+ */
+export const DZ_DEFAULTS_NOT_THE_MODULES: Readonly<Record<DzParamId, string>> = {
+    'dzQuality.hitLanding': 'on, the owner picked it (2026-10-17, STREAMLINE.md F16); the module starts with it off',
+};
+
 /** What the module holds now, as the store would hold it, for every row that can be read back. */
 export function readParams(api: DeepZoomApi): DzParams {
     const out: DzParams = {};

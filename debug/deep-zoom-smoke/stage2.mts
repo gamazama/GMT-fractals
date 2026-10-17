@@ -110,7 +110,9 @@ const heldBuildInit = (hostExpr: string): string => `(() => {
     tick();
 })()`;
 
-/** Put the store back to the feature defaults this stage touches. */
+/** Put the store back to the feature defaults this stage touches. The steps that measure Hit refine hold
+ *  Hit landing off while they do (on by default since 2026-10-17, the owner's pick; Hit refine replaces it,
+ *  so with it on refine moved 0.8 % of the pixels instead of the 2 % or more it moves alone). */
 const RESET = `(() => { const s = window.__store.getState();
     s.setDzQuality({ detail: 1 }); s.setDzLight({ shading: 1, lightType: 0, keyElevation: 40 });
     s.setDzColour({ plain: true, mode: 0, scale: 1 }); return true; })()`;
@@ -177,8 +179,9 @@ export const stage: DzStage = {
                 if (!ctx.check(boot.ready, 'host.ready resolved')) return;
                 const r = await ctx.withHost<{ compared: number; differ: string[] }>(`
                     const st = window.__store.getState(); const boot = host.bootParams(); const differ = []; let compared = 0;
+                    const picks = (await import('/deep-zoom/host/paramMap.ts')).DZ_DEFAULTS_NOT_THE_MODULES;   // differ on purpose
                     for (const f of ${JSON.stringify(FEATURES)}) for (const k of Object.keys(st[f] || {})) {
-                        const id = f + '.' + k; if (!(id in boot)) continue; compared++;
+                        const id = f + '.' + k; if (!(id in boot) || id in picks) continue; compared++;
                         if (boot[id] !== st[f][k]) differ.push(id + ' module ' + boot[id] + ' store ' + st[f][k]);
                     }
                     return { compared, differ };`);
@@ -272,7 +275,7 @@ export const stage: DzStage = {
                 ctx.check(chromaOf(coloured) > chromaOf(plain) + 6, 'Colour: Palette colours the start view (channel spread ' + chromaOf(plain).toFixed(1) + ' -> ' + chromaOf(coloured).toFixed(1) + ')');
                 await ctx.ev('window.__store.getState().setDzColour({ plain: true })');
                 // Hit refine reaches far hits as well.
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, hitRefine: 0 })');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, hitRefine: 0, hitLanding: false })');
                 await ctx.sleep(800);
                 const coarse = await pixels(ctx);
                 const same = shareChanged(coarse, await pixels(ctx));
@@ -280,7 +283,7 @@ export const stage: DzStage = {
                 await ctx.sleep(800);
                 const refined = shareChanged(coarse, await pixels(ctx));
                 ctx.check(refined > Math.max(1, same * 4), 'Hit refine 4 moves far hits too: ' + refined.toFixed(1) + ' % of the start view changes (the control: ' + same.toFixed(2) + ' %)');
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, hitRefine: 0 })');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, hitRefine: 0, hitLanding: true })');
                 if (!(await enterDeepView(ctx))) return;
                 await settle(ctx);
                 const a = await meanColour(ctx);
@@ -357,7 +360,7 @@ export const stage: DzStage = {
                 await ctx.boot({ clearStorage: true });
                 if (!(await enterDeepView(ctx))) return;
                 // One sample per frame: with the still accumulating, jitter hides what this changes.
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, hitRefine: 0 })');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, hitRefine: 0, hitLanding: false })');
                 await ctx.sleep(900);
                 const a = await pixels(ctx);
                 await ctx.sleep(300);
@@ -373,7 +376,7 @@ export const stage: DzStage = {
                 await ctx.sleep(700);
                 const back = shareChanged(a, await pixels(ctx));
                 ctx.check(back <= control + 0.5, 'back at off the picture is the first one again (' + back.toFixed(2) + ' % differ)');
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true })');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, hitLanding: true })');
             },
         },
         {
@@ -500,7 +503,7 @@ export const stage: DzStage = {
                 // estimate: the value reaches the renderer (the Mandelbox marches by it) and the bulb's picture stays as it is.
                 await ctx.page.bringToFront();
                 if (!(await enterDeepView(ctx))) return;
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, normals: 2, detail: 8 })');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, normals: 2, detail: 8, hitLanding: false })');
                 await ctx.sleep(1200);
                 const a = await pixels(ctx);
                 await ctx.sleep(300);
@@ -515,7 +518,7 @@ export const stage: DzStage = {
                 await ctx.sleep(900);
                 const refined = shareChanged(a, await pixels(ctx));
                 ctx.check(refined > Math.max(1, control * 4), 'while Hit refine 4, which it does read, moves ' + refined.toFixed(1) + ' % of them');
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, detail: 1, hitRefine: 0 })');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, detail: 1, hitRefine: 0, hitLanding: true })');
             },
         },
         {

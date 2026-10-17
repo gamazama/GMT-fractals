@@ -230,7 +230,10 @@ export const DzQualityFeature = {
         },
         hitLanding: {
             type: 'boolean',
-            default: false,
+            // ON, the owner's pick (2026-10-17, STREAMLINE.md F16, shown off | on at Arches and at
+            // Slicing: "looks better on"). The module starts with it off (`let landMode = 0` in
+            // renderer/core.js) and takes the store's value at ready (deep-zoom/useHostSync.ts).
+            default: true,
             label: 'Hit landing',
             description: 'Places each surface hit on a fixed level of the distance estimate instead of where the last march step fell. Moves the surface by a fraction of a pixel.',
         },

@@ -95,9 +95,11 @@
  *
  * THE GRADIENT (stage 5, 2026-10-09; the owner: "yes to all" on the calls of that day)
  *   - IT REPLACES THE BUILT-IN PALETTE. There is no "use gradient" switch (the plan's
- *     `useGradient`): as in GMT, whatever is not Plain is the gradient. The default is the
- *     renderer's cosine palette as stops (`DZ_DEFAULT_GRADIENT`), so a scene saved before stage 5
- *     with the palette on draws as it did.
+ *     `useGradient`): as in GMT, whatever is not Plain is the gradient. The default
+ *     (`DZ_DEFAULT_GRADIENT`) is "twilight", the owner's pick of three quiet ramps shown him on
+ *     2026-10-17 (STREAMLINE.md F4; it loops end to end, which the Iterations mapping needs: a frame
+ *     spans about one run of the ramp). Until then it was the renderer's cosine palette as stops,
+ *     a full rainbow; a scene that carries its gradient keeps it.
  *   - IT IS LINEAR. The shading pass uses a texel as the surface's albedo, lights it, then tone
  *     maps and applies the display gamma (grep `albedoNew`, then `0.4545` in SHADE_FRAG). A
  *     gradient's `colorSpace: 'linear'` makes `generateGradientTextureBuffer` bake linearised
@@ -167,10 +169,9 @@
  *   intended proof, read as `colourToRenderer(plain, mode) === settings().color`.
  * @assumption The gap table above was read from the two shaders, not measured: no check renders
  *   one view in both and compares the lookup positions.
- * @assumption `DZ_DEFAULT_GRADIENT`, baked linear, is the renderer's cosine palette to within 9
- *   levels of 255 on any channel (mean 1.6). Fitted and measured once, 2026-10-09, with the
- *   palette suite's own fitter (`rampToGradientConfig` in `palette/core/stopFit.ts`, targetDE
- *   0.01) over the display-encoded cosine; nothing re-checks it.
+ * @assumption `DZ_DEFAULT_GRADIENT` is the palette catalogue's "twilight" (`public/palette/core.*`,
+ *   Matplotlib's licence) fitted to 17 stops by the palette suite's own fitter (`rampToGradientConfig`
+ *   in `palette/core/stopFit.ts`, targetDE 0.01), 2026-10-17; nothing re-checks the fit.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
@@ -221,14 +222,14 @@ export const colourFromRenderer = (rendererMode: number): { plain: true } | { pl
     return gmt === undefined ? { plain: true } : { plain: false, mode: gmt };
 };
 
-/** The renderer's built-in cosine palette as a gradient: what "not Plain" drew before stage 5.
- *  'linear' because the renderer lights the texel (the header, THE GRADIENT). How it was made
- *  and how close it is: the last @assumption of the header. */
+/** "twilight", the owner's pick (the header, THE GRADIENT). 'linear' because the renderer lights
+ *  the texel. How it was made: the last @assumption of the header. */
 const DZ_DEFAULT_STOPS: ReadonlyArray<readonly [number, string]> = [
-    [0, '#FF8B8B'], [0.0431, '#FD6CA7'], [0.0745, '#F953B9'], [0.1373, '#EA1AD7'],
-    [0.1882, '#D80BE9'], [0.2431, '#BF40F7'], [0.302, '#9E70FE'], [0.4078, '#51B5F8'],
-    [0.4353, '#39C3F3'], [0.5373, '#1FECD0'], [0.6157, '#64FCA7'], [0.6902, '#99FF76'],
-    [0.7843, '#CCF127'], [0.8627, '#EAD71A'], [0.9216, '#F8BB50'], [1, '#FF8B8B'],
+    [0, '#E2D9E2'], [0.0275, '#D8D8DE'], [0.0706, '#BCCBD1'], [0.1608, '#7FA5C3'],
+    [0.2941, '#5F5BB2'], [0.3608, '#5B3298'], [0.4078, '#511A75'], [0.4549, '#3D114E'],
+    [0.5059, '#311337'], [0.549, '#43123E'], [0.6078, '#691A4D'], [0.6627, '#8C2A50'],
+    [0.7294, '#AB4B50'], [0.8588, '#CA9A7D'], [0.9373, '#D8C7BE'], [0.9647, '#DED3D3'],
+    [1, '#E2D9E2'],
 ];
 export const DZ_DEFAULT_GRADIENT: GradientConfig = {
     colorSpace: 'linear',

@@ -75,7 +75,7 @@
  *     as text. Not broken on purpose: the other three numbers' lines of the push, the band rule for its scale,
  *     the map line.
  */
-import { DZ_PARAM_ROWS, DZ_PARAM_FEATURES, DZ_PARAM_ROW_BY_ID, defaultParams, paramId, readParams } from '../../deep-zoom/host/paramMap.ts';
+import { DZ_DEFAULTS_NOT_THE_MODULES, DZ_PARAM_ROWS, DZ_PARAM_FEATURES, DZ_PARAM_ROW_BY_ID, defaultParams, paramId, readParams } from '../../deep-zoom/host/paramMap.ts';
 import { createParamPusher } from '../../deep-zoom/host/looseParams.ts';
 import { NORMALS_OPTIONS, normalsIndex, normalsToRenderer } from '../../deep-zoom/features/quality.ts';
 import { FORMULA_BOX, FORMULA_BULB, FORMULA_KALI } from '../../deep-zoom/features/formula.ts';
@@ -197,9 +197,12 @@ console.log('[2] read');
     const { api } = makeApi();
     const read = readParams(api);
     const defaults = defaultParams();
-    const differ = Object.entries(read).filter(([id, v]) => !Object.is(v, defaults[id])).map(([id, v]) => `${id} ${String(v)} != ${String(defaults[id])}`);
+    const differ = Object.entries(read).filter(([id, v]) => !Object.is(v, defaults[id]) && !(id in DZ_DEFAULTS_NOT_THE_MODULES)).map(([id, v]) => `${id} ${String(v)} != ${String(defaults[id])}`);
+    const onPurpose = Object.keys(DZ_DEFAULTS_NOT_THE_MODULES);
     check(Object.keys(read).length >= 28, 'read: 28 params or more read back from the module', `${Object.keys(read).length}`);
-    check(differ.length === 0, 'read: with the module at its defaults every read-back equals the feature default', differ.join('; '));
+    check(differ.length === 0, 'read: with the module at its defaults every read-back equals the feature default (but the owner picks in DZ_DEFAULTS_NOT_THE_MODULES)', differ.join('; '));
+    check(onPurpose.every((id) => id in read && !Object.is(read[id], defaults[id])), 'read: and each owner pick in that list still differs from where the module starts (else it leaves the list)',
+        onPurpose.map((id) => `${id} ${String(read[id])} / ${String(defaults[id])}`).join('; '));
     check(read['dzColour.mode'] === undefined, 'read: colour mode has no read-back while Plain');
 }
 
