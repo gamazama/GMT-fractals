@@ -145,8 +145,8 @@ Another tab or a new pick applies what a face did; \`Esc\` cancels it. The chip 
     category: "What's New",
     title: "What's New",
     content: `
-## Unreleased
-> Not shipped yet. Entries collect here and are reviewed at release.
+## 2.0.1 — the wall and Deep Zoom
+> October 2026
 
 - **Zooming the wall keeps the gradient you grabbed under the pointer**, however far down the wall you are, on a phone too.
 - **The wall follows the keyboard cursor** all the way down, and sideways when it is zoomed.

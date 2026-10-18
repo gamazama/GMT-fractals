@@ -46,26 +46,17 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         content: `
 Every GMT release, newest first.
 
-## Unreleased
-> Not shipped yet. Entries collect here and are reviewed at release.
+## 0.9.8.6 — Deep Zoom
+> October 18, 2026
 
-- **The Render dialog remembers what you set**, also after a reload, and Escape closes it. Its formats are named in plain words: Video MP4, Frames (PNG folder).
 - **Deep Zoom, a new app.** Fly into a Mandelbulb, a Mandelbox or a KaliBox down to 1e-77, and render the flight. System ▸ Open Deep Zoom.
-- **Direct mode keeps its colours.** Highlights now follow the same model as the path tracer, so surfaces no longer wash out to white. Scenes you saved before load with the look they had.
-- **Built-in formulas relit to match.** Their default scenes keep their brightness; a few glossy ones read more matte.
-- **Fastest keeps its speed.** The Fastest quality preset uses a lighter highlight that looks nearly the same as the new one and is about 9% quicker than it while moving on the default Mandelbulb.
-- **Path-traced shadows fixed.** Surfaces were shadowing themselves; on a detailed scene over half the direct light was lost. Renders are brighter and cleaner. Scenes saved in Path Tracing load as they did: for the fix, set Shadow Tolerance to 1 (Advanced mode, System ▸ Shader Compiler Panel).
-- **Sphere lights match between Direct and Path Tracing.** A Sphere light follows its own Falloff and Range in both, so switching mode no longer changes its brightness.
-- **Better frame rate with audio and LFOs on.** The interface no longer repaints every frame while something is modulated, which was holding the render back.
-- **Modulating bloom or colour grading no longer restarts the render.**
 - **Gradient Studio.** The pop-out button in a gradient editor's header opens the gradient in a floating window with Curves, Adjust and Paint.
-- **Image sequences ask before replacing frames.** If the folder already holds frames of this render: Overwrite, Continue (render only the missing ones) or Cancel.
-- **A video rendered into a picked file is written to disk as it goes**, not held in memory until the end, and every video has a keyframe each second so players can seek in it.
-- **"Video MP4, higher quality" and "best quality" are at the bottom of the format list.** They are H.265 and AV1, and Windows needs its HEVC and AV1 video extensions to play them.
+- **Truer highlights in Direct mode.** Surfaces no longer wash out to white, saved scenes load with the look they had, and Fastest keeps its speed.
+- **Cleaner path-traced lighting.** Surfaces no longer shadow themselves, and Sphere lights match between Direct and Path Tracing. For older path-traced scenes, set Shadow Tolerance to 1 (Advanced mode, System ▸ Shader Compiler Panel) to get the fix.
+- **Better frame rate with audio and LFOs on**, and modulating bloom or colour grading no longer restarts the render.
+- **Sturdier video export.** H.265, AV1 and WebM work again, videos are written to disk as they render and can be seeked, and a failed export no longer blocks the next one.
+- **Image sequences ask before replacing frames** (Overwrite, Continue or Cancel), and the Render dialog remembers what you set.
 - **Undo covers the timeline's length**, and a saved scene remembers its frame rate.
-- **Fixed:** H.265, AV1 and WebM video exports no longer fail with "Unsupported codec type".
-- **Fixed:** a failed export no longer blocks the next one with "Export already in progress".
-- **Fixed:** the version number in an export's file name no longer goes up because the playhead moved or a save was cancelled, and a discarded video no longer leaves an empty file.
 - **Fluid Toy:** a zoom animation is drawn and edited as a zoom in the Graph Editor, and a pan keeps pace with the zoom on very deep moves.
 
 ---

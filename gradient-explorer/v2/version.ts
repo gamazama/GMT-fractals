@@ -11,7 +11,7 @@
  * versioning on, not something marketed. Patch and minor bumps from here follow ordinary
  * semver sense; the What's New entry is what users read, not the number.
  */
-export const GX_VERSION = '2.0.0';
+export const GX_VERSION = '2.0.1';
 
 /** Display name, used by About, Support and the feedback context. */
 export const GX_APP_NAME = 'Gradient Explorer';
