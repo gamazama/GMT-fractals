@@ -327,7 +327,7 @@ const BOX_KERNEL = `
    passes 2^20): the bulb's split into a reference part and a delta (Ddr / DR) is not needed, and OrbitOut.Ddr
    carries the whole of it.
    Not here, and not built with USE_BOX: the jet and its checkpoints, the rebase to the
-   origin. The rebase is the page's: δ = z − Z0. */
+   origin. No rebase at all since 2026-10-18: DIRECT AFTER A REBASE (grep, below). */
 uniform vec4  uBoxA;             // scale · |scale| · the folding limit L · 2 L
 uniform vec4  uBoxB;             // minR² · fixedR² · fixedR² / minR² · the escape radius, squared
 uniform mat3  uBoxRot;           // the pre-rotation
@@ -380,13 +380,14 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   float trap = 1e30, escR2 = uBoxB.w;
   float S = uBoxA.x, aS = uBoxA.y, m2 = uBoxB.x, F2 = uBoxB.y, kA = uBoxB.z;
   vec4 T00 = texelFetch(orbit, ivec2(0, 0), 0);
-#ifdef USE_SCHED
-  /* PER-ITERATION PARAMETERS (grep; the USE_SCHED variant): the map is read by the pixel's own index it; from its
-     first rebase on the pixel iterates z itself (zD) with its own c, and the reference is not read again */
-  float L2 = uBoxA.w;
+  /* DIRECT AFTER A REBASE (grep): from its first rebase on the pixel iterates z itself (zD) with its own c (cD),
+     and the reference is not read again */
   bool direct = false;
-  int sW = textureSize(orbit, 0).x - 1;
   vec3 zD = vec3(0.0), cD = uAddC > 0.5 ? T00.xyz + C * sclPow2(ec) : uJuliaC;
+#ifdef USE_SCHED
+  /* PER-ITERATION PARAMETERS (grep; the USE_SCHED variant): the map is read by the pixel's own index it */
+  float L2 = uBoxA.w;
+  int sW = textureSize(orbit, 0).x - 1;
 #endif
   vec4 cT0 = T00;                              // (V, |V|) at the current reference index
   /* THE PREFIX JUMP (grep; rows 6-9, built by boxJumpRows). D is still δc here. The largest index k whose
@@ -418,24 +419,35 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
     gWork++;
 #endif
 #ifdef USE_SCHED
-    {
-      vec4 pa = texelFetch(orbit, ivec2(min(it, sW), 10), 0), pb = texelFetch(orbit, ivec2(min(it, sW), 11), 0);
-      S = pa.x; aS = pa.y; L2 = pa.w; m2 = pb.x; F2 = pb.y; kA = pb.z;
-      if (direct) {
-        if (uSchedRot == 1) zD = schedRot(orbit, min(it, sW), zD); else if (uBoxHasRot == 1) zD = uBoxRot * zD;
-        zD = clamp(zD, -pa.z, pa.z) * 2.0 - zD;
-        float kk = clamp(F2 / max(dot(zD, zD), 1e-30), 1.0, kA);
-        zD = zD * (kk * S) + (uAddC > 0.5 ? cD : texelFetch(orbit, ivec2(min(it, sW), 15), 0).xyz);   // JULIA MODE: this iteration's constant (row 15)
-        drM = drM * (kk * aS) + sclPow2(-drE);
-        if (drM > 1048576.0) { float adj = floor(log2(drM)); drM *= exp2(-adj); drE += adj; }
-        it++;
-        float zz2 = dot(zD, zD);
-        trap = min(trap, zz2);
-        if (zz2 > uBoxB.w) { escaped = true; escR2 = zz2; break; }
-        continue;
-      }
-    }
+    vec4 pa = texelFetch(orbit, ivec2(min(it, sW), 10), 0), pb = texelFetch(orbit, ivec2(min(it, sW), 11), 0);
+    S = pa.x; aS = pa.y; L2 = pa.w; m2 = pb.x; F2 = pb.y; kA = pb.z;
 #endif
+    if (direct) {                                            // DIRECT AFTER A REBASE (grep): the map on z itself
+#ifdef USE_SCHED
+      if (uSchedRot == 1) zD = schedRot(orbit, min(it, sW), zD); else
+#endif
+      if (uBoxHasRot == 1) zD = uBoxRot * zD;
+#if defined(USE_KALI)
+      zD = abs(zD) + uKaliT;                                 // KALIBOX (grep): its fold in the box fold's place
+#elif defined(USE_SCHED)
+      zD = clamp(zD, -pa.z, pa.z) * 2.0 - zD;
+#else
+      zD = clamp(zD, -uBoxA.z, uBoxA.z) * 2.0 - zD;
+#endif
+      float kk = clamp(F2 / max(dot(zD, zD), 1e-30), 1.0, kA);
+#ifdef USE_SCHED
+      zD = zD * (kk * S) + (uAddC > 0.5 ? cD : texelFetch(orbit, ivec2(min(it, sW), 15), 0).xyz);   // JULIA MODE: this iteration's constant (row 15)
+#else
+      zD = zD * (kk * S) + cD;
+#endif
+      drM = drM * (kk * aS) + sclPow2(-drE);
+      if (drM > 1048576.0) { float adj = floor(log2(drM)); drM *= exp2(-adj); drE += adj; }
+      it++;
+      float zz2 = dot(zD, zD);
+      trap = min(trap, zz2);
+      if (zz2 > uBoxB.w) { escaped = true; escR2 = zz2; break; }
+      continue;
+    }
     vec4 tw = texelFetch(orbit, ivec2(m, 1), 0);             // W (xyz), |W|² (w)
     vec4 gx = texelFetch(orbit, ivec2(m, 2), 0);             // per axis: U − L (m, e), U + L (m, e)
     vec4 gy = texelFetch(orbit, ivec2(m, 3), 0);
@@ -482,19 +494,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
     float z2 = dot(zf, zf);
     trap = min(trap, z2);
     if (z2 > uBoxB.w) { escaped = true; escR2 = z2; break; }
-    if (z2 < dot(dz, dz) || m >= orbitLen - 1) {             // Zhuoran rebase / reference exhausted
-#ifdef USE_SCHED
-      direct = true; zD = zf; rebases++; continue;           // PER-ITERATION PARAMETERS (grep): no rebase, z runs direct
-#endif
-      D = zf - T00.xyz; e = 0.0;
-      sclNorm(D, e);
-      m = 0; rebases++;
-      cT0 = T00;
-    }
+    if (z2 < dot(dz, dz) || m >= orbitLen - 1) { direct = true; zD = zf; rebases++; }   // a rebase / reference exhausted: DIRECT AFTER A REBASE (grep)
   }
-#ifdef USE_SCHED
   if (direct) { D = zD - T00.xyz; e = 0.0; sclNorm(D, e); cT0 = T00; }   // what a rebase would have left: the delta against the first point
-#endif
   vec3 zE = cT0.xyz + D * sclPow2(e);
   float rF = length(zE);
   vec2 drH = hdrReduce(vec2(drM, drE));
@@ -3218,8 +3220,17 @@ function boxDerive(){
    each step. The page's rebase restarts the reference at index 0 while the pixel's own count goes on, so with a
    schedule the two would no longer agree. After that rebase the delta is z - Z0, as large as the point itself,
    and every step from there is already plain f32 on numbers of size 1 (grep REBASE TO THE ORIGIN, which says why);
-   so with a schedule on, a pixel iterates z itself from its first rebase on, with the map of its own index: the
-   same precision, and no reference to agree with. Without a schedule nothing of this runs.
+   so a pixel iterates z itself from its first rebase on, with the map of its own index: the same precision, and no
+   reference to agree with.
+   DIRECT AFTER A REBASE (2026-10-18, the owner's yes, with a schedule or without): every box and KaliBox pixel does so,
+   scheduled or not. The plain rebase onto Z0 is gone from the box's kernel and its CPU twin (boxOrbitJS): where a
+   pixel would have been rebased, it runs the map on z itself to its escape. A direct step reads no orbit row and
+   has no fold case table, so it is cheaper than a delta step. MEASURED with no schedule (RTX 5070 Ti, 1080p, the
+   15 views of debug/scratch/box-depth/ab.mts, against d25951ac; debug/scratch/box-sched/, git-ignored): the live
+   frame 6 to 39 % faster at depth (Arches 1.2e-20 4.90 -> 3.10 ms at frame 640, Lace 1.1e-50 7.65 -> 5.05, Block city
+   8.7e-42 15.35 -> 12.70), the two views from outside the whole box within noise (under 1 ms); pictures 0.00 to 0.01 %
+   of pixels more than 8 levels apart. Correct: the direct proof's Mandelbox, KaliBox and Julia-box lines, 0 points
+   over 1e-3 against the fixed-point orbit (npm run smoke:deep-zoom-direct, 52 PASS).
    ON THE GPU it is a program of its own, USE_SCHED (keys XS, XST: grep schedOn), built in the background when a
    schedule is set, as Burning's is and for Burning's reason: as a branch on a uniform in the box's program it cost
    every box picture 3 to 9 % with no schedule set (the compiler lays the loop out anew around it). Without
@@ -4081,7 +4092,7 @@ function boxOrbitJS(O, dc, maxIter, fixed, jump){
   const p = O.box, sch = p.sched && !p.kali;   // PER-ITERATION PARAMETERS (grep): the map is read by the iteration's index
   let R = p.hasRot ? p.R : null;
   let S = p.scale, aS = Math.abs(S), m2 = p.m2, F2 = p.F2, kA = p.kA, L2 = 2 * p.fold, direct = false;
-  const V0 = O.Vf[0], GH = O.GH, GL = O.GL, cx = O.julia ? 0 : dc[0], cy = O.julia ? 0 : dc[1], cz = O.julia ? 0 : dc[2];   // JULIA MODE (grep): nothing is added after the start
+  const GH = O.GH, GL = O.GL, cx = O.julia ? 0 : dc[0], cy = O.julia ? 0 : dc[1], cz = O.julia ? 0 : dc[2];   // JULIA MODE (grep): nothing is added after the start
   let dx = dc[0], dy = dc[1], dz = dc[2], m = 0, it = 0, dr = 1, escaped = false, trap2 = Infinity;
   const k0 = jump ? navJumpAt(O.jump, len3(dc), maxIter) : 0;   // THE NAVIGATION'S JUMP (grep): the referees never pass `jump`
   if (k0 > 0) { const M = O.jump.M[k0]; [dx, dy, dz] = mv3(M, dc); dr = O.DRk[k0]; trap2 = O.jump.T[k0]; m = it = k0; }
@@ -4090,10 +4101,11 @@ function boxOrbitJS(O, dc, maxIter, fixed, jump){
   while (it < maxIter) {
     if (sch) { const P = boxAt(p, it); S = P.scale; aS = Math.abs(S); m2 = P.m2; F2 = P.F2; kA = P.kA; L2 = 2 * P.fold; R = P.hasRot ? P.R : null;
       if (O.julia) cD = O.KS[Math.min(it, O.KS.length - 1)]; }
-    if (direct) {                                // PER-ITERATION PARAMETERS (grep): from the first rebase on, z itself
+    if (direct) {                                // DIRECT AFTER A REBASE (grep): from the first rebase on, z itself
       let x = zx, y = zy, w = zz;
       if (R) { x = R[0][0]*zx + R[0][1]*zy + R[0][2]*zz; y = R[1][0]*zx + R[1][1]*zy + R[1][2]*zz; w = R[2][0]*zx + R[2][1]*zy + R[2][2]*zz; }
-      const L = 0.5 * L2; x = Math.max(-L, Math.min(L, x)) * 2 - x; y = Math.max(-L, Math.min(L, y)) * 2 - y; w = Math.max(-L, Math.min(L, w)) * 2 - w;
+      if (p.kali) { x = Math.abs(x) + p.T[0]; y = Math.abs(y) + p.T[1]; w = Math.abs(w) + p.T[2]; }   // KALIBOX (grep): its fold and translation
+      else { const L = 0.5 * L2; x = Math.max(-L, Math.min(L, x)) * 2 - x; y = Math.max(-L, Math.min(L, y)) * 2 - y; w = Math.max(-L, Math.min(L, w)) * 2 - w; }
       const k = Math.max(1, Math.min(kA, F2 / Math.max(x*x + y*y + w*w, 1e-300)));
       zx = x * k * S + cD[0]; zy = y * k * S + cD[1]; zz = w * k * S + cD[2];
       dr = dr * k * aS + 1; it++;
@@ -4122,8 +4134,7 @@ function boxOrbitJS(O, dc, maxIter, fixed, jump){
     if (z2 < trap2) trap2 = z2;
     if (!fixed && z2 > BOX_ESC2) { escaped = true; break; }
     if (z2 < dx*dx + dy*dy + dz*dz || m >= O.len - 1) {
-      if (sch) { direct = true; continue; }       // PER-ITERATION PARAMETERS (grep): no rebase; z runs direct from here
-      dx = zx - V0[0]; dy = zy - V0[1]; dz = zz - V0[2]; m = 0; }   // the page's rebase: onto the reference's first point
+      direct = true; }                            // DIRECT AFTER A REBASE (grep): z runs direct from here
   }
   const r = Math.hypot(zx, zy, zz);
   return { de: (r - 1) / dr, escaped, r, it, dr, trap: Math.sqrt(trap2), z: [zx, zy, zz] };
