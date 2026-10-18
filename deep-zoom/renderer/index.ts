@@ -397,7 +397,7 @@ export interface DzSenseOptions {
  *  to need are typed; the rest (test studies, probes, levers) are reachable through the index
  *  signature and are `unknown` until narrowed. */
 /** A field of one entry of `setBoxSchedule`'s table. */
-export type DeepZoomScheduleField = 'scale' | 'minR' | 'fold' | 'fixedR' | 'rx' | 'ry' | 'rz' | 'cx' | 'cy' | 'cz';
+export type DeepZoomScheduleField = 'scale' | 'minR' | 'fold' | 'fixedR' | 'rx' | 'ry' | 'rz' | 'pt' | 'pp' | 'cx' | 'cy' | 'cz';
 
 export interface DeepZoomApi {
     dz: DzHostHandle;
@@ -428,7 +428,8 @@ export interface DeepZoomApi {
     /** The Mandelbox's per-iteration parameters (grep PER-ITERATION PARAMETERS in core.js): null to clear, or one
      *  entry an iteration, null or any of `scale`, `minR`, `fold`, `fixedR` (the rest from the base); iterations
      *  past the table take the base; `rx`, `ry`, `rz` are the pre-rotation's angles (radians) and `cx`, `cy`, `cz`
-     *  the Julia constant's coordinates (doubles; Julia mode only; an axis left out is the exact base constant's).
+     *  the Julia constant's coordinates (doubles; Julia mode only; an axis left out is the exact base constant's);
+     *  `pt`, `pp` the Mandelbulb's phase angles (grep PER-ITERATION PARAMETERS, THE BULB). Each formula reads its own.
      *  The first schedule builds its shader variant in the background (a few
      *  seconds; the f32 baseline draws meanwhile). Rebuilds the reference orbit. KaliBox is not scheduled.
      *  The rules a user edits, and how they compile to this, are deep-zoom/boxSchedule.ts. */

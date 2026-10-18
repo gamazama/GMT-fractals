@@ -20,8 +20,9 @@
  * PITFALLS
  *   - IT LIVES IN THE FORMULA TAB: the dock showing another tab unmounts it, and it closes. Escape closes it too
  *     (it holds nothing Escape could lose: every edit is already in the store).
- *   - The tool shows for the Mandelbox only: KaliBox and the bulb have no schedule, and a switch of formula closes it.
- *     The Constant row is there for the bulb too: its button shows only while the Mandelbox is drawn.
+ *   - The tool shows the groups of the formula drawn: the Mandelbox's (Box, Pre-Rotation, Julia constant) or the
+ *     Mandelbulb's (Phase, Julia constant). KaliBox has no schedule; a switch to a formula a tab is not of closes it.
+ *     The Mandelbulb's first schedule builds its renderer (the ray march's, about 15 s), the box's about 2 s.
  *   - The Julia constant's rules do nothing outside Julia mode; the tool says so, and keeps them.
  *   - A rule's value goes through the store's own hold for Scale (`validBoxScale`): the renderer cannot draw
  *     |scale| under 1.02.
@@ -37,7 +38,7 @@ import { useEngineStore } from '../../store/engineStore';
 import { useDzTelemetry } from '../host/telemetry';
 import { degreesMapping } from '../../components/inputs/primitives/FormatUtils';
 import type { ValueMapping } from '../../components/inputs/primitives/FormatUtils';
-import { DzFormulaFeature, FORMULA_BOX, validBoxScale } from '../features/formula';
+import { DzFormulaFeature, FORMULA_BOX, FORMULA_BULB, validBoxScale } from '../features/formula';
 import {
     SCHEDULED_KEYS, SCHEDULED_PARAMS, SCHEDULE_GROUPS, SCHEDULE_ITERATIONS, SCHEDULE_ROW_OPENS, describeRule, isScheduled,
     isScheduledKey, newRule, scheduleValueAt, sortedKeys,
@@ -80,6 +81,9 @@ function domainOf(key: DzScheduledKey): { min: number; max: number; step: number
 const groupOf = (key: DzScheduledKey): DzScheduleGroup => SCHEDULED_PARAMS[key].group;
 const keysOf = (group: DzScheduleGroup): DzScheduledKey[] => SCHEDULED_KEYS.filter((k) => groupOf(k) === group);
 const titleOf = (key: DzScheduledKey): string => (groupOf(key) === 'box' ? SCHEDULED_PARAMS[key].label : `${SCHEDULE_GROUPS[groupOf(key)].label} ${SCHEDULED_PARAMS[key].label}`);
+/** The formula the store draws, as the groups name it: the box, the bulb, or neither (KaliBox has no schedule). */
+const useScheduleFormula = (): 'box' | 'bulb' | null => useEngineStore((s) => (s.dzFormula.kind === FORMULA_BOX ? 'box' : s.dzFormula.kind === FORMULA_BULB ? 'bulb' : null));
+const groupsOf = (f: 'box' | 'bulb'): DzScheduleGroup[] => (Object.keys(SCHEDULE_GROUPS) as DzScheduleGroup[]).filter((g) => SCHEDULE_GROUPS[g].formulas.includes(f));
 
 // ── the button on a row ─────────────────────────────────────────────────────────────────────────────────────
 export const ScheduleButton: React.FC<LabelSuffixProps> = ({ paramKey }) => {
@@ -87,11 +91,11 @@ export const ScheduleButton: React.FC<LabelSuffixProps> = ({ paramKey }) => {
     const first: DzScheduledKey | null = isScheduledKey(paramKey) ? paramKey : SCHEDULE_ROW_OPENS[paramKey] ?? null;
     const keys = first ? (isScheduledKey(paramKey) ? [first] : keysOf(groupOf(first))) : [];
     const on = useEngineStore((s) => keys.some((k) => isScheduled(s.dzFormula.boxSchedule?.[k])));
-    const isBox = useEngineStore((s) => s.dzFormula.kind === FORMULA_BOX);
+    const formula = useScheduleFormula();
     const open = useOpenKey();
-    if (!first || !isBox) return null;
+    if (!first || !formula || !SCHEDULE_GROUPS[groupOf(first)].formulas.includes(formula)) return null;
     const mine = open !== null && keys.includes(open), paramKeyOpen: DzScheduledKey = first;
-    const label = isScheduledKey(paramKey) ? SCHEDULED_PARAMS[paramKey].label : SCHEDULE_GROUPS[groupOf(first)].label;
+    const label = isScheduledKey(paramKey) ? titleOf(paramKey) : SCHEDULE_GROUPS[groupOf(first)].label;
     return (
         <button type="button" data-dz-schedule-button={paramKey}
             // pointer-events-auto: a slider's label is `pointer-events: none` (it must not catch the track's drag)
@@ -206,12 +210,12 @@ const RuleCard: React.FC<{ paramKey: DzScheduledKey; index: number; rules: DzSch
 // ── the tool ────────────────────────────────────────────────────────────────────────────────────────────────
 export const ScheduleTool: React.FC = () => {
     const key = useOpenKey();
-    const isBox = useEngineStore((s) => s.dzFormula.kind === FORMULA_BOX);
+    const formula = useScheduleFormula();
     const juliaMode = useEngineStore((s) => s.dzFormula.juliaMode);
     const schedule = useEngineStore((s) => s.dzFormula.boxSchedule);
     const base = useEngineStore((s) => (key ? s.dzFormula[key] : 0));
     const inUse = useDzTelemetry((t) => t.iters);
-    if (!key || !isBox) return null;
+    if (!key || !formula || !SCHEDULE_GROUPS[groupOf(key)].formulas.includes(formula)) return null;
     const rules = schedule?.[key] ?? [], dom = domainOf(key), label = titleOf(key), group = groupOf(key);
     // The graph's reach: past the last iteration a rule names and the count in use, at least 20.
     let reach = Math.max(20, inUse + 4);
@@ -228,7 +232,7 @@ export const ScheduleTool: React.FC = () => {
             <div data-dz-schedule-tool={key} className="flex flex-col h-full text-[10px] text-fg-tertiary">
                 {/* two rows of tabs: the group, then its parameters; a dot on whatever holds a rule */}
                 <div className="flex gap-1 px-2 pt-2">
-                    {(Object.keys(SCHEDULE_GROUPS) as DzScheduleGroup[]).map((g) => (
+                    {groupsOf(formula).map((g) => (
                         <Button key={g} size="small" active={g === group} data-dz-schedule-group={g} onClick={() => scheduleTool.open(keysOf(g)[0])}
                             label={`${SCHEDULE_GROUPS[g].label}${keysOf(g).some((k) => isScheduled(schedule?.[k])) ? ' •' : ''}`} />
                     ))}

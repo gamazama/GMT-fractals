@@ -659,7 +659,11 @@ void jetStep(inout vec3 jv, inout float ev, inout float jvs, inout float Qm, vec
   if (rz > 0.0) {
     float irz = 1.0 / rz, sth = rho * irz, cth = z.z * irz;
     float cph = rho > 0.0 ? z.x * irho : 1.0, sph = rho > 0.0 ? z.y * irho : 0.0;
+#if defined(USE_SCHED) && !defined(USE_BOX)
+    float kmax = gPhX == 0.0 ? uPower : 1e30;                   // THE PHASE AND THE JET (above), at the phase of this step
+#else
     float kmax = uPhase.x == 0.0 ? uPower : 1e30;               // THE PHASE AND THE JET (above)
+#endif
     float kap = sth > 1e-12 ? clamp(sA / sth, -kmax, kmax) : uPower;
     nj = dot(jv, vec3(sth * cph, sth * sph, cth)) * vec3(sA * cB, sA * sB, cA)
        + dot(jv, vec3(cth * cph, cth * sph, -sth)) * vec3(cA * cB, cA * sB, -sA)
@@ -839,6 +843,14 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec4 T00 = texelFetch(orbit, ivec2(0, 0), 0);
   vec2 DR00 = texelFetch(orbit, ivec2(0, 3), 0).xy;
   vec4 cT0 = T00; vec2 cDR = DR00;
+#ifdef USE_SCHED
+  /* PER-ITERATION PARAMETERS, THE BULB (grep): rb, the first row of the orbit in use (a slot after a rebase: every slot
+     starts at the same point, so T00 and DR00 hold for all), curLen its length; the direct run of a pixel whose
+     rebase has no slot (zD, its whole dr drD), and the pixel's own c for it */
+  int rb = 0, curLen = orbitLen;
+  bool direct = false; vec3 zD = vec3(0.0); vec2 drD = vec2(1.0, 0.0);
+  vec3 cPix = T00.xyz + C * sclPow2(ec);
+#endif
 #ifdef USE_JET
   vec3 jv = gRd; float ev = 0.0, jvs = 1.0, Qm = 0.0, ckErr = 0.0, ckJerr = 0.0;     // zdot_0 = v (z_0 = c); Q = Qm·2^ev; jvs = 2^-ev
   int pass = 0, ckFrom = -1;
@@ -866,10 +878,13 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       Qm = kc.x * exp2(clamp(-(ev + uRefE), -126.0, 126.0));
       Ddr = ka.xy; trap = ka.z;
       m = int(kc.y); it = int(kc.z);
+#ifdef USE_SCHED
+      rb = int(kc.w); curLen = int(ka.w);        // the orbit the checkpoint stood on
+#endif
       ckErr = er; ckJerr = min(kb.z + sq, 1e30);
       pass = p; ckFrom = p; gCkLast = p;
       ckWr = CK_WR == 0 || (gCkSince >= 1 && gRunPrev >= gRunBase + CK_WR);   // LAZY WRITES: the passes a resumed orbit runs have grown (0: every orbit writes)
-      cT0 = texelFetch(orbit, ivec2(m, 0), 0); cDR = texelFetch(orbit, ivec2(m, 3), 0).xy;
+      cT0 = texelFetch(orbit, ivec2(m, OROW(0)), 0); cDR = texelFetch(orbit, ivec2(m, OROW(3)), 0).xy;
       break;
     }
   }
@@ -883,11 +898,51 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
     if (gRay == 2 && ckWr) {
       if (pass != ckFrom) {                                  // the checkpoint an orbit resumed from stays as it was
         int cs = pass - (pass / CKN) * CKN;
+#ifdef USE_SCHED
+        gCkD[cs] = vec4(D, e); gCkJ[cs] = vec4(jv, ev); gCkA[cs] = vec4(Ddr, trap, float(curLen));
+        gCkB[cs] = vec4(gTau, ckErr, ckJerr, float(pass));
+        gCkC[cs] = vec4(Qm * exp2(clamp(ev + uRefE, -126.0, 126.0)), float(m), float(it), float(rb));
+#else
         gCkD[cs] = vec4(D, e); gCkJ[cs] = vec4(jv, ev); gCkA[cs] = vec4(Ddr, trap, 0.0);
         gCkB[cs] = vec4(gTau, ckErr, ckJerr, float(pass));
         gCkC[cs] = vec4(Qm * exp2(clamp(ev + uRefE, -126.0, 126.0)), float(m), float(it), 0.0);
+#endif
       }
       pass++;
+    }
+#endif
+#ifdef USE_SCHED
+    if (direct) {                              // PER-ITERATION PARAMETERS, THE BULB (grep): no slot for this pixel's rebase - z itself
+      vec4 sr = schedRowAt(it);
+      vec3 zq = zD;
+#ifdef USE_BURN
+      { vec3 fs = mix(vec3(1.0), vec3(uBurnNeg), lessThan(zq, vec3(0.0)));
+#ifdef USE_JET
+        if (gRay != 0) jv *= fs;
+#endif
+        zq *= fs; }
+#endif
+      float rz = length(zq);
+      vec3 cAdd = uAddC > 0.5 ? cPix : schedKAt(it);
+      if (rz > 0.0) {
+        float ez = floor(log2(rz)), rm = rz * exp2(-ez), rn1 = 1.0;
+        for (int k = 1; k < uPowerI; k++) rn1 *= rm;
+        float rho = length(zq.xy);
+        float th = atan2Acc(rho, zq.z) * uPower + sr.z;
+        float ph = (rho > 0.0 ? atan2Acc(zq.y, zq.x) : 0.0) * uPower + sr.w;
+        float sth, cth1, sph, cph1;
+        sinCosm1Acc(th, sth, cth1); sinCosm1Acc(ph, sph, cph1);
+#ifdef USE_JET
+        if (gRay != 0) { zPv = zq; jPv = jv; ePv = ev; qPv = Qm; gPhX = sr.z; jetStep(jv, ev, jvs, Qm, zq, sth, 1.0 + cth1, sph, 1.0 + cph1, uPower * rn1 * sclPow2((uPower - 1.0) * ez)); }
+#endif
+        zD = rn1 * rm * vec3(sth * (1.0 + cph1), sth * sph, 1.0 + cth1) * sclPow2(uPower * ez) + cAdd;
+        drD = hdrAdd(hdrReduce(vec2(drD.x * uPower * rn1, drD.y + (uPower - 1.0) * ez)), vec2(1.0, 0.0));
+      } else { zD = cAdd; drD = vec2(1.0, 0.0); }
+      it++;
+      float zz2 = dot(zD, zD);
+      trap = min(trap, zz2);
+      if (zz2 > 4.0) { escaped = true; escR2 = zz2; break; }
+      continue;
     }
 #endif
     bool applied = false;                      // always false since the skip table went (2026-10-11): it marked a pass that had applied a table run
@@ -895,15 +950,15 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
     gWork++;                                   // one loop pass = one real step
 #endif
     if (!applied) {
-      vec4 t1 = texelFetch(orbit, ivec2(m, 1), 0);           // sin/cos of the reference output angles
-      vec4 t2 = texelFetch(orbit, ivec2(m, 2), 0);           // R^n (xy), R^(n-1) (zw) as HDR pairs
+      vec4 t1 = texelFetch(orbit, ivec2(m, OROW(1)), 0);     // sin/cos of the reference output angles
+      vec4 t2 = texelFetch(orbit, ivec2(m, OROW(2)), 0);     // R^n (xy), R^(n-1) (zw) as HDR pairs
       vec3 V = cT0.xyz; float R = cT0.w;
 #ifdef USE_BURN
       {
         /* BURNING (grep): the fold, as a delta by cases. The reference's signed coordinates come as mantissa and
            exponent (rows 4 and 5), the power below is taken at A = fold(Z) with a radius of its own, and the jet
            takes the side each of the PIXEL's coordinates stands on. */
-        vec4 b4 = texelFetch(orbit, ivec2(m, 4), 0), b5 = texelFetch(orbit, ivec2(m, 5), 0);
+        vec4 b4 = texelFetch(orbit, ivec2(m, OROW(4)), 0), b5 = texelFetch(orbit, ivec2(m, OROW(5)), 0);
         float fx, fy, fz;
         D = vec3(burnFoldD(b4.xy, D.x, e, fx), burnFoldD(b4.zw, D.y, e, fy), burnFoldD(b5.xy, D.z, e, fz));
         V *= vec3(b4.x < 0.0 ? uBurnNeg : 1.0, b4.z < 0.0 ? uBurnNeg : 1.0, b5.x < 0.0 ? uBurnNeg : 1.0); R = b5.z;
@@ -959,6 +1014,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       float en = e + t2.y;
 #ifdef USE_JET
       if (gRay != 0) { zPv = V + df; jPv = jv; ePv = ev; qPv = Qm; }
+#ifdef USE_SCHED
+      if (gRay != 0) gPhX = schedRowAt(it).z;
+#endif
       if (gRay != 0) jetStep(jv, ev, jvs, Qm, V + df, sa + s * dsA, ca + s * dcA, sb + s * dsB, cb + s * dcB, uPower * t2.z * sclPow2(t2.w) * (1.0 + gN1 * s));
 #endif
       /* δ ← Δ + δc : align the two exponents once, renormalise once */
@@ -966,14 +1024,14 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       sclNorm(D, e);
       m++; it++;
     }
-    cT0 = texelFetch(orbit, ivec2(m, 0), 0);                 // (V,R) and DR at the new index
-    cDR = texelFetch(orbit, ivec2(m, 3), 0).xy;
+    cT0 = texelFetch(orbit, ivec2(m, OROW(0)), 0);           // (V,R) and DR at the new index
+    cDR = texelFetch(orbit, ivec2(m, OROW(3)), 0).xy;
     vec3 dz = D * sclPow2(e);
     vec3 zf = cT0.xyz + dz;
     float z2 = dot(zf, zf);
     trap = min(trap, z2);
     if (z2 > 4.0) { escaped = true; escR2 = z2; break; }
-    if (z2 < dot(dz, dz) || m >= orbitLen - 1) {             // Zhuoran rebase / reference exhausted
+    if (z2 < dot(dz, dz) || m >= OLEN - 1) {                 // Zhuoran rebase / reference exhausted
       if (uRebaseOrigin == 1 && it < maxIter) {
         /* REBASE TO THE ORIGIN (uRebaseOrigin, 2026-10-08; off by default: the page's rebase is
            the branch below). A rebase restarts the reference at its first point. The page does it
@@ -1010,8 +1068,14 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
           float rn1 = 1.0;
           for (int k = 1; k < uPowerI; k++) rn1 *= rm;       // rm^(n−1) by multiplication: the built-in pow is not f32-accurate
           float rho = length(zf.xy);
-          float th = atan2Acc(rho, zf.z) * uPower + uPhase.x;
-          float ph = (rho > 0.0 ? atan2Acc(zf.y, zf.x) : 0.0) * uPower + uPhase.y;
+#ifdef USE_SCHED
+          vec2 phNow = schedRowAt(it).zw;                    // PER-ITERATION PARAMETERS, THE BULB (grep): the phase of this iteration
+          gPhX = phNow.x;
+#else
+          vec2 phNow = uPhase;
+#endif
+          float th = atan2Acc(rho, zf.z) * uPower + phNow.x;
+          float ph = (rho > 0.0 ? atan2Acc(zf.y, zf.x) : 0.0) * uPower + phNow.y;
           float sth, cth1, sph, cph1;
           sinCosm1Acc(th, sth, cth1); sinCosm1Acc(ph, sph, cph1);
 #ifdef USE_JET
@@ -1033,7 +1097,17 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
         dz = D * sclPow2(e); zf = cT0.xyz + dz; z2 = dot(zf, zf);
         trap = min(trap, z2);
         if (z2 > 4.0) { escaped = true; escR2 = z2; break; }
+#ifdef USE_SCHED
+        { vec4 sr = schedRowAt(it);                          // the slot of the shift it (the pixel's next map is f_it)
+          if (sr.x >= 0.0) { rb = int(sr.x) * uSlotRows; curLen = int(sr.y); }
+          else { direct = true; zD = zf; drD = hdrAdd(DR00, Ddr); ckWr = false; } }
+#endif
       } else {
+#ifdef USE_SCHED
+        vec4 sr = schedRowAt(it);
+        if (sr.x < 0.0) { direct = true; zD = zf; drD = hdrAdd(cDR, Ddr); ckWr = false; continue; }   // no slot: the direct run
+        rb = int(sr.x) * uSlotRows; curLen = int(sr.y);
+#endif
         D = zf - T00.xyz; e = 0.0;
         sclNorm(D, e);
         Ddr = hdrAdd(hdrSub(cDR, vec2(1.0, 0.0)), Ddr);
@@ -1042,6 +1116,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       }
     }
   }
+#ifdef USE_SCHED
+  if (direct) { D = zD; e = 0.0; sclNorm(D, e); cT0 = vec4(0.0); cDR = vec2(0.0); Ddr = drD; }   // the direct run's z and dr, on a reference of 0
+#endif
   float sE = sclPow2(e);
   float QE = 2.0 * dot(cT0.xyz, D) + sE * dot(D, D);
   float r2f = sqrt(max(cT0.w * cT0.w + sE * QE, 0.0));
@@ -1239,6 +1316,22 @@ uniform int   uPowerI;           // power n (int, for the binomial Horner loop b
 uniform float uBinomN[17];       // C(n,1..n)   — (1+u)^n − 1
 uniform float uBinomN1[17];      // C(n-1,1..n-1) — (1+u)^(n-1) − 1
 uniform vec2  uPhase;            // lobe-twist phase (θ, φ) — the f32 far-field DE, the rebase to the origin, and the jet's azimuth stretch (grep THE PHASE AND THE JET)
+#if defined(USE_SCHED) && !defined(USE_BOX)
+/* PER-ITERATION PARAMETERS, THE BULB (grep; its USE_SCHED variant): the orbit texture holds the slot orbits' rows
+   (uSlotRows each) and, from uSchedRow on, one row an iteration: (the slot a rebase there goes on along, its length,
+   theta phase, phi phase), then the Julia constant (xyz). OROW, OLEN, PHX, PHY: what the kernel reads instead of
+   row k, orbitLen and uPhase; without USE_SCHED they are those very tokens. */
+uniform int   uSchedRow;
+uniform int   uSlotRows;
+float gPhX = 0.0;                // the theta phase of the step jetStep is taking (THE PHASE AND THE JET)
+vec4 schedRowAt(int i) { return texelFetch(uOrbit, ivec2(min(i, textureSize(uOrbit, 0).x - 1), uSchedRow), 0); }
+vec3 schedKAt(int i) { return texelFetch(uOrbit, ivec2(min(i, textureSize(uOrbit, 0).x - 1), uSchedRow + 1), 0).xyz; }
+#define OROW(k) (rb + k)
+#define OLEN curLen
+#else
+#define OROW(k) k
+#define OLEN orbitLen
+#endif
 uniform int   uColorMode;        // 0 = plain | 1 = iteration (escape time) | 2 = orbit trap (origin)
 uniform int       uNormalIters;  // PERF LEVER: >0 caps pertOrbit iters on the normal taps (0 = full uIters)
 uniform int       uBisectIters;  // PERF LEVER: >0 caps pertOrbit iters on the bisection midpoint evals (0 = full uIters)
@@ -1384,10 +1477,18 @@ float deF32(vec3 pos){
 #endif
         float rp1 = pow(r, uPower-1.0);
         dr = rp1*uPower*dr + 1.0;
+#if defined(USE_SCHED) && !defined(USE_BOX)
+        vec4 sr = schedRowAt(i);                     // PER-ITERATION PARAMETERS, THE BULB (grep)
+        float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + sr.z;
+        float phi = atan(z.y, z.x) * uPower + sr.w;
+        float zr = rp1*r;
+        z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + (uAddC > 0.5 ? c : schedKAt(i));
+#else
         float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + uPhase.x;
         float phi = atan(z.y, z.x) * uPower + uPhase.y;
         float zr = rp1*r;
         z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + c;
+#endif
 #ifdef USE_BURN
         r = rTop;                    // what is read after the loop is the iterate's own radius, as without the fold
 #endif
@@ -1409,9 +1510,16 @@ float paletteF32(vec3 pos){
         z *= mix(vec3(1.0), vec3(uBurnNeg), lessThan(z, vec3(0.0))); r = length(z);   // BURNING (grep), as deF32
 #endif
         float rp1 = pow(r, uPower-1.0);
+#if defined(USE_SCHED) && !defined(USE_BOX)
+        vec4 sr = schedRowAt(i);                     // PER-ITERATION PARAMETERS, THE BULB (grep)
+        float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + sr.z;
+        float phi = atan(z.y, z.x) * uPower + sr.w;
+        z = rp1*r*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + (uAddC > 0.5 ? c : schedKAt(i));
+#else
         float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + uPhase.x;
         float phi = atan(z.y, z.x) * uPower + uPhase.y;
         z = rp1*r*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + c;
+#endif
         r = length(z); it++;
         trap2 = min(trap2, r*r);
     }
@@ -2500,9 +2608,13 @@ let burnLine = 0;
    Keys PR (the picture: built at load, see above) and PTR (with the work counters). */
 const BOX_ITER_MAX = 500;                        // the box's ceiling (grep ITERATIONS AS A MARGIN); the kernel's loop runs 512 passes at most
 const RAY_ITER_REACH = 20.7, RAY_ITER_MAX = 400;   // ITERATIONS AS A MARGIN (grep): e^20.7 = 1e9, five decades beyond a 1/32-pixel hit level at 1080 rows
-const rKey = (t) => 'P' + (t ? 'T' : '') + 'R';
+/* PER-ITERATION PARAMETERS, THE BULB (grep): the ray program with USE_SCHED (keys PRS, PTRS; PRBS, PTRBS). bulbSchedFlag is
+   bulbDerive's: the keys are asked for at load, before boxOn and bulbSched exist, and it is false until a schedule. */
+let bulbSchedFlag = false;
+const bulbSchedOn = () => bulbSchedFlag && !boxOn();
+const rKey = (t) => 'P' + (t ? 'T' : '') + 'R' + (bulbSchedOn() ? 'S' : '');
 let rayDefs = '';                                 // extra #defines for the ray variant (experiments: api.setRayDefs)
-const rSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_JET' + rayDefs);
+const rSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_JET' + (bulbSchedOn() ? '\n#define USE_SCHED' : '') + rayDefs);
 function ensureRayVariant(t){
   const key = rKey(t);
   if (variants[key] === undefined && pendingBuild[key]) pendingBuild[key].finish();
@@ -2564,7 +2676,7 @@ function kickBoxVariantAsync(){                  // without blocking; a no-op on
    goes on, the plain single-precision picture (the baseline with the same fold) drawn until it is there; a probe
    or a study that asks first builds it at once, blocking. burnNeg is 1 without a fold (grep THE FACTOR IS THE WHOLE). */
 const burnActive = () => burnNeg !== 1;
-const bKey = (t) => 'P' + (t ? 'T' : '') + 'RB';
+const bKey = (t) => 'P' + (t ? 'T' : '') + 'RB' + (bulbSchedOn() ? 'S' : '');
 const bSrc = (t) => rSrc(t).replace('\n#define USE_JET', '\n#define USE_JET\n#define USE_BURN\n#define NO_CKPT');   // NO_CKPT: no checkpoint ring in it (grep WHOLE ORBITS UNDER BURNING)
 function ensureBurnVariant(t){
   const key = bKey(t);
@@ -2592,6 +2704,22 @@ function kickBurnVariantAsync(){                 // without blocking; a no-op on
     accumReset = true;
   });
 }
+/* PER-ITERATION PARAMETERS, THE BULB (grep): the scheduled ray program, built as Burning's is - in the background, the
+   f32 baseline drawn meanwhile (a probe that asks first builds it at once, through ensureRayVariant) */
+function kickBulbSchedVariantAsync(){
+  if (burnActive()) { kickBurnVariantAsync(); return; }   // bKey and bSrc follow the schedule
+  const key = rKey(false);
+  if (variants[key] !== undefined || pendingBuild[key]) return;
+  const t0 = performance.now();
+  pendingBuild[key] = mkProgAsync(rSrc(false), (p, err) => {
+    pendingBuild[key] = null;
+    if (!p) { variantErr[key] = err; variants[key] = null; return; }
+    const x = makeUD(p);
+    compileMs[key] = performance.now() - t0;
+    variants[key] = { p, x };
+    accumReset = true;
+  });
+}
 /* the counter variant of whatever is drawn (api.stats, api.marchProbe) */
 const countVariant = () => (boxOn() ? ensureBoxVariant(true) : burnActive() ? ensureBurnVariant(true) : ensureRayVariant(true));
 const countKey = () => (boxOn() ? xKey(true) : burnActive() ? bKey(true) : rKey(true));
@@ -2599,7 +2727,7 @@ const countKey = () => (boxOn() ? xKey(true) : burnActive() ? bKey(true) : rKey(
 const pictureKey = () => (boxOn() ? xKey(false) : burnActive() ? bKey(false) : rKey(false));
 /* the program a deep PICTURE of the active formula needs, or null while it is not built: what "the deep path
    is ready" means from here on (for the plain bulb it is deepProg, as ever) */
-const deepNow = () => (boxOn() || burnActive() ? (variants[pictureKey()] ? variants[pictureKey()].p : null) : deepProg);
+const deepNow = () => (boxOn() || burnActive() || bulbSchedOn() ? (variants[pictureKey()] ? variants[pictureKey()].p : null) : deepProg);
 
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad);
@@ -2665,7 +2793,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             origin:g('uOrigin'), refE:g('uRefE'), probe:g('uProbe'), probeT:g('uProbeT'),
             pixAng:g('uPixAng'), camF:g('uCamPosF'), spreadT:g('uSpreadT'),
             normalMode:g('uNormalMode'), bisectMax:g('uBisectMax'), jitter:g('uJitter'),
-            power:g('uPower'), powerI:g('uPowerI'), binomN:g('uBinomN'), binomN1:g('uBinomN1'), phase:g('uPhase'),
+            schedRow:g('uSchedRow'), slotRows:g('uSlotRows'), power:g('uPower'), powerI:g('uPowerI'), binomN:g('uBinomN'), binomN1:g('uBinomN1'), phase:g('uPhase'),
             colorMode:g('uColorMode'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
@@ -3060,6 +3188,7 @@ const loadTimer = setTimeout(() => {
 function deepCtx(){
   if (boxOn()) return ensureBoxVariant(false) || { p: null, x: ud };   // THE FORMULA SEAM: one variant, whatever else is asked (a frame gets here only once it is built)
   if (burnActive()) return ensureBurnVariant(false) || { p: null, x: ud };   // BURNING (grep): its own variant of the ray march's program, the same way
+  if (bulbSchedOn()) return ensureRayVariant(false) || { p: null, x: ud };   // PER-ITERATION PARAMETERS, THE BULB (grep): the ray program with USE_SCHED
   return { p: deepProg, x: ud };                 // null until the ray march's program is built (and for good if it could not be)
 }
 compileMs.S = performance.now() - shadeT0;      // pass S, built at load (blocking — it is small)
@@ -3103,7 +3232,7 @@ function makeHP(P) {
   const ipow = (a, n) => { let r = ONE, b = a, e = n; while (e > 0) { if (e & 1) r = mul(r, b); b = mul(b, b); e >>= 1; } return r; };
   /* the triplex power map for general integer n, with a constant phase rotation ψ on (nθ, nφ).
      cos/sin(nθ) come transcendental-free from Chebyshev; the phase is a rotation by constants. */
-  const P8 = (v) => {
+  const P8 = (v, pT = phaseTheta, pP = phasePhi) => {   // pT, pP: PER-ITERATION PARAMETERS, THE BULB (grep): the phase of this iteration
     const [x, y, z] = v;
     const x2 = mul(x, x), y2 = mul(y, y), z2 = mul(z, z);
     const r2 = x2 + y2 + z2, rho2 = x2 + y2;
@@ -3115,9 +3244,9 @@ function makeHP(P) {
     if (rho > SMALL) { cph = fdiv(x, rho); sph = fdiv(y, rho); } else { cph = ONE; sph = 0n; }
     let cNth = chebT(cth, nPower), sNth = mul(sth, chebU(cth, nPower - 1));
     let cNph = chebT(cph, nPower), sNph = mul(sph, chebU(cph, nPower - 1));
-    if (phaseTheta !== 0) { const cp = fromNum(Math.cos(phaseTheta)), sp = fromNum(Math.sin(phaseTheta));
+    if (pT !== 0) { const cp = fromNum(Math.cos(pT)), sp = fromNum(Math.sin(pT));
       const c2 = mul(cNth, cp) - mul(sNth, sp), s2 = mul(sNth, cp) + mul(cNth, sp); cNth = c2; sNth = s2; }
-    if (phasePhi !== 0) { const cp = fromNum(Math.cos(phasePhi)), sp = fromNum(Math.sin(phasePhi));
+    if (pP !== 0) { const cp = fromNum(Math.cos(pP)), sp = fromNum(Math.sin(pP));
       const c2 = mul(cNph, cp) - mul(sNph, sp), s2 = mul(sNph, cp) + mul(cNph, sp); cNph = c2; sNph = s2; }
     return [mul(mul(rN, sNth), cNph), mul(mul(rN, sNth), sNph), mul(rN, cNth)];
   };
@@ -3361,6 +3490,132 @@ let juliaOn = false;                             // Julia mode: c is the constan
 let juliaHP = [0n, 0n, 0n];                      // K, 256-bit fixed point, as the camera
 let juliaF = [0, 0, 0];                          // K as doubles: the f32 copies' uniform, the ball, the box's extent
 const cOfHP = (P) => (juliaOn ? juliaHP : P);    // what a fixed-point orbit of the point P adds each iteration
+/* ════════ PER-ITERATION PARAMETERS, THE BULB (2026-10-18; grep PER-ITERATION PARAMETERS for the box's) ════════
+   The schedule's table (boxSched, api.setBoxSchedule) also carries the bulb's fields: pt and pp, the phase's two
+   angles, and cx, cy, cz, the Julia constant's axes (Julia mode only). bulbDerive keeps an entry an iteration of
+   the overrides (null: the base's, read live - phaseTheta, phasePhi, juliaHP - so a moved slider needs no new
+   record); phT, phP, kHPat and kFat read the map of iteration i, the base past the table.
+   WHERE IT MATTERS. A pixel's delta step reads the phase only through its reference row (the reference's phased
+   angles), and in Julia mode the constant cancels in a delta: a scheduled reference orbit is all a pixel needs,
+   UNTIL IT REBASES. A rebase restarts the reference at index 0 while the pixel's own count goes on, and the bulb
+   cannot run direct after it as the box does (the plain rebase's grain: grep REBASE TO THE ORIGIN). So the
+   orbit carries SLOTS (bulbSlots): more reference orbits of the same start point, each with the maps of one
+   shift t on (f_t, f_t+1, ...), one for each distinct run of maps a rebase can land on, and a pixel that
+   rebases at iteration t goes on along the slot of t. Measured before it was built
+   (debug/scratch/bulb-sched/rebase-stats.mts, git-ignored): at depth nearly every rebase comes where the
+   camera's own orbit escapes (0.90 to 0.99 of its length; 2 to 66 % of the orbits near the surface), and one
+   orbit costs 0.3 to 1.6 ms to build. The slots are therefore built for the shifts from about there on, at most
+   BULB_SLOTS of them; a shift with none runs direct (the old grain, for that pixel only).
+   A slot serves every later shift whose maps up to the count agree with its own (sameRun), and starts at the
+   earliest such shift (64 below at most), so a repeating pattern needs one slot a period class.
+   ON THE GPU it is the ray program with USE_SCHED (keys PRS, PTRS; with Burning PRBS, PTRBS), built in the background
+   when a schedule is set (about 15 s); without one the program is the text it was (OROW, OLEN: the same tokens).
+   MEASURED (2026-10-18, RTX 5070 Ti; debug/scratch/bulb-sched/, git-ignored; no guard of its own):
+     - no schedule: smoke:deep-zoom-direct 52 PASS, every line's numbers as before;
+     - the CPU twin with its slots against the fixed-point direct orbit (cpu-proof.mts): every place but the known
+       limits of the test itself, worst 5e-5; slots cost 0.3 to 8 ms of CPU an orbit (1 to 16 slots);
+     - the GPU against the fixed-point direct orbit, the direct proof's off-centre procedure (gpu-proof.mts): a theta
+       switch, an alternating phi and a theta pattern at the proof's two flight views and the kept power-2 and
+       Slicing places, undived and dived to 1e-20 and 1e-35: 28 of the 39 grids with hits PASS.
+   @bug PRODUCTION: under a schedule some deep views draw part of the picture wrong. At flight view B dived to 1e-35
+     (4e-33), a theta pattern (0.4 on 2 of every 5 iterations) has 125 of 169 rays more than 1e-3 off the fixed-point
+     orbit, and a theta switch 91. The same view without a schedule has 0, and the CPU twin is 1e-2 off there too.
+     Covering every shift with a slot (64 of them) did not change it, so the cause is not a missing slot. Not
+     found; the next suspect is pixels that rebase again and again onto slot orbits that escape quickly (a slot
+     starts at the camera's point, which lies near the scheduled set's surface but not the shifted maps'). Repro:
+     ONLY_VIEW="flight view B" DIVES=1e-35 npx tsx debug/scratch/bulb-sched/gpu-proof.mts (git-ignored). */
+let bulbSched = null, bulbStamp = 0;
+function bulbDerive(){
+  bulbStamp++;
+  if (!boxSched) { bulbSched = null; bulbSchedFlag = false; return; }
+  const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
+  const out = boxSched.map(q => {
+    if (!q) return null;
+    const pt = num(q.pt), pp = num(q.pp), kx = num(q.cx), ky = num(q.cy), kz = num(q.cz);
+    if (pt === null && pp === null && kx === null && ky === null && kz === null) return null;
+    const e = { pt, pp, kOver: null, kOverF: null };
+    if (kx !== null || ky !== null || kz !== null) { e.kOverF = [kx, ky, kz]; e.kOver = e.kOverF.map(v => (v === null ? null : hp.fromNum(v))); }
+    return e;
+  });
+  let last = out.length - 1; while (last >= 0 && !out[last]) last--;
+  bulbSched = last >= 0 ? out.slice(0, last + 1) : null;
+  bulbSchedFlag = !!bulbSched;
+}
+const bsAt = (i) => (bulbSched && i < bulbSched.length ? bulbSched[i] : null);
+const phT = (i) => { const e = bsAt(i); return e && e.pt !== null ? e.pt : phaseTheta; };
+const phP = (i) => { const e = bsAt(i); return e && e.pp !== null ? e.pp : phasePhi; };
+const kHPat = (i) => { const e = bsAt(i); return e && e.kOver ? e.kOver.map((x, j) => (x === null ? juliaHP[j] : x)) : juliaHP; };
+const kFat = (i) => { const e = bsAt(i); return e && e.kOverF ? e.kOverF.map((x, j) => (x === null ? juliaF[j] : x)) : juliaF; };
+/* the largest |K| of the schedule (the escape ball and the line rule take it) */
+const kMaxAbs = () => { let m = Math.hypot(juliaF[0], juliaF[1], juliaF[2]); if (bulbSched) for (let i = 0; i < bulbSched.length; i++) { const k = kFat(i); m = Math.max(m, Math.hypot(k[0], k[1], k[2])); } return m; };
+const BULB_SLOTS = 16;                           // the most slot orbits an orbit carries (see WHERE IT MATTERS)
+/* the map of each iteration up to N, as text (vals[i]): a slot built for shift s serves a shift t >= s when the
+   maps from t to N are the maps from s on (sameRun) - a pixel that rebases at t runs no further than N */
+function bulbVals(N){
+  const v = new Array(N + 1);
+  for (let i = 0; i <= N; i++) { let x = phT(i) + ',' + phP(i); if (juliaOn) { const k = kFat(i); x += ',' + k[0] + ',' + k[1] + ',' + k[2]; } v[i] = x; }
+  return v;
+}
+const sameRun = (vals, s, t, N) => { for (let k = 0; t + k <= N; k++) if (vals[s + k] !== vals[t + k]) return false; return true; };
+/* the slot orbits (see WHERE IT MATTERS), and the texture: the orbits' rows stacked (slotRows each), then one row
+   an iteration (the slot a rebase at that iteration goes on along, its length, the two phases) and one of the
+   Julia constant. O.slots[0] is O itself; O.slotOf[t] = -1: no slot, that pixel runs direct. */
+function bulbSlots(O, CHP, lenMax){
+  const N = lenMax, slots = [O], slotOf = new Int16Array(N + 1).fill(-1), vals = bulbVals(N);
+  slotOf[0] = 0;
+  /* the shifts from about where the camera's orbit escapes, upward (most rebases), then downward to half its length
+     (below that a rebase is rare: such a pixel runs direct) */
+  const from = Math.max(1, Math.floor(0.75 * O.len) - 2);
+  const order = []; for (let t = from; t <= N; t++) order.push(t); for (let t = from - 1; t >= Math.max(1, Math.floor(0.5 * O.len)); t--) order.push(t);
+  for (const t of order) {
+    let sl = -1;
+    for (let j = 0; j < slots.length && sl < 0; j++) if (slots[j].shift <= t && sameRun(vals, slots[j].shift, t, N)) sl = j;
+    if (sl < 0 && slots.length < BULB_SLOTS + 1) {
+      /* the slot starts at the earliest shift (64 below at most) whose maps are these: one slot then serves a
+         repeating pattern's every period, and the shifts below the first pass too */
+      let t0 = t; for (let u = t - 1; u >= Math.max(1, t - 64); u--) if (sameRun(vals, u, t, N)) t0 = u;
+      const So = burnNeg !== 1 ? buildBurnOrbit(CHP, Math.max(2, N - t0 + 2), t0) : buildBulbOrbit(CHP, Math.max(2, N - t0 + 2), t0);
+      sl = slots.length; slots.push(So);
+    }
+    slotOf[t] = sl;
+  }
+  /* every shift left without one takes a slot that serves it, if any does (no more orbits are built for these) */
+  for (let t = 1; t <= N; t++) if (slotOf[t] < 0) for (let j = 0; j < slots.length; j++) if (slots[j].shift <= t && sameRun(vals, slots[j].shift, t, N)) { slotOf[t] = j; break; }
+  const RS = O.rows || 4, nS = slots.length, W = Math.max(N + 1, ...slots.map(o => o.len)), rows = RS * nS + 2, data = new Float32Array(W * rows * 4);
+  for (let sI = 0; sI < nS; sI++) {
+    const So = slots[sI], L = So.len;
+    for (let r = 0; r < RS; r++) for (let k = 0; k < L; k++) for (let j = 0; j < 4; j++) data[((sI * RS + r) * W + k) * 4 + j] = So.data[(r * L + k) * 4 + j];
+  }
+  const A = RS * nS;
+  for (let t = 0; t < W; t++) {
+    const sl = t <= N ? slotOf[t] : slotOf[N], Kf = juliaOn ? kFat(t) : [0, 0, 0];
+    data.set([sl, sl >= 0 ? slots[sl].len : 0, phT(t), phP(t)], (A * W + t) * 4);
+    data.set([Kf[0], Kf[1], Kf[2], 0], ((A + 1) * W + t) * 4);
+  }
+  O.slots = slots; O.slotOf = slotOf; O.slotRows = RS; O.schedRow = A; O.texW = W; O.rows = rows; O.data = data;
+  O.slotMiss = 0; for (let t = from; t <= N; t++) if (slotOf[t] < 0) O.slotMiss++;
+  return O;
+}
+/* where a CPU twin's rebase at iteration t goes on along: the slot's orbit, or null (run direct) */
+const bulbRebaseTo = (O, t) => (O.slotOf ? (t < O.slotOf.length && O.slotOf[t] >= 0 ? O.slots[O.slotOf[t]] : null) : O);
+/* the direct run of a CPU twin for a pixel with no slot: z itself from iteration it, with the map of each
+   iteration; dr is the pixel's whole derivative. jet / zs / sides: pertOrbitJetJS's, carried along (or null). */
+function bulbDirectJS(z, dr, it, maxIter, cPix, fixed, J){
+  let escaped = false;
+  for (; it < maxIter; ) {
+    let x = z[0], y = z[1], w = z[2];
+    if (burnNeg !== 1) { const sd = [x < 0 ? burnNeg : 1, y < 0 ? burnNeg : 1, w < 0 ? burnNeg : 1]; x *= sd[0]; y *= sd[1]; w *= sd[2]; if (J) { J.sides.push(sd); J.jet = [J.jet[0]*sd[0], J.jet[1]*sd[1], J.jet[2]*sd[2]]; } }
+    const r = Math.hypot(x, y, w);
+    if (J) { J.jet = pushJetJS([x, y, w], J.jet, J.v, it); J.zs.push([x, y, w]); J.its.push(it); }
+    const rp1 = Math.pow(r, nPower - 1); dr = nPower * rp1 * dr + 1;
+    const th = Math.acos(Math.max(-1, Math.min(1, r > 0 ? w / r : 1))) * nPower + phT(it), ph = Math.atan2(y, x) * nPower + phP(it), zr = rp1 * r;
+    const c = cPix(it);
+    z = [zr * Math.sin(th) * Math.cos(ph) + c[0], zr * Math.sin(th) * Math.sin(ph) + c[1], zr * Math.cos(th) + c[2]];
+    it++;
+    if (!fixed && z[0]*z[0] + z[1]*z[1] + z[2]*z[2] > 4) { escaped = true; break; }
+  }
+  return { z, dr, it, escaped };
+}
 /* K from three fixed-point decimal strings (as dz.getView's `cam`), or from three finite numbers (a host's number
    rows: each becomes the fixed-point number of that double, hp.fromNum). Returns true when it changed; anything
    else - a mix of the two, a number that is not finite, text that is not a whole number - is refused and
@@ -3757,11 +4012,16 @@ function hdrSplit(v) {
    in the kernel covers pixels needing more iterations. */
 function buildRefOrbit(CHP, lenMax) {
   if (boxOn()) return buildBoxOrbit(CHP, lenMax);            // THE FORMULA SEAM: the orbit carries its formula from here on (O.box)
-  if (burnNeg !== 1) return buildBurnOrbit(CHP, lenMax);   // BURNING (grep): the orbit of the folded map, with two rows more
+  const O = burnNeg !== 1 ? buildBurnOrbit(CHP, lenMax, 0) : buildBulbOrbit(CHP, lenMax, 0);   // BURNING (grep): the orbit of the folded map, with two rows more
+  return bulbSched ? bulbSlots(O, CHP, lenMax) : O;           // PER-ITERATION PARAMETERS, THE BULB (grep): and its slots
+}
+/* the bulb's reference orbit of the point CHP under the maps from iteration `shift` on (0: the camera's own) */
+function buildBulbOrbit(CHP, lenMax, shift) {
   const V = [CHP.slice()], cHP = cOfHP(CHP);     // JULIA MODE (grep): the orbit of the camera's point adds K
   const Vf = [CHP.map(hp.toNum)];
   for (let k = 0; k < lenMax - 1; k++) {
-    const nv = hp.addV(hp.P8(V[k]), cHP);
+    const i = shift + k;
+    const nv = hp.addV(hp.P8(V[k], phT(i), phP(i)), juliaOn && bulbSched ? kHPat(i) : cHP);
     V.push(nv);
     const vf = nv.map(hp.toNum);
     Vf.push(vf);
@@ -3774,7 +4034,7 @@ function buildRefOrbit(CHP, lenMax) {
   for (let k = 0; k < len; k++) {
     const v = Vf[k], R = Math.hypot(...v) || 1e-300;
     const th = Math.acos(Math.max(-1, Math.min(1, v[2] / R))), ph = Math.atan2(v[1], v[0]);
-    const a = nPower * th + phaseTheta, b = nPower * ph + phasePhi;     // phased base angles (ψ const)
+    const a = nPower * th + phT(shift + k), b = nPower * ph + phP(shift + k);     // phased base angles (the phase of iteration shift + k)
     const Rp = Math.pow(R, nPower - 1), Rn = Rp * R;
     const hRn = hdrSplit(Rn), hRp = hdrSplit(Rp), hDR = hdrSplit(DR);
     const put = (row, vals) => { for (let j = 0; j < 4; j++) data[(row * len + k) * 4 + j] = vals[j]; };
@@ -3785,7 +4045,7 @@ function buildRefOrbit(CHP, lenMax) {
     Rk.push(R); DRk.push(DR);
     DR = nPower * Rp * DR + 1;
   }
-  return { data, len, Vf, Rk, DRk, julia: juliaOn };
+  return { data, len, Vf, Rk, DRk, julia: juliaOn, shift };
 }
 /* BURNING (grep): the bulb's reference orbit under the fold, and its six rows (grep burnFoldD for how the shader
    reads the last two):
@@ -3795,11 +4055,12 @@ function buildRefOrbit(CHP, lenMax) {
      row 5     Zz so, and |A|
    Vf, Rk: the signed iterate and its radius, as on a plain orbit; Af, RAk: the folded point and its radius -
    what a step of the CPU kernel takes the power of. The plain bulb's builder above is not touched by this. */
-function buildBurnOrbit(CHP, lenMax) {
+function buildBurnOrbit(CHP, lenMax, shift = 0) {
   const V = [CHP.slice()], cHP = cOfHP(CHP);
   const Vf = [CHP.map(hp.toNum)];
   for (let k = 0; k < lenMax - 1; k++) {
-    const nv = hp.addV(hp.P8(burnHP(V[k])), cHP);
+    const i = shift + k;                         // PER-ITERATION PARAMETERS, THE BULB (grep)
+    const nv = hp.addV(hp.P8(burnHP(V[k]), phT(i), phP(i)), juliaOn && bulbSched ? kHPat(i) : cHP);
     V.push(nv);
     const vf = nv.map(hp.toNum);
     Vf.push(vf);
@@ -3812,7 +4073,7 @@ function buildBurnOrbit(CHP, lenMax) {
   for (let k = 0; k < len; k++) {
     const z = Vf[k], v = burnHP(V[k]).map(hp.toNum), R = Math.hypot(...v) || 1e-300;
     const th = Math.acos(Math.max(-1, Math.min(1, v[2] / R))), ph = Math.atan2(v[1], v[0]);
-    const a = nPower * th + phaseTheta, b = nPower * ph + phasePhi;
+    const a = nPower * th + phT(shift + k), b = nPower * ph + phP(shift + k);
     const Rp = Math.pow(R, nPower - 1), Rn = Rp * R;
     const hRn = hdrSplit(Rn), hRp = hdrSplit(Rp), hDR = hdrSplit(DR), hx = hdrSplit(z[0]), hy = hdrSplit(z[1]), hz = hdrSplit(z[2]);
     const put = (row, vals) => { for (let j = 0; j < 4; j++) data[(row * len + k) * 4 + j] = vals[j]; };
@@ -3825,7 +4086,7 @@ function buildBurnOrbit(CHP, lenMax) {
     Rk.push(Math.hypot(...z) || 1e-300); DRk.push(DR); Af.push(v); RAk.push(R);
     DR = nPower * Rp * DR + 1;
   }
-  return { data, len, rows, Vf, Rk, DRk, Af, RAk, julia: juliaOn, burn: burnNeg };
+  return { data, len, rows, Vf, Rk, DRk, Af, RAk, julia: juliaOn, burn: burnNeg, shift };
 }
 /* ════════ uniforms set before each deep draw, and the orbit texture ════════
    The skip table (BLA: its CPU build, its texture, its mode and its 'auto' rule) sat here until 2026-10-11.
@@ -3915,7 +4176,7 @@ const refFar = (O) => !!O && !O.box && O.len > 1 && O.Rk[1] > REF_FAR;
 /* the radius of the ball that holds everything the bulb's programs draw, while the camera stands outside it; else 0 */
 function holdBall(){
   if (boxOn()) return 0;
-  const C = juliaOn ? Math.hypot(juliaF[0], juliaF[1], juliaF[2]) : -1; let rho = 2;
+  const C = juliaOn ? kMaxAbs() : -1; let rho = 2;   // kMaxAbs: PER-ITERATION PARAMETERS, THE BULB (grep): the largest constant of a schedule
   const f = Math.abs(burnNeg);                   // BURNING (grep): a fold shortens a point to no less than this share of itself (1 without one, and at mix 1)
   for (let i = 0; i < 200; i++) rho = Math.pow(2 + (C < 0 ? rho : C), 1 / nPower) / f;
   if (cam.iters < 2) rho = Math.max(rho, 2);     // the far field tests z1 only from its second pass on
@@ -3929,6 +4190,7 @@ function setPowerUniforms(x){
   gl.uniform1fv(x.binomN, binomN);
   gl.uniform1fv(x.binomN1, binomN1);
   gl.uniform2f(x.phase, phaseTheta, phasePhi);
+  if (x.schedRow) { gl.uniform1i(x.schedRow, curOrbit && curOrbit.schedRow ? curOrbit.schedRow : 0); gl.uniform1i(x.slotRows, curOrbit && curOrbit.slotRows ? curOrbit.slotRows : 4); }   // PER-ITERATION PARAMETERS, THE BULB (grep)
   gl.uniform1i(x.colorMode, colorMode);          // pass G picks the palette PARAMETER; palette, light and falloff are pass S's (drawDeep)
   gl.uniform2f(x.origin, 0, 0);
   gl.uniform1i(x.guide, 0); gl.uniform1i(x.guideTex, 3);   // not a guided sample unless drawDeep / bindGuide says so
@@ -3944,7 +4206,7 @@ function setPowerUniforms(x){
   gl.uniform1i(x.rayUse, burnNeg !== 1 ? rayUse & ~4 : rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops. BURNING (grep) runs whole orbits: bit 4 is not handed on
   gl.uniform1f(x.rayHit, detailNow() / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * detailNow());   // both as multiples of uPixAng, which is a display pixel ÷ detail
   gl.uniform1f(x.rayFloor, rayFloorDiv > 0 ? detailNow() / rayFloorDiv : 0);
-  { const cl = juliaOn ? Math.hypot(juliaF[0], juliaF[1], juliaF[2]) : Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]); let rho = 2;       // THE LINE AGAINST THE BALL: rho^n - |c| = rho, from above (JULIA MODE: |c| is |K|, exactly)
+  { const cl = juliaOn ? kMaxAbs() : Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]); let rho = 2;       // THE LINE AGAINST THE BALL: rho^n - |c| = rho, from above (JULIA MODE: |c| is |K|, exactly)
     for (let i = 0; i < 80; i++) rho = Math.pow(rho + cl, 1 / nPower);
     gl.uniform1f(x.rayLine, burnNeg !== 1 ? burnLine : rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }   // BURNING (grep): the line rule is held off (burnLine is 0 but for a measurement)
   gl.uniform1i(x.maxSteps, march.maxSteps);
@@ -4049,7 +4311,7 @@ dzListen(dzDropTarget, 'drop', e => {
 const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], len3=a=>Math.hypot(a[0],a[1],a[2]), ZERO3=[0,0,0];
 const add3=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]], sub3=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], scl3=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
 const powm1N = (u,n) => { const c=binom(n); let p=c[n-1]; for(let k=n-2;k>=0;k--) p=p*u+c[k]; return u*p; };  // (1+u)^n−1
-function stableDeltaJS(V,d){                       // §3, residual forms (precision-ladder)
+function stableDeltaJS(V,d,i=0){                   // §3, residual forms (precision-ladder); i: the iteration, for its phase (PER-ITERATION PARAMETERS, THE BULB)
   const NP=nPower, R=len3(V); if(R<1e-300) return [0,0,0];
   const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,0)), Dr=q/(r2+R);
   const Rn=Math.pow(R,NP), dRn=Rn*Math.expm1(NP*Math.log1p(Dr/R));
@@ -4061,7 +4323,7 @@ function stableDeltaJS(V,d){                       // §3, residual forms (preci
   const rhoP=Math.sqrt(Math.max(rho*rho+qr2,0));
   const drho=qr2/(rhoP+rho);
   const Dth=Math.atan2(drho*V[2]-d[2]*rho, rho*rhoP+V[2]*(V[2]+d[2]));
-  const a=NP*th0+phaseTheta,b=NP*ph0+phasePhi,Da=NP*Dth,Db=NP*Dphi;   // phased base; Δ phase-invariant
+  const a=NP*th0+phT(i),b=NP*ph0+phP(i),Da=NP*Dth,Db=NP*Dphi;   // phased base; Δ phase-invariant
   const ca=Math.cos(a),sa=Math.sin(a),cb=Math.cos(b),sb=Math.sin(b);
   const cA=Math.cos(Da),sA=Math.sin(Da),cB=Math.cos(Db),sB=Math.sin(Db);
   const cAm=-sA*sA/(1+cA), cBm=-sB*sB/(1+cB);
@@ -4142,25 +4404,36 @@ function boxOrbitJS(O, dc, maxIter, fixed, jump){
 function pertOrbitJS(O, dc, maxIter, fixed, jump){     // fixed: run exactly maxIter iterations, no escape test (neighbours that must stop together); jump: THE NAVIGATION'S JUMP (grep)
   if (O.box) return boxOrbitJS(O, dc, maxIter, fixed, jump);
   let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0;
+  let Oc=O;                                      // PER-ITERATION PARAMETERS, THE BULB (grep): the orbit in use (a slot after a rebase)
   const tab = jump ? navJump(O) : null, k0 = navJumpAt(tab, len3(dc), maxIter);
   if (k0 > 0) { d = mv3(tab.M[k0], dc); Ddr = dot3(tab.G[k0], dc); m = it = k0; }
   for(let k=k0;k<maxIter;k++){
-    let V=O.Vf[m], R=O.Rk[m];
+    let V=Oc.Vf[m], R=Oc.Rk[m];
     if(O.burn!==undefined){                      // BURNING (grep): the fold's own delta by cases, then the power's at the folded reference
-      d=[burnDeltaJS(V[0],d[0],O.burn), burnDeltaJS(V[1],d[1],O.burn), burnDeltaJS(V[2],d[2],O.burn)]; V=O.Af[m]; R=O.RAk[m];
+      d=[burnDeltaJS(V[0],d[0],O.burn), burnDeltaJS(V[1],d[1],O.burn), burnDeltaJS(V[2],d[2],O.burn)]; V=Oc.Af[m]; R=Oc.RAk[m];
     }
     const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,0)), Dr=q/(r2+R);
     const u=Dr/R, Rp=Math.pow(R,nPower-1);
     const Dp=Rp*powm1N(u,nPower-1);
-    Ddr=nPower*(Dp*O.DRk[m]+(Rp+Dp)*Ddr);
-    const sd=stableDeltaJS(V,d);
+    Ddr=nPower*(Dp*Oc.DRk[m]+(Rp+Dp)*Ddr);
+    const sd=stableDeltaJS(V,d,(Oc.shift||0)+m);
     d=O.julia?sd:add3(sd,dc);                    // JULIA MODE (grep): the offset starts the delta and is not added again
     m++;
-    const z=add3(O.Vf[m],d);
+    const z=add3(Oc.Vf[m],d);
     it=k+1;
     if(!fixed && dot3(z,z)>4){ escaped=true; break; }
-    if(dot3(z,z)<dot3(d,d) || m>=O.len-1){ d=sub3(z,O.Vf[0]); Ddr=(O.DRk[m]-1)+Ddr; m=0; }
+    if(dot3(z,z)<dot3(d,d) || m>=Oc.len-1){
+      const T = bulbRebaseTo(O, it);
+      if (T) { d=sub3(z,T.Vf[0]); Ddr=(Oc.DRk[m]-1)+Ddr; Oc=T; m=0; }
+      else {                                     // no slot for this shift: the direct run
+        const cP = O.julia ? kFat : (() => { const c0 = add3(O.Vf[0], dc); return () => c0; })();
+        const o = bulbDirectJS(z, Oc.DRk[m] + Ddr, it, maxIter, cP, fixed, null);
+        const rr = len3(o.z);
+        return { de: 0.5*rr*Math.log(Math.max(rr,1e-300))/o.dr, escaped: o.escaped, r: rr, it: o.it };
+      }
+    }
   }
+  O = Oc;
   const V=O.Vf[m], R=O.Rk[m];
   const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,1e-300));
   return { de: 0.5*r2*Math.log(Math.max(r2,1e-300))/(O.DRk[m]+Ddr), escaped, r: r2, it };
@@ -4194,7 +4467,7 @@ function navJumpAt(tab, c, maxIter){
 function navJump(O){
   if (O.box) return O.jump || null;
   if (O.burn !== undefined) return null;
-  const key = nPower + ',' + phaseTheta + ',' + phasePhi;
+  const key = nPower + ',' + phaseTheta + ',' + phasePhi + ',' + bulbStamp;   // bulbStamp: PER-ITERATION PARAMETERS, THE BULB (grep)
   if (O.jump && O.jump.key === key) return O.jump;
   const N = nPower, len = O.len, addC = O.julia ? 0 : 1;
   let ke = len - 2; for (let k = 0; k < len; k++) if (O.Rk[k] > 2) { ke = k; break; }
@@ -4204,7 +4477,7 @@ function navJump(O){
     tab.M.push(M); tab.G.push(G); tab.R[k] = Rmin;
     const V = O.Vf[k], R = O.Rk[k], rho = Math.hypot(V[0], V[1]), cth = V[2] / R, sth = rho / R;
     const cp = rho > 1e-300 ? V[0] / rho : 1, sp = rho > 1e-300 ? V[1] / rho : 0;
-    const a = N * Math.acos(Math.max(-1, Math.min(1, cth))) + phaseTheta, b = N * Math.atan2(V[1], V[0]) + phasePhi;
+    const a = N * Math.acos(Math.max(-1, Math.min(1, cth))) + phT(k), b = N * Math.atan2(V[1], V[0]) + phP(k);
     const sa = Math.sin(a), ca = Math.cos(a), sb = Math.sin(b), cb = Math.cos(b);
     let s = 1; if (N > 1) { let u0 = 1, u1 = 2 * cth; for (let j = 2; j < N; j++) { const u2 = 2 * cth * u1 - u0; u0 = u1; u1 = u2; } s = u1; }   // sin Nθ / sin θ = U_(N-1)(cos θ)
     const rh = [sth*cp, sth*sp, cth], th = [cth*cp, cth*sp, -sth], ph = [-sp, cp, 0], rhp = [sa*cb, sa*sb, ca], thp = [ca*cb, ca*sb, -sa], php = [-sb, cb, 0];
@@ -4284,12 +4557,12 @@ const SENSE_ANGLE = 0.0735;                      // radians (4.2 degrees): how f
 const SENSE_FAR = 8;                             // a ray this far from the camera has left the bulb: "open"
 const senseFar = () => (boxOn() ? boxFar() : SENSE_FAR);   // the box is larger, and its size follows its scale (grep THE FORMULA SEAM)
 /* the triplex power's derivative at the full point z, applied to the direction j, plus the + c term's own (v) */
-function pushJetJS(z, j, v){
+function pushJetJS(z, j, v, i=0){
   const NP=nPower, x=z[0], y=z[1], zz=z[2];
   const rho2=Math.max(x*x+y*y,1e-300), rho=Math.sqrt(rho2), r2=rho2+zz*zz, r=Math.sqrt(r2);
   const th=Math.acos(Math.max(-1,Math.min(1,zz/r))), ph=Math.atan2(y,x);
   const rn1=Math.pow(r,NP-1), rn=rn1*r;
-  const a=NP*th+phaseTheta, b=NP*ph+phasePhi, sa=Math.sin(a), ca=Math.cos(a), sb=Math.sin(b), cb=Math.cos(b);
+  const a=NP*th+phT(i), b=NP*ph+phP(i), sa=Math.sin(a), ca=Math.cos(a), sb=Math.sin(b), cb=Math.cos(b);
   const rd=(x*j[0]+y*j[1]+zz*j[2])/r, thd=(zz*(x*j[0]+y*j[1])/rho-rho*j[2])/r2, phd=(x*j[1]-y*j[0])/rho2;
   const A=NP*rn1*rd, B=rn*NP*thd, C=rn*NP*phd*sa;
   return [A*sa*cb+B*ca*cb-C*sb+v[0], A*sa*sb+B*ca*sb+C*cb+v[1], A*ca-B*sa+v[2]];
@@ -4321,11 +4594,11 @@ function pushJetJS(z, j, v){
    to 1.9); its variant took 19 s to build, 36 s with BLA; and gde alone is NOT safe to step by - it spikes
    where the gradient vanishes, which is why the step was min(de, gde). */
 /* the TRANSPOSE of that derivative at z, applied to w: one step back of the gradient of |z_k| (TRUE-GRADIENT ESTIMATE) */
-function pullGradJS(z, w){
+function pullGradJS(z, w, i=0){
   const NP=nPower, x=z[0], y=z[1], zz=z[2];
   const rho2=Math.max(x*x+y*y,1e-300), rho=Math.sqrt(rho2), r2=rho2+zz*zz, r=Math.sqrt(r2);
   const th=Math.acos(Math.max(-1,Math.min(1,zz/r))), ph=Math.atan2(y,x);
-  const a=NP*th+phaseTheta, b=NP*ph+phasePhi, sa=Math.sin(a), ca=Math.cos(a), sb=Math.sin(b), cb=Math.cos(b);
+  const a=NP*th+phT(i), b=NP*ph+phP(i), sa=Math.sin(a), ca=Math.cos(a), sb=Math.sin(b), cb=Math.cos(b);
   const wr=sa*cb*w[0]+sa*sb*w[1]+ca*w[2], wt=ca*cb*w[0]+ca*sb*w[1]-sa*w[2], wp=-sb*w[0]+cb*w[1];
   const k=NP*Math.pow(r,NP-1), kp=k*wp*sa*r/rho2;
   return [k*(wr*x/r+wt*zz*x/(rho*r))-kp*y, k*(wr*y/r+wt*zz*y/(rho*r))+kp*x, k*(wr*zz/r-wt*rho/r)];
@@ -4343,34 +4616,46 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed, jump){
     const o = boxOrbitJS(O, dc, maxIter, fixed, jump);
     return { de: o.de, escaped: o.escaped, r: o.r, it: o.it, z: o.z, jet: [0,0,0], E: o.de, grad: [0,0,0], G: o.de, ray: o.de };
   }
-  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(); const zs=[], sides=[];
+  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(); const zs=[], sides=[], its=[];
+  let Oc=O, dirDr=0, direct=false;              // PER-ITERATION PARAMETERS, THE BULB (grep): the orbit in use; the direct run's whole dr
   const tab = jump ? navJump(O) : null, k0 = navJumpAt(tab, len3(dc), maxIter);
   if (k0 > 0) { const M = tab.M[k0]; d = mv3(M, dc); Ddr = dot3(tab.G[k0], dc); jet = mv3(M, rd); m = it = k0; }   // THE NAVIGATION'S JUMP (grep): jet_k = M_k rd there
   let z=add3(O.Vf[m],d);
   for(let k=k0;k<maxIter;k++){
-    let V=O.Vf[m], R=O.Rk[m];
+    let V=Oc.Vf[m], R=Oc.Rk[m];
     if(O.burn!==undefined){                      // BURNING (grep): as pertOrbitJS; the jet and the point it is pushed at take the pixel's own side
       const s=burnSideJS(z,O.burn); sides.push(s);
       z=[z[0]*s[0],z[1]*s[1],z[2]*s[2]]; jet=[jet[0]*s[0],jet[1]*s[1],jet[2]*s[2]];
-      d=[burnDeltaJS(V[0],d[0],O.burn), burnDeltaJS(V[1],d[1],O.burn), burnDeltaJS(V[2],d[2],O.burn)]; V=O.Af[m]; R=O.RAk[m];
+      d=[burnDeltaJS(V[0],d[0],O.burn), burnDeltaJS(V[1],d[1],O.burn), burnDeltaJS(V[2],d[2],O.burn)]; V=Oc.Af[m]; R=Oc.RAk[m];
     }
     const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,0)), Dr=q/(r2+R);
     const u=Dr/R, Rp=Math.pow(R,nPower-1);
     const Dp=Rp*powm1N(u,nPower-1);
-    Ddr=nPower*(Dp*O.DRk[m]+(Rp+Dp)*Ddr);
-    jet=pushJetJS(z,jet,O.julia?ZERO3:rd);       // JULIA MODE (grep): no "+ v", the true derivative of the start point
-    zs.push(z);
-    d=O.julia?stableDeltaJS(V,d):add3(stableDeltaJS(V,d),dc);
+    Ddr=nPower*(Dp*Oc.DRk[m]+(Rp+Dp)*Ddr);
+    jet=pushJetJS(z,jet,O.julia?ZERO3:rd,it);    // JULIA MODE (grep): no "+ v", the true derivative of the start point
+    zs.push(z); its.push(it);
+    const sd=stableDeltaJS(V,d,(Oc.shift||0)+m);
+    d=O.julia?sd:add3(sd,dc);
     m++;
-    z=add3(O.Vf[m],d);
+    z=add3(Oc.Vf[m],d);
     it=k+1;
     const z2=dot3(z,z);
     if(!fixed && z2>4){ escaped=true; break; }
-    if(z2<dot3(d,d) || m>=O.len-1){ d=sub3(z,O.Vf[0]); Ddr=(O.DRk[m]-1)+Ddr; m=0; }
+    if(z2<dot3(d,d) || m>=Oc.len-1){
+      const T = bulbRebaseTo(O, it);
+      if (T) { d=sub3(z,T.Vf[0]); Ddr=(Oc.DRk[m]-1)+Ddr; Oc=T; m=0; }
+      else {                                     // no slot for this shift: the direct run, the jet and the iterates with it
+        const cP = O.julia ? kFat : (() => { const c0 = add3(O.Vf[0], dc); return () => c0; })();
+        const J = { jet, v: O.julia ? ZERO3 : rd, zs, sides, its };
+        const o = bulbDirectJS(z, Oc.DRk[m] + Ddr, it, maxIter, cP, fixed, J);
+        z = o.z; jet = J.jet; it = o.it; escaped = o.escaped; dirDr = o.dr; direct = true;
+        break;
+      }
+    }
   }
-  const r=len3(z), g=0.5*r*Math.log(Math.max(r,1e-300)), speed=len3(jet), de=g/(O.DRk[m]+Ddr);
+  const r=len3(z), g=0.5*r*Math.log(Math.max(r,1e-300)), speed=len3(jet), de=g/(direct ? dirDr : Oc.DRk[m]+Ddr);
   let w=r>0 ? [z[0]/r,z[1]/r,z[2]/r] : [0,0,0], grad=[0,0,0];
-  for(let k=zs.length-1;k>=0;k--){ if(!O.julia) grad=add3(grad,w); w=pullGradJS(zs[k],w);       // z_(k+1) = f(z_k) + c, z_0 = c (JULIA MODE: c is no part of the point, so only the pull back to z_0 counts)
+  for(let k=zs.length-1;k>=0;k--){ if(!O.julia) grad=add3(grad,w); w=pullGradJS(zs[k],w,its[k]);       // z_(k+1) = f(z_k) + c, z_0 = c (JULIA MODE: c is no part of the point, so only the pull back to z_0 counts)
     if(O.burn!==undefined){ const s=sides[k]; w=[w[0]*s[0],w[1]*s[1],w[2]*s[2]]; } }             // BURNING (grep): and back through the fold
   grad=add3(grad, k0 > 0 ? mtv3(tab.M[k0], w) : w);   // THE NAVIGATION'S JUMP: back over the jumped iterates in one step, M_k0ᵀ w (its identity term is the plain line's w)
   const slope=len3(grad), E=speed>0 ? g/speed : de, G=slope>0 ? g/slope : de;
@@ -4809,11 +5094,11 @@ function deCPU(px,py,pz, power, N){
         dr=rp1*power*dr+1;
         let theta=Math.acos(Math.max(-1,Math.min(1,zz/rb)));
         let phi=Math.atan2(zy,zx);
-        theta=theta*power+phaseTheta; phi=phi*power+phasePhi;
-        const zr=rp1*rb;
-        zx=zr*Math.sin(theta)*Math.cos(phi)+cx;
-        zy=zr*Math.sin(phi)*Math.sin(theta)+cy;
-        zz=zr*Math.cos(theta)+cz;
+        theta=theta*power+phT(i); phi=phi*power+phP(i);   // PER-ITERATION PARAMETERS, THE BULB (grep)
+        const zr=rp1*rb, K=juliaOn&&bulbSched?kFat(i):null;
+        zx=zr*Math.sin(theta)*Math.cos(phi)+(K?K[0]:cx);
+        zy=zr*Math.sin(phi)*Math.sin(theta)+(K?K[1]:cy);
+        zz=zr*Math.cos(theta)+(K?K[2]:cz);
     }
     return 0.5*Math.log(Math.max(r,1e-8))*r/Math.max(dr,1e-20);
 }
@@ -4831,12 +5116,13 @@ function deCPUesc(px,py,pz, N){
         if(burnNeg!==1){ if(zx<0) zx*=burnNeg; if(zy<0) zy*=burnNeg; if(zz<0) zz*=burnNeg; rb=Math.hypot(zx,zy,zz); }   // BURNING (grep): the fold, and the folded point's radius
         const rp1=Math.pow(rb,nPower-1);
         dr=rp1*nPower*dr+1;
-        let theta=Math.acos(Math.max(-1,Math.min(1,zz/rb)))*nPower+phaseTheta;
-        let phi=Math.atan2(zy,zx)*nPower+phasePhi;
+        let theta=Math.acos(Math.max(-1,Math.min(1,zz/rb)))*nPower+phT(i);   // PER-ITERATION PARAMETERS, THE BULB (grep)
+        let phi=Math.atan2(zy,zx)*nPower+phP(i);
+        const K=juliaOn&&bulbSched?kFat(i):null;
         const zr=rp1*rb;
-        zx=zr*Math.sin(theta)*Math.cos(phi)+cx;
-        zy=zr*Math.sin(phi)*Math.sin(theta)+cy;
-        zz=zr*Math.cos(theta)+cz;
+        zx=zr*Math.sin(theta)*Math.cos(phi)+(K?K[0]:cx);
+        zy=zr*Math.sin(phi)*Math.sin(theta)+(K?K[1]:cy);
+        zz=zr*Math.cos(theta)+(K?K[2]:cz);
     }
     if(!escaped){ r=Math.hypot(zx,zy,zz); escaped = r>2; }
     return { de: 0.5*Math.log(Math.max(r,1e-300))*r/dr, escaped, iters: it };
@@ -4909,7 +5195,7 @@ function hpDirectDE(posFp, maxIter){
     const vb = burnNeg !== 1 ? burnHP(v) : v;            // BURNING (grep): the fold; the derivative takes the folded point's radius
     const r = fsqrt(burnNeg !== 1 ? mul(vb[0],vb[0]) + mul(vb[1],vb[1]) + mul(vb[2],vb[2]) : r2), rNm1 = ipow(r, nPower - 1);     // r^(n−1); dr = n·r^(n−1)·dr + 1
     dr = Nbig * mul(rNm1, dr) + ONE;
-    v = hp.addV(hp.P8(vb), cOfHP(posFp));
+    v = hp.addV(hp.P8(vb, phT(i), phP(i)), juliaOn && bulbSched ? kHPat(i) : cOfHP(posFp));   // PER-ITERATION PARAMETERS, THE BULB (grep)
   }
   if (!escaped) {
     r2 = mul(v[0],v[0]) + mul(v[1],v[1]) + mul(v[2],v[2]);
@@ -5010,7 +5296,7 @@ function hpDirectTrap(posFp, maxIter){
   const Pb = BigInt(hp.P), SC = Number(hp.SCALE), mul = (a,b) => (a*b) >> Pb;
   let v = posFp.slice(), trap2 = Infinity, it = 0, escaped = false;
   for (let i = 0; i < maxIter; i++) {
-    v = hp.addV(hp.P8(burnNeg !== 1 ? burnHP(v) : v), cOfHP(posFp)); it++;   // BURNING (grep): the fold
+    v = hp.addV(hp.P8(burnNeg !== 1 ? burnHP(v) : v, phT(i), phP(i)), juliaOn && bulbSched ? kHPat(i) : cOfHP(posFp)); it++;   // BURNING (grep): the fold; PER-ITERATION PARAMETERS, THE BULB (grep)
     const r2 = Number(mul(v[0],v[0]) + mul(v[1],v[1]) + mul(v[2],v[2])) / SC;
     if (r2 < trap2) trap2 = r2;
     if (r2 > 4) { escaped = true; break; }
@@ -5416,6 +5702,7 @@ function setFormulaNow(kind, params){
     cam.iters = Math.max(cam.iters, Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(boxP.scale))) + 12)); }   // (boxP.scale: the scale of whichever of the two is selected)
   else cam.iters = Math.min(cam.iters, itersMax());
   if (burnActive()) kickBurnVariantAsync();        // BURNING (grep): its variant builds in the background from the first time it is on
+  if (bulbSchedOn()) kickBulbSchedVariantAsync();  // PER-ITERATION PARAMETERS, THE BULB (grep)
   orbitDirty = true; accumReset = true; snapDist = true;
 }
 api.setFormula = setFormulaNow;
@@ -5423,13 +5710,18 @@ api.setFormula = setFormulaNow;
    fold, fixedR; the rest from the base). Iterations past the array take the base. The Mandelbox only. */
 api.setBoxSchedule = (arr)=>{
   boxSched = Array.isArray(arr) && arr.length ? arr.slice(0, BOX_ITER_MAX).map(q => (q && typeof q === 'object' ? { ...q } : null)) : null;
-  boxP = boxDerive(); formulaStamp++;
+  boxP = boxDerive(); bulbDerive(); formulaStamp++;   // bulbDerive: PER-ITERATION PARAMETERS, THE BULB (grep)
   if (boxOn()) kickBoxVariantAsync();            // the schedule's program (USE_SCHED) builds in the background; the f32 baseline draws meanwhile
+  else if (bulbSchedOn()) kickBulbSchedVariantAsync();   // and the bulb's (PER-ITERATION PARAMETERS, THE BULB)
   orbitDirty = true; accumReset = true; snapDist = true;
 };
 api.boxSchedule = ()=>(boxSched ? boxSched.map(q => (q ? { ...q } : null)) : null);
+/* PER-ITERATION PARAMETERS, THE BULB (grep): the orbit's slots as they stand - how many, and the shifts from where most
+   rebases come that have none (a pixel rebasing there runs direct, in plain f32); null without a schedule */
+api.bulbSlots = ()=>(curOrbit && curOrbit.slots ? { slots: curOrbit.slots.length - 1, shifts: curOrbit.slots.map(o => o.shift), miss: curOrbit.slotMiss, len: curOrbit.len,
+  uncovered: Array.from(curOrbit.slotOf).map((v, t) => (v < 0 ? t : -1)).filter(t => t > 0) } : null);
 api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), kaliScale: kali.scale, kaliMinRad2: kali.minRad2, kaliTrans: kali.trans.slice(), kaliRot: kali.rot, julia: juliaOn, c: juliaHP.map(String), cNum: juliaF.slice(), burning: burnOn, burnMix });   // cNum: the constant as doubles, for a host's number rows; burning, burnMix: BURNING (grep), the bulb's, kept while the box is drawn
-api.formulaState = ()=>{ if (!boxOn() && !burnActive()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
+api.formulaState = ()=>{ if (!boxOn() && !burnActive() && !bulbSchedOn()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
   const v = variants[pictureKey()]; return v ? 'on' : v === null ? 'failed' : 'building'; };   // the Mandelbox's variant, or BURNING's (grep)
 // Shell setters (not in the historical page, added 2026-10-08): what the page's `iters` and
 // `auto-iters` control rows and its [ ] I keys do, for a host that owns those values.
@@ -5886,6 +6178,7 @@ function frame(now){
 
   if (boxOn() && !deepNow()) kickBoxVariantAsync();            // THE FORMULA SEAM: the box's variant builds in the background; its f32 baseline is drawn meanwhile
   if (!boxOn() && burnActive() && !deepNow()) kickBurnVariantAsync();   // BURNING (grep): and so does its variant
+  if (bulbSchedOn() && !deepNow()) kickBulbSchedVariantAsync();          // PER-ITERATION PARAMETERS, THE BULB (grep): and the scheduled one
   deepActive = deepNow() && (modeOverride==='deep' || (modeOverride==='auto' && smoothedDist < 1e-4));
 
   /* auto iteration budget: the n-iter surface needs ~1.35/decade to resolve at depth.

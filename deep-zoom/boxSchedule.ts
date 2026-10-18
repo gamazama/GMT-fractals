@@ -3,8 +3,9 @@
  * chosen iterations, and what they compile to for the renderer. Pure: no store, no React, no renderer.
  *
  * WHAT IT IS
- *   A schedule changes Scale, Min Radius, Folding Limit, Fixed Radius, the Pre-Rotation's three angles or (in Julia
- *   mode) the Julia constant's three coordinates at some iterations of the orbit and leaves
+ *   A schedule changes Scale, Min Radius, Folding Limit, Fixed Radius, the Pre-Rotation's three angles, the
+ *   Mandelbulb's two phase angles or (in Julia mode, either formula) the Julia constant's three coordinates at some
+ *   iterations of the orbit and leaves
  *   the rest at the slider's value (the BASE). The iteration index is roughly depth: at the box's 2.6 to 3.1
  *   iterations a decade, a change at iteration k reshapes the picture from about 10^-(k/3) down and leaves
  *   everything shallower as it was. So a schedule makes a dive change its look as it goes.
@@ -20,7 +21,7 @@
  * THE SEAM
  *   `compileBoxSchedule` gives the renderer's table (`api.setBoxSchedule`, grep PER-ITERATION PARAMETERS in
  *   renderer/core.js): one entry an iteration, null or the renderer's names (scale, minR, fold, fixedR, rx, ry, rz,
- *   cx, cy, cz) for the
+ *   pt, pp, cx, cy, cz) for the
  *   values that differ from the base there; iterations past the table take the base. The host pushes it
  *   (host/looseParams.ts, the `schedule` push). The table does not depend on the base, so moving a slider
  *   sends no new table.
@@ -48,12 +49,18 @@ export const SCHEDULED_PARAMS = {
     juliaX: { field: 'cx', label: 'X', group: 'julia' },
     juliaY: { field: 'cy', label: 'Y', group: 'julia' },
     juliaZ: { field: 'cz', label: 'Z', group: 'julia' },
+    // the Mandelbulb's (2026-10-18; grep PER-ITERATION PARAMETERS, THE BULB in renderer/core.js)
+    phaseTheta: { field: 'pt', label: 'Theta', group: 'phase' },
+    phasePhi: { field: 'pp', label: 'Phi', group: 'phase' },
 } as const;
 export type DzScheduleGroup = (typeof SCHEDULED_PARAMS)[keyof typeof SCHEDULED_PARAMS]['group'];
-export const SCHEDULE_GROUPS: Record<DzScheduleGroup, { label: string; row: string }> = {
-    box: { label: 'Box', row: '' },
-    rotation: { label: 'Pre-Rotation', row: 'boxRotation' },
-    julia: { label: 'Julia constant', row: 'juliaConstant' },
+/** The tool's groups, with the formulas each belongs to: the Julia constant is both formulas' (the table carries
+ *  every formula's fields; each formula's renderer reads its own). */
+export const SCHEDULE_GROUPS: Record<DzScheduleGroup, { label: string; row: string; formulas: readonly ('box' | 'bulb')[] }> = {
+    box: { label: 'Box', row: '', formulas: ['box'] },
+    rotation: { label: 'Pre-Rotation', row: 'boxRotation', formulas: ['box'] },
+    phase: { label: 'Phase', row: '', formulas: ['bulb'] },
+    julia: { label: 'Julia constant', row: 'juliaConstant', formulas: ['box', 'bulb'] },
 };
 /** The composed rows whose button opens a group (the row's key -> its first parameter). */
 export const SCHEDULE_ROW_OPENS: Record<string, DzScheduledKey> = { boxRotation: 'boxRotX', juliaConstant: 'juliaX' };
