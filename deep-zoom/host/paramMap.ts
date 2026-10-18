@@ -49,7 +49,7 @@ export type DzInvalidation = 'O' | 'A' | '-';
 
 /** The pushes of `looseParams.ts`. `look` rows also name the field of `api.setLook`. */
 export type DzPushGroup =
-    | 'formula' | 'power' | 'phase' | 'iters' | 'autoIters'
+    | 'formula' | 'schedule' | 'power' | 'phase' | 'iters' | 'autoIters'
     | 'frame' | 'detail' | 'normalDetail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'accum'
     | 'stepRelax' | 'capRelax'
     | 'shading' | 'light' | 'look' | 'colour' | 'channel' | 'compare';
@@ -121,6 +121,9 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     // Burning and its mix, the bulb's, ride in that call as well (renderer/core.js, BURNING).
     box('burning', (f) => f.burning),
     box('burningMix', (f) => f.burnMix),
+    // The box's iteration schedule: rules in the store, a table for the renderer (deep-zoom/boxSchedule.ts). No read-back:
+    // the renderer holds the table, not the rules.
+    { feature: 'dzFormula', key: 'boxSchedule', cls: 'O', group: 'schedule' },
     { feature: 'dzFormula', key: 'juliaConstant', cls: '-', group: null, why: 'a composed row with no state of its own: juliaX, juliaY and juliaZ carry the value' },
     { feature: 'dzFormula', key: 'boxRotation', cls: '-', group: null, why: 'a composed row with no state of its own: boxRotX, boxRotY and boxRotZ carry the value' },
     { feature: 'dzFormula', key: 'kaliTranslation', cls: '-', group: null, why: 'a composed row with no state of its own: kaliTransX, kaliTransY and kaliTransZ carry the value' },

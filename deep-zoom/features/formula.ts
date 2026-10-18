@@ -118,6 +118,16 @@
  *   deep place (grep `the constant must be exact` in renderer/core.js). The track ids are
  *   `dzFormula.juliaX` / `Y` / `Z`.
  *
+ * THE ITERATION SCHEDULE (2026-10-18)
+ *   `boxSchedule` is the Mandelbox's rules for giving Scale, Min Radius, Folding Limit and Fixed Radius other
+ *   values at chosen iterations (deep-zoom/boxSchedule.ts says what a rule is and what it compiles to). It is a
+ *   hidden `complex` param: no row of its own. Each of the four rows carries a button after its label that opens
+ *   the schedule tool (`dz-schedule-button`, components/ScheduleTool.tsx). It is a formula value: one of
+ *   `FORMULA_CHOICE_KEYS`, so a place, Back, Home, a scene, a link and undo carry it, and a place or card
+ *   without one has none (`applyFormula` in deep-zoom/locations.ts). Not keyframed: a schedule is rules, not a
+ *   number. It reaches the renderer by its own push (`api.setBoxSchedule`, host/looseParams.ts); its slice type
+ *   is `DzBoxSchedule` (storeTypes.ts), not the `any` a `complex` param would be.
+ *
  * INVALIDATION
  *   Every param here is class O: the renderer rebuilds its reference orbit (grep `orbitDirty` in
  *   core.js), which is heavy at depth — about one BigInt evaluation per iteration — and restarts
@@ -205,6 +215,7 @@ import * as THREE from 'three';
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import type { SliceFromParams } from '../../engine/typedSlices';
 import { defineEnumParam } from '../../engine/defineEnumParam';
+import type { DzBoxSchedule } from '../boxSchedule';
 
 // ── Formula — core.js: `let dzFormula = 'mandelbulb'`. The option's own name is what `api.setFormula` takes.
 export const FORMULA_OPTIONS = ['mandelbulb', 'mandelbox', 'kalibox'] as const;
@@ -341,6 +352,15 @@ export const DzFormulaFeature = {
             condition: onBox,
             description: 'Turns space about x, then y, then z before every fold.',
         },
+        // ── the box's iteration schedule: no row; the four rows above open it (see THE ITERATION SCHEDULE) ──
+        boxSchedule: {
+            type: 'complex',
+            default: {} as DzBoxSchedule,
+            label: 'Iteration schedule',
+            hidden: true,
+            condition: onBox,
+            description: 'Rules that give Scale, Min Radius, Folding Limit or Fixed Radius other values at chosen iterations. Later iterations shape deeper detail, so a schedule makes a dive change as it goes.',
+        },
         // ── KaliBox: GMT's rows (engine-gmt/formulas/KaliBox.ts), see KALIBOX in the header ──
         kaliScale: {
             type: 'float',
@@ -417,7 +437,7 @@ export const DzFormulaFeature = {
  *  Julia CONSTANT is not among them: it is part of the view, and its three number rows follow the view. See
  *  JULIA MODE and THE CONSTANT'S ROW in the header.) */
 export const FORMULA_CHOICE_KEYS = ['kind', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotX', 'boxRotY', 'boxRotZ', 'juliaMode', 'burning', 'burningMix',
-    'kaliScale', 'kaliMinRad2', 'kaliTransX', 'kaliTransY', 'kaliTransZ', 'kaliRot'] as const;
+    'kaliScale', 'kaliMinRad2', 'kaliTransX', 'kaliTransY', 'kaliTransZ', 'kaliRot', 'boxSchedule'] as const;
 type DzFormulaChoiceKey = (typeof FORMULA_CHOICE_KEYS)[number];
 /** A choice always says its `kind`. Every other key may be absent, and an absent key leaves its row as it is:
  *  a choice written before a key existed does not have it (`juliaMode` and `burning`: off; `burningMix`;
@@ -425,11 +445,13 @@ type DzFormulaChoiceKey = (typeof FORMULA_CHOICE_KEYS)[number];
  *  (a KaliBox card leaves the Mandelbox's rows alone, as a Mandelbox card leaves KaliBox's). */
 export type DzFormulaChoice =
     Pick<SliceFromParams<typeof DzFormulaFeature['params']>, 'kind'>
-    & Partial<Pick<SliceFromParams<typeof DzFormulaFeature['params']>, Exclude<DzFormulaChoiceKey, 'kind'>>>;
+    & Partial<Pick<SliceFromParams<typeof DzFormulaFeature['params']>, Exclude<DzFormulaChoiceKey, 'kind' | 'boxSchedule'>>>
+    & { boxSchedule?: DzBoxSchedule };
 
 /* Compile-time guard for the @invariant in the header. `AnyKeys` is the union of the slice keys
    typed `any` (never when there are none); `MustBeNever` refuses anything else, so tsc names the
    offending key. Type-only: nothing of this reaches the bundle. */
 type AnyKeys<S> = { [K in keyof S]: 0 extends 1 & S[K] ? K : never }[keyof S];
 type MustBeNever<T extends never> = T;
-type SliceIsTyped = MustBeNever<AnyKeys<SliceFromParams<typeof DzFormulaFeature['params']>>>;
+// `boxSchedule` is the one `complex` param, typed `any` by SliceFromParams; storeTypes.ts gives it DzBoxSchedule.
+type SliceIsTyped = MustBeNever<Exclude<AnyKeys<SliceFromParams<typeof DzFormulaFeature['params']>>, 'boxSchedule'>>;

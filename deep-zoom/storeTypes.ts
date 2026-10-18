@@ -22,13 +22,15 @@
 
 import type { SliceFromParams } from '../engine/typedSlices';
 import type { DzFormulaFeature } from './features/formula';
+import type { DzBoxSchedule } from './boxSchedule';
 import type { DzQualityFeature } from './features/quality';
 import type { DzInspectFeature } from './features/inspect';
 import type { DzLightFeature }   from './features/light';
 import type { DzColourFeature }  from './features/colour';
 import type { DzCameraFeature }  from './features/camera';
 
-export type DzFormulaSlice = SliceFromParams<typeof DzFormulaFeature['params']>;
+/** `boxSchedule` is a `complex` param, which SliceFromParams types `any`: its shape is the schedule's (deep-zoom/boxSchedule.ts). */
+export type DzFormulaSlice = Omit<SliceFromParams<typeof DzFormulaFeature['params']>, 'boxSchedule'> & { boxSchedule: DzBoxSchedule };
 export type DzQualitySlice = SliceFromParams<typeof DzQualityFeature['params']>;
 export type DzInspectSlice = SliceFromParams<typeof DzInspectFeature['params']>;
 export type DzLightSlice   = SliceFromParams<typeof DzLightFeature['params']>;

@@ -69,6 +69,9 @@ export interface BaseVectorInputProps {
     onDragStart?: () => void;
     onDragEnd?: () => void;
     headerRight?: React.ReactNode;
+    /** Drawn after the label (the slider's `labelSuffix`): a reading or a small control of the row. The label is
+     *  `pointer-events: none`, so a control here sets `pointer-events-auto` on itself. */
+    labelSuffix?: React.ReactNode;
     showDualAxisPads?: boolean;
     
     // New unified system props

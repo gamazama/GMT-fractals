@@ -122,11 +122,13 @@ export type PanelItem =
            *  under different names in different panel contexts (e.g.
            *  atmosphere.fogColor as 'Sky Color' vs 'Fog Color'). */
           labelOverrides?: Record<string, string>;
-          /** Per-param live readings drawn after the row's label (key → widget id in
-           *  componentRegistry, rendered with no props). For a number that belongs to
+          /** Per-param widgets drawn after the row's label (key → widget id in
+           *  componentRegistry, rendered with LabelSuffixProps: the row's feature and
+           *  param, so one widget can serve several rows). For a number that belongs to
            *  one row and changes outside the store - the count in use beside a floor,
            *  the size drawn beside the size asked - so it reads on that row instead of
-           *  on a row of its own. Sliders, dropdowns and switches carry it. */
+           *  on a row of its own; or a small control that acts on that row's param (the
+           *  deep zoomer's iteration schedule). Sliders, dropdowns and switches carry it. */
           labelSuffixes?: Record<string, string>;
           /** Opt children of this parent param in as roots (AutoFeaturePanel
            *  liftChildrenOf) — lets a whitelist item surface a param that is
@@ -526,3 +528,9 @@ export const addPanel = (def: PanelDefinition): void => {
             : {}),
     }));
 };
+
+/** What a `labelSuffixes` widget is rendered with: the row it sits on. */
+export interface LabelSuffixProps {
+    featureId: string;
+    paramKey: string;
+}

@@ -68,6 +68,7 @@
 import type { DzView } from './host/DeepZoomHost';
 import type { DzLocationState } from './locations';
 import { FORMULA_BOX, FORMULA_BULB, FORMULA_KALI } from './features/formula';
+import { compileBoxSchedule } from './boxSchedule';
 
 export type ParsedLocations =
     | { ok: true; locations: DzLocationState[]; labels: Array<string | undefined> }
@@ -274,7 +275,9 @@ export function locationKey(state: DzLocationState): string {
         : saved ? [saved.power, saved.phaseTheta, saved.phasePhi] : [v.power, v.phase[0], v.phase[1]];
     // Burning is the bulb's: on, the place is another one, and so is the same camera at another mix; off, the mix says nothing
     const burning = kind === FORMULA_BULB && choice?.burning === true ? (choice.burningMix ?? 1) : null;
-    return JSON.stringify([v.cam, v.julia ?? null, kind, choice?.juliaMode === true, shape.map((n) => (typeof n === 'number' ? n : null)), burning]);
+    // The box's iteration schedule shapes it too (deep-zoom/boxSchedule.ts): its table, so that no schedule and an empty one are one place
+    const schedule = kind === FORMULA_BOX ? compileBoxSchedule(choice?.boxSchedule) : null;
+    return JSON.stringify([v.cam, v.julia ?? null, kind, choice?.juliaMode === true, shape.map((n) => (typeof n === 'number' ? n : null)), burning, ...(schedule ? [schedule] : [])]);
 }
 
 /** Which of `incoming` are not yet in `have` (by `locationKey`), as indexes into `incoming`, and how

@@ -334,6 +334,13 @@ uniform mat3  uBoxRot;           // the pre-rotation
 uniform int   uBoxHasRot;        // 0 = no pre-rotation: the matrix is not applied
 uniform float uBoxFar;           // how far from the camera the far-field march follows a ray (the bulb: 12)
 uniform int   uBoxJump;          // THE PREFIX JUMP (grep): the last orbit index a jump may land on; 0 = no jump
+#ifdef USE_SCHED
+uniform int   uSchedRot;         // PER-ITERATION PARAMETERS (grep): 1 = each iteration's pre-rotation from rows 12 to 14
+/* the pre-rotation of iteration i (rows 12 to 14: one row of the matrix each) applied to v */
+vec3 schedRot(sampler2D orbit, int i, vec3 v) {
+  return vec3(dot(texelFetch(orbit, ivec2(i, 12), 0).xyz, v), dot(texelFetch(orbit, ivec2(i, 13), 0).xyz, v), dot(texelFetch(orbit, ivec2(i, 14), 0).xyz, v));
+}
+#endif
 float boxOnE(vec2 g, float e) { return g.x * exp2(clamp(g.y - e, -160.0, 120.0)); }      // a distance (mantissa, exponent) as a mantissa on e
 #ifdef USE_KALI
 /* KALIBOX (grep; the USE_KALI variant of this kernel): one axis of the fold x -> abs(x) as a DELTA. Z = the
@@ -373,6 +380,14 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   float trap = 1e30, escR2 = uBoxB.w;
   float S = uBoxA.x, aS = uBoxA.y, m2 = uBoxB.x, F2 = uBoxB.y, kA = uBoxB.z;
   vec4 T00 = texelFetch(orbit, ivec2(0, 0), 0);
+#ifdef USE_SCHED
+  /* PER-ITERATION PARAMETERS (grep; the USE_SCHED variant): the map is read by the pixel's own index it; from its
+     first rebase on the pixel iterates z itself (zD) with its own c, and the reference is not read again */
+  float L2 = uBoxA.w;
+  bool direct = false;
+  int sW = textureSize(orbit, 0).x - 1;
+  vec3 zD = vec3(0.0), cD = uAddC > 0.5 ? T00.xyz + C * sclPow2(ec) : uJuliaC;
+#endif
   vec4 cT0 = T00;                              // (V, |V|) at the current reference index
   /* THE PREFIX JUMP (grep; rows 6-9, built by boxJumpRows). D is still δc here. The largest index k whose
      radius R_k this δc is under (R_k never rises with k: a binary search), then δ = M_k·δc and the loop goes
@@ -402,17 +417,43 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
 #ifdef USE_STATS
     gWork++;
 #endif
+#ifdef USE_SCHED
+    {
+      vec4 pa = texelFetch(orbit, ivec2(min(it, sW), 10), 0), pb = texelFetch(orbit, ivec2(min(it, sW), 11), 0);
+      S = pa.x; aS = pa.y; L2 = pa.w; m2 = pb.x; F2 = pb.y; kA = pb.z;
+      if (direct) {
+        if (uSchedRot == 1) zD = schedRot(orbit, min(it, sW), zD); else if (uBoxHasRot == 1) zD = uBoxRot * zD;
+        zD = clamp(zD, -pa.z, pa.z) * 2.0 - zD;
+        float kk = clamp(F2 / max(dot(zD, zD), 1e-30), 1.0, kA);
+        zD = zD * (kk * S) + (uAddC > 0.5 ? cD : texelFetch(orbit, ivec2(min(it, sW), 15), 0).xyz);   // JULIA MODE: this iteration's constant (row 15)
+        drM = drM * (kk * aS) + sclPow2(-drE);
+        if (drM > 1048576.0) { float adj = floor(log2(drM)); drM *= exp2(-adj); drE += adj; }
+        it++;
+        float zz2 = dot(zD, zD);
+        trap = min(trap, zz2);
+        if (zz2 > uBoxB.w) { escaped = true; escR2 = zz2; break; }
+        continue;
+      }
+    }
+#endif
     vec4 tw = texelFetch(orbit, ivec2(m, 1), 0);             // W (xyz), |W|² (w)
     vec4 gx = texelFetch(orbit, ivec2(m, 2), 0);             // per axis: U − L (m, e), U + L (m, e)
     vec4 gy = texelFetch(orbit, ivec2(m, 3), 0);
     vec4 gz = texelFetch(orbit, ivec2(m, 4), 0);
     vec4 gs = texelFetch(orbit, ivec2(m, 5), 0);             // |W|² − minR² (m, e), |W|² − fixedR² (m, e)
     float s = sclPow2(e), inv = exp2(clamp(-e, -160.0, 120.0));   // 2^e, and 2^−e for the three constants that are not δ-linear
+#ifdef USE_SCHED
+    if (uSchedRot == 1) D = schedRot(orbit, min(it, sW), D); else   // PER-ITERATION PARAMETERS (grep): linear, so the delta takes it as is
+#endif
     if (uBoxHasRot == 1) D = uBoxRot * D;
 #ifdef USE_KALI
     vec3 E = vec3(kaliFoldD(gx.xy, D.x, e), kaliFoldD(gy.xy, D.y, e), kaliFoldD(gz.xy, D.z, e));
 #else
+#ifdef USE_SCHED
+    float l2 = L2 * inv;
+#else
     float l2 = uBoxA.w * inv;
+#endif
     vec3 E = vec3(boxFoldD(gx, D.x, e, l2), boxFoldD(gy, D.y, e, l2), boxFoldD(gz, D.z, e, l2));
 #endif
     vec3 W = tw.xyz; float r2 = tw.w;
@@ -442,12 +483,18 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
     trap = min(trap, z2);
     if (z2 > uBoxB.w) { escaped = true; escR2 = z2; break; }
     if (z2 < dot(dz, dz) || m >= orbitLen - 1) {             // Zhuoran rebase / reference exhausted
+#ifdef USE_SCHED
+      direct = true; zD = zf; rebases++; continue;           // PER-ITERATION PARAMETERS (grep): no rebase, z runs direct
+#endif
       D = zf - T00.xyz; e = 0.0;
       sclNorm(D, e);
       m = 0; rebases++;
       cT0 = T00;
     }
   }
+#ifdef USE_SCHED
+  if (direct) { D = zD - T00.xyz; e = 0.0; sclNorm(D, e); cT0 = T00; }   // what a rebase would have left: the delta against the first point
+#endif
   vec3 zE = cT0.xyz + D * sclPow2(e);
   float rF = length(zE);
   vec2 drH = hdrReduce(vec2(drM, drE));
@@ -1267,6 +1314,19 @@ ${KERNEL_CORE}
    tests it. A ray is handed to them where the bulb's is (grep FAR HAND-OFF) and followed to uBoxFar. boxMu is
    the smooth iteration count: past the escape radius an iteration multiplies |z| by |scale|, so the share of
    the last one is log(|z| / R) / log |scale| (the bulb's log log |z| / log n belongs to a power map). */
+#ifdef USE_SCHED
+/* PER-ITERATION PARAMETERS (grep): the map of iteration i, from rows 10 to 15 */
+void boxStepF32(inout vec3 z, inout float dr, vec3 c, int i) {
+    int sW = textureSize(uOrbit, 0).x - 1, j = min(i, sW);
+    vec4 pa = texelFetch(uOrbit, ivec2(j, 10), 0), pb = texelFetch(uOrbit, ivec2(j, 11), 0);
+    if (uSchedRot == 1) z = schedRot(uOrbit, j, z); else if (uBoxHasRot == 1) z = uBoxRot * z;
+    z = clamp(z, -pa.z, pa.z) * 2.0 - z;
+    float k = clamp(pb.y / max(dot(z, z), 1e-30), 1.0, pb.z);
+    z = z * (k * pa.x) + (uAddC > 0.5 ? c : texelFetch(uOrbit, ivec2(j, 15), 0).xyz);   // JULIA MODE: this iteration's constant
+    dr = dr * k * pa.y + 1.0;
+}
+#define BOX_STEP_F32(z, dr, c, i) boxStepF32(z, dr, c, i)
+#else
 void boxStepF32(inout vec3 z, inout float dr, vec3 c) {
     if (uBoxHasRot == 1) z = uBoxRot * z;
 #ifdef USE_KALI
@@ -1278,13 +1338,15 @@ void boxStepF32(inout vec3 z, inout float dr, vec3 c) {
     z = z * (k * uBoxA.x) + c;
     dr = dr * k * uBoxA.y + 1.0;
 }
+#define BOX_STEP_F32(z, dr, c, i) boxStepF32(z, dr, c)
+#endif
 float boxMu(float iters, float r) { return iters + 1.0 - 0.5 * log(max(r * r / uBoxB.w, 1.0)) / log(uBoxA.y); }
 float deF32(vec3 pos){
     vec3 z = pos, c = cOf(pos); float dr = 1.0, r2 = 0.0;
     int N = int(uIters);
     for (int i = 0; i < 512; i++) {
         if (i >= N) break;
-        boxStepF32(z, dr, c);
+        BOX_STEP_F32(z, dr, c, i);
         r2 = dot(z, z);
         if (r2 > uBoxB.w) break;
     }
@@ -1296,7 +1358,7 @@ float paletteF32(vec3 pos){
     int N = int(uIters);
     for (int i = 0; i < 512; i++) {
         if (i >= N) break;
-        boxStepF32(z, dr, c);
+        BOX_STEP_F32(z, dr, c, i);
         r2 = dot(z, z); it++;
         trap2 = min(trap2, r2);
         if (r2 > uBoxB.w) break;
@@ -2406,6 +2468,7 @@ function mkProgAsync(fs, cb){
      USE_JET   the bulb's program: THE RAY MARCH (key PR; PTR with the work counters)
      USE_BOX   the Mandelbox's program (key X; XT with the work counters)
      USE_BOX + USE_KALI   KaliBox's program (grep KALIBOX; key K; KT with the work counters)
+     USE_BOX + USE_SCHED  the Mandelbox with a schedule (grep PER-ITERATION PARAMETERS; key XS; XST with the work counters)
      + T      USE_STATS: per-pixel work counters for __stats and the march probe (diagnostics only)
    THE BULB HAS ONE PROGRAM SINCE 2026-10-11, PR. It is compiled WITHOUT blocking at load (deepProg / ud — the
    readiness flag everything checks), and nothing else draws a deep picture of the bulb: until it is there
@@ -2459,8 +2522,9 @@ function ensureRayVariant(t){
    compiles. A probe or a study that asks for it before then builds it at once, blocking.
    KALIBOX (grep) is this variant with USE_KALI as well - its fold in the box fold's place and nothing else - under
    keys K and KT: the same two functions build it, by the formula selected when they are called. */
-const xKey = (t) => (kaliOn() ? 'K' : 'X') + (t ? 'T' : '');
-const xSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_BOX' + (kaliOn() ? '\n#define USE_KALI' : ''));
+const schedOn = () => !kaliOn() && !!boxP.sched;  // PER-ITERATION PARAMETERS (grep): the Mandelbox with a schedule is its own program, XS / XST
+const xKey = (t) => (kaliOn() ? 'K' : 'X') + (schedOn() ? 'S' : '') + (t ? 'T' : '');
+const xSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_BOX' + (kaliOn() ? '\n#define USE_KALI' : '') + (schedOn() ? '\n#define USE_SCHED' : ''));
 function ensureBoxVariant(t){
   const key = xKey(t);
   if (variants[key] === undefined && pendingBuild[key]) pendingBuild[key].finish();
@@ -2604,7 +2668,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
             land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), addC:g('uAddC'), juliaC:g('uJuliaC'), farSwitch:g('uFarSwitch'), holdR:g('uHoldR'), farOnly:g('uFarOnly'), burnNeg:g('uBurnNeg'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
-            boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar'), kaliT:g('uKaliT'), boxJump:g('uBoxJump') }; }   // the last seven: null but in the USE_BOX variant (kaliT: but with USE_KALI)
+            boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar'), kaliT:g('uKaliT'), boxJump:g('uBoxJump'), schedRot:g('uSchedRot') }; }   // the last seven: null but in the USE_BOX variant (kaliT: but with USE_KALI)
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -3139,10 +3203,60 @@ function boxDerive(){
     return p;
   }
   const m2 = box.minR * box.minR, F2 = box.fixedR * box.fixedR, hasRot = Math.hypot(box.rot[0], box.rot[1], box.rot[2]) > 0.001;   // GMT's own threshold
-  const p = { scale: box.scale, fold: box.fold, m2, F2, kA: F2 / m2, hasRot, R: boxRotMat(hasRot ? box.rot : [0, 0, 0]) };
+  const p = { scale: box.scale, fold: box.fold, m2, F2, kA: F2 / m2, hasRot, R: boxRotMat(hasRot ? box.rot : [0, 0, 0]), rot: box.rot.slice() };
   p.fixed = hp.boxFixed(p);
+  if (boxSched) p.sched = boxSched.map(q => boxSchedAt(q, p)).concat([p]);   // PER-ITERATION PARAMETERS (grep): the last entry is the base, for every iteration past the table
   return p;
 }
+/* ════════ PER-ITERATION PARAMETERS (2026-10-18; a feasibility build, the Mandelbox only) ════════
+   boxSched: null, or one entry an iteration, each null (the base) or { scale, minR, fold, fixedR } with any field
+   left out taken from the base (api.setBoxSchedule). The pre-rotation stays one for the whole orbit. boxDerive
+   expands it into p.sched, a derived record an iteration (boxAt), and every copy of the map reads it by the
+   iteration's ABSOLUTE index: the reference orbit and its rows (buildBoxOrbit, rows 10 and 11 for the GPU), the
+   prefix jump's matrices (boxJumpRows), the CPU twin (boxOrbitJS), the direct referees, the kernel and the far field.
+   WHY A PIXEL RUNS DIRECT AFTER A REBASE. A delta step needs the pixel and the reference to take the same map at
+   each step. The page's rebase restarts the reference at index 0 while the pixel's own count goes on, so with a
+   schedule the two would no longer agree. After that rebase the delta is z - Z0, as large as the point itself,
+   and every step from there is already plain f32 on numbers of size 1 (grep REBASE TO THE ORIGIN, which says why);
+   so with a schedule on, a pixel iterates z itself from its first rebase on, with the map of its own index: the
+   same precision, and no reference to agree with. Without a schedule nothing of this runs.
+   ON THE GPU it is a program of its own, USE_SCHED (keys XS, XST: grep schedOn), built in the background when a
+   schedule is set, as Burning's is and for Burning's reason: as a branch on a uniform in the box's program it cost
+   every box picture 3 to 9 % with no schedule set (the compiler lays the loop out anew around it). Without
+   USE_SCHED the box's program is token for token what it was.
+   MEASURED (2026-10-18, RTX 5070 Ti; debug/scratch/box-sched/, git-ignored; no guard of its own yet):
+     - correct: the direct proof's Mandelbox procedure (GPU against the CPU twin and a fixed-point orbit of the
+       explicit point, the proof's own bar) at its seven views under three schedules (scale on every second
+       iteration, a switch of scale and minR at iteration 12, the fold on every third and fixedR from 30), and at
+       its four deep views dived to 1e-20 and 1e-40 of the scheduled surface: every line PASS, worst 8.3e-4;
+     - no schedule: 15 views against the program before this, the picture the same and the frame within noise;
+     - a schedule whose every entry is the base (the mechanism alone, the same picture: 0.00 to 0.01 % of pixels
+       more than 8 levels apart): the live frame 9 to 34 % FASTER at depth, as the direct run is cheaper than a
+       delta step; from outside the whole box 8 to 25 % slower, on frames under 1 ms (the far field's fetches);
+     - real schedules at matched depths: from 0.1 to 3.9 times the unscheduled frame, median 0.9 to 1.1. The
+       cost follows the shape a schedule makes (march steps), as it does from one place to another without one.
+   Not scheduled: KaliBox, and the f32 baseline program (drawn while the deep variant compiles). A schedule moves
+   the surface at every depth past the iterations it changes: a kept place is not on it. */
+let boxSched = null;
+function boxSchedAt(q, base){
+  if (!q) return base;
+  const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+  let s = num(q.scale, base.scale); if (Math.abs(s) < 1.02) s = s < 0 ? -1.02 : 1.02;   // applyFormula's holds
+  const scale = Math.max(-8, Math.min(8, s)), minR = Math.max(3.1623e-5, Math.min(8, num(q.minR, Math.sqrt(base.m2))));
+  const fold = Math.max(1e-3, Math.min(8, num(q.fold, base.fold))), fixedR = Math.max(minR, Math.min(8, num(q.fixedR, Math.sqrt(base.F2))));
+  const rot = [num(q.rx, base.rot[0]), num(q.ry, base.rot[1]), num(q.rz, base.rot[2])], hasRot = Math.hypot(rot[0], rot[1], rot[2]) > 0.001;   // GMT's own threshold
+  const m2 = minR * minR, F2 = fixedR * fixedR, r = { scale, fold, m2, F2, kA: F2 / m2, hasRot, R: boxRotMat(hasRot ? rot : [0, 0, 0]), rot };
+  /* the Julia constant's axes this iteration overrides, as doubles and in fixed point (null: the base constant's,
+     which is read when an orbit is built - boxK - so a new base constant needs no new record) */
+  const kx = num(q.cx, null), ky = num(q.cy, null), kz = num(q.cz, null);
+  if (kx !== null || ky !== null || kz !== null) { r.kOverF = [kx, ky, kz]; r.kOver = r.kOverF.map(v => (v === null ? null : hp.fromNum(v))); }
+  r.fixed = hp.boxFixed(r);
+  return r;
+}
+const boxAt = (p, k) => (p.sched ? p.sched[Math.min(k, p.sched.length - 1)] : p);   // the map of iteration k
+/* JULIA MODE's constant at an iteration of a schedule: fixed point (boxK) and doubles (boxKf) */
+const boxK = (P) => (P.kOver ? P.kOver.map((x, i) => (x === null ? juliaHP[i] : x)) : juliaHP);
+const boxKf = (P) => (P.kOverF ? P.kOverF.map((x, i) => (x === null ? juliaF[i] : x)) : juliaF);
 let boxP = boxDerive();
 /* ════════ JULIA MODE (2026-10-12) - both formulas; ONE FACTOR on the vector added each iteration ════════
    GMT's own Julia mode (read: engine-gmt/shaders/chunks/de.ts, `vec4 c = mix(z, vec4(uJulia, uParamA),
@@ -3481,9 +3595,12 @@ function boxExtent(){
     const aS = Math.abs(kali.scale), t = Math.hypot(kali.trans[0], kali.trans[1], kali.trans[2]);
     return juliaOn ? 1.1 * Math.max((aS * t + Math.hypot(juliaF[0], juliaF[1], juliaF[2])) / (aS - 1), t + 1) : KALI_OPEN;
   }
-  const aS = Math.abs(box.scale);
-  if (juliaOn) return 1.1 * (2 * Math.sqrt(3) * box.fold * aS + Math.hypot(juliaF[0], juliaF[1], juliaF[2])) / (aS - 1);
-  return 1.8 * (2 * box.fold * (aS + 1) / (aS - 1) + box.fixedR);
+  /* PER-ITERATION PARAMETERS (grep): the bound taken at the schedule's least |scale| and largest fold and fixed radius.
+     @assumption it holds the set as it holds a fixed map's: the classic bound is derived for one map, not for a sequence */
+  const S = boxP.sched || [boxP], aS = Math.min(...S.map(q => Math.abs(q.scale))), fold = Math.max(...S.map(q => q.fold)), fixedR = Math.sqrt(Math.max(...S.map(q => q.F2)));
+  const kMax = Math.max(...S.map(q => { const k = q.kOverF ? boxKf(q) : juliaF; return Math.hypot(k[0], k[1], k[2]); }));
+  if (juliaOn) return 1.1 * (2 * Math.sqrt(3) * fold * aS + kMax) / (aS - 1);
+  return 1.8 * (2 * fold * (aS + 1) / (aS - 1) + fixedR);
 }
 function boxFar(){
   const d = Math.hypot(hp.toNum(camHP[0]), hp.toNum(camHP[1]), hp.toNum(camHP[2]));
@@ -3504,21 +3621,39 @@ function boxFar(){
    plain f32 a distance under 1e-38 would read 0 and lose its sign.
    The same numbers in f64 (GH, GL, Wf, R2, GM, GF, REG) are what the CPU kernel reads; Rk and DRk are
    the reference's own radius and derivative, for the estimate at the camera.
-     rows 6-9  THE PREFIX JUMP (grep boxJumpRows): R_k and DR_k; the matrix M_k, a row each, one exponent; the trap */
+     rows 6-9  THE PREFIX JUMP (grep boxJumpRows): R_k and DR_k; the matrix M_k, a row each, one exponent; the trap
+     rows 10-11  PER-ITERATION PARAMETERS (grep), with a schedule only: each iteration's map, texW wide */
 function buildBoxOrbit(CHP, lenMax) {
   const p = boxP, B = p.fixed, Vs = [], Qs = [], cHP = cOfHP(CHP);   // JULIA MODE (grep): the orbit of the camera's point adds K
   let v = CHP.slice();
   for (let k = 0; k < lenMax; k++) {
-    const q = hp.boxParts(v, B);
+    const Pk = boxAt(p, k), Bk = Pk.fixed;        // PER-ITERATION PARAMETERS (grep): the map of this index (B itself without a schedule)
+    const q = hp.boxParts(v, Bk);
     Vs.push(v); Qs.push(q);
     if (k > 0 && hp.toNum(hp.norm2(v)) > BOX_REF_MAX2) break;   // never one entry alone: a step needs the index after it, however far out the camera is
-    v = hp.boxStep(q, cHP, B);
+    v = hp.boxStep(q, juliaOn && Pk.kOver ? boxK(Pk) : cHP, Bk);
   }
-  const len = Vs.length, rows = 10, data = new Float32Array(len * rows * 4), A = () => new Float64Array(len);
-  const O = { box: p, julia: juliaOn, len, rows, data, Vf: [], Wf: [], Rk: [], DRk: [], GH: [A(), A(), A()], GL: [A(), A(), A()], R2: A(), GM: A(), GF: A(), REG: new Int8Array(len) };
-  const put = (row, k, vals) => { for (let j = 0; j < 4; j++) data[(row * len + k) * 4 + j] = vals[j]; };
+  /* PER-ITERATION PARAMETERS (grep): rows 10 to 15 hold each iteration's map, (scale, |scale|, L, 2 L),
+     (minR², fixedR², fixedR² / minR², 0), the pre-rotation's three rows (12 to 14; the identity where there is none) and
+     the Julia constant (15, as doubles), as wide as the count asks for (texW), since a pixel that runs direct after a
+     rebase reads them past the orbit's end. Without a schedule the texture is as it was. O.KS: row 15 in f64. */
+  const len = Vs.length, texW = p.sched ? Math.max(len, lenMax) : len, rows = p.sched ? 16 : 10, data = new Float32Array(texW * rows * 4), A = () => new Float64Array(len);
+  const O = { box: p, julia: juliaOn, len, texW, rows, data, K: cHP.map(hp.toNum), Vf: [], Wf: [], Rk: [], DRk: [], GH: [A(), A(), A()], GL: [A(), A(), A()], R2: A(), GM: A(), GF: A(), REG: new Int8Array(len) };
+  const put = (row, k, vals) => { for (let j = 0; j < 4; j++) data[(row * texW + k) * 4 + j] = vals[j]; };
+  if (p.sched) {
+    O.KS = [];
+    for (let k = 0; k < texW; k++) {
+      const P = boxAt(p, k), Rr = P.hasRot ? P.R : [[1, 0, 0], [0, 1, 0], [0, 0, 1]], Kf = juliaOn ? boxKf(P) : [0, 0, 0];
+      put(10, k, [P.scale, Math.abs(P.scale), P.fold, 2 * P.fold]); put(11, k, [P.m2, P.F2, P.kA, 0]);
+      for (let a = 0; a < 3; a++) put(12 + a, k, [Rr[a][0], Rr[a][1], Rr[a][2], 0]);
+      put(15, k, [Kf[0], Kf[1], Kf[2], 0]); O.KS.push(Kf);
+    }
+    /* the GPU's switch: the pre-rotation is read from rows 12 to 14 only when some iteration's is not the base's */
+    O.schedRot = p.sched.some(P => P.hasRot !== p.hasRot || (P.hasRot && P.rot.some((a, i) => a !== p.rot[i]))) ? 1 : 0;
+  }
   let DR = 1;
   for (let k = 0; k < len; k++) {
+    const P = boxAt(p, k), B = P.fixed;
     const q = Qs[k], vf = Vs[k].map(hp.toNum), wf = q.w.map(hp.toNum), R = Math.hypot(vf[0], vf[1], vf[2]);
     O.Vf.push(vf); O.Wf.push(wf); O.Rk.push(R); O.DRk.push(DR);
     O.R2[k] = hp.toNum(q.r2); O.GM[k] = hp.toNum(q.r2 - B.m2); O.GF[k] = hp.toNum(q.r2 - B.F2); O.REG[k] = q.reg;
@@ -3531,7 +3666,7 @@ function buildBoxOrbit(CHP, lenMax) {
     }
     const gm = hdrSplit(O.GM[k]), gf = hdrSplit(O.GF[k]);
     put(5, k, [gm.m, gm.e, gf.m, gf.e]);
-    DR = DR * hp.toNum(q.k) * Math.abs(p.scale) + 1;
+    DR = DR * hp.toNum(q.k) * Math.abs(P.scale) + 1;
   }
   boxJumpRows(O, p, put);
   return O;
@@ -3564,10 +3699,9 @@ function buildBoxOrbit(CHP, lenMax) {
    An index past the reference's escape is never landed on (jumpMax): over it the delta is not small. */
 const BOX_JUMP_TAU = 1e-5;                       // the shell's relative second-order term allowed a step (1e-4 jumped 0 to 5 passes further on the starters)
 function boxJumpRows(O, p, put) {
-  const len = O.len, S = p.scale, addC = O.julia ? 0 : 1, Rt = p.R;
+  const len = O.len, addC = O.julia ? 0 : 1, Rt = p.R;
   const mm = (A, B) => { const C = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i*3+j] = A[i*3] * B[j] + A[i*3+1] * B[3+j] + A[i*3+2] * B[6+j]; return C; };
   const rot = p.hasRot ? [Rt[0][0], Rt[0][1], Rt[0][2], Rt[1][0], Rt[1][1], Rt[1][2], Rt[2][0], Rt[2][1], Rt[2][2]] : [1, 0, 0, 0, 1, 0, 0, 0, 1];
-  const sm = Math.sqrt(p.m2), sF = Math.sqrt(p.F2);
   let M = [1, 0, 0, 0, 1, 0, 0, 0, 1], Rmin = Infinity, trap = 1e30, ke = len - 2;
   for (let k = 0; k < len; k++) if (O.Rk[k] > BOX_ESC) { ke = k; break; }
   O.jumpMax = Math.max(0, Math.min(ke, len - 2));
@@ -3583,6 +3717,8 @@ function boxJumpRows(O, p, put) {
     put(8, k, [M[3] * sc, M[4] * sc, M[5] * sc, trap]);
     put(9, k, [M[6] * sc, M[7] * sc, M[8] * sc, 0]);
     /* iteration k: its radius, and its Jacobian F (the fold's signs), H (the shell's reflection), the factor */
+    const P = boxAt(p, k), S = P.scale, sm = Math.sqrt(P.m2), sF = Math.sqrt(P.F2);   // PER-ITERATION PARAMETERS (grep)
+    const rotK = P === p ? rot : P.hasRot ? P.R.flat() : [1, 0, 0, 0, 1, 0, 0, 0, 1];
     const R2 = O.R2[k], Wm = Math.sqrt(R2), reg = O.REG[k], F = [1, 1, 1];
     let rk = Math.min(Math.abs(Wm - sm), Math.abs(Wm - sF), 0.5 * O.Rk[k], reg === 1 ? BOX_JUMP_TAU * Wm : Infinity);
     for (let a = 0; a < 3; a++) {
@@ -3591,9 +3727,9 @@ function boxJumpRows(O, p, put) {
       F[a] = p.kali ? (gh < 0 ? -1 : 1) : (gh > 0 || gl < 0 ? -1 : 1);   // KALIBOX: rows 2-4 hold the coordinate itself
     }
     Rmin = Math.min(Rmin, rk / Math.sqrt(fro));
-    let J = rot.map((v, i) => v * F[(i / 3) | 0]);
+    let J = rotK.map((v, i) => v * F[(i / 3) | 0]);
     if (reg === 1) { const w = O.Wf[k].map(x => x / Wm), H = []; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) H.push((i === j ? 1 : 0) - 2 * w[i] * w[j]); J = mm(H, J); }
-    const f = S * (reg === 0 ? p.kA : reg === 1 ? p.F2 / R2 : 1);
+    const f = S * (reg === 0 ? P.kA : reg === 1 ? P.F2 / R2 : 1);
     M = mm(J, M).map(v => v * f);
     M[0] += addC; M[4] += addC; M[8] += addC;
   }
@@ -3802,7 +3938,8 @@ function setPowerUniforms(x){
     gl.uniform1f(x.rayLine, burnNeg !== 1 ? burnLine : rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }   // BURNING (grep): the line rule is held off (burnLine is 0 but for a measurement)
   gl.uniform1i(x.maxSteps, march.maxSteps);
   if (boxOn()) { setBoxUniforms(x);              // THE FORMULA SEAM: nothing is set here for the bulb that was not set before
-    gl.uniform1i(x.boxJump, boxJumpOn && curOrbit && curOrbit.jumpMax ? curOrbit.jumpMax : 0); }   // THE PREFIX JUMP (grep)
+    gl.uniform1i(x.boxJump, boxJumpOn && curOrbit && curOrbit.jumpMax ? curOrbit.jumpMax : 0);   // THE PREFIX JUMP (grep)
+    gl.uniform1i(x.schedRot, curOrbit && curOrbit.schedRot ? 1 : 0); }   // PER-ITERATION PARAMETERS (grep): null outside USE_SCHED, a no-op there
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
     gl.uniform1f(x.refE, e); gl.uniform1f(x.farFrom, Math.log2(march.farFromDist * d) - e); }
@@ -3812,7 +3949,7 @@ function uploadOrbit(O) {
   if (orbitTex) gl.deleteTexture(orbitTex);
   orbitTex = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, orbitTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, O.len, O.rows || 4, 0, gl.RGBA, gl.FLOAT, O.data);   // the box's orbit has six rows (buildBoxOrbit)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, O.texW || O.len, O.rows || 4, 0, gl.RGBA, gl.FLOAT, O.data);   // texW: PER-ITERATION PARAMETERS (grep)   // the box's orbit has six rows (buildBoxOrbit)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -3941,13 +4078,30 @@ function boxFoldJS(gh, gl, d, L2){
   return 2 * cd - d;
 }
 function boxOrbitJS(O, dc, maxIter, fixed, jump){
-  const p = O.box, S = p.scale, aS = Math.abs(S), m2 = p.m2, F2 = p.F2, kA = p.kA, L2 = 2 * p.fold, R = p.hasRot ? p.R : null;
+  const p = O.box, sch = p.sched && !p.kali;   // PER-ITERATION PARAMETERS (grep): the map is read by the iteration's index
+  let R = p.hasRot ? p.R : null;
+  let S = p.scale, aS = Math.abs(S), m2 = p.m2, F2 = p.F2, kA = p.kA, L2 = 2 * p.fold, direct = false;
   const V0 = O.Vf[0], GH = O.GH, GL = O.GL, cx = O.julia ? 0 : dc[0], cy = O.julia ? 0 : dc[1], cz = O.julia ? 0 : dc[2];   // JULIA MODE (grep): nothing is added after the start
   let dx = dc[0], dy = dc[1], dz = dc[2], m = 0, it = 0, dr = 1, escaped = false, trap2 = Infinity;
   const k0 = jump ? navJumpAt(O.jump, len3(dc), maxIter) : 0;   // THE NAVIGATION'S JUMP (grep): the referees never pass `jump`
   if (k0 > 0) { const M = O.jump.M[k0]; [dx, dy, dz] = mv3(M, dc); dr = O.DRk[k0]; trap2 = O.jump.T[k0]; m = it = k0; }
   let zx = O.Vf[m][0] + dx, zy = O.Vf[m][1] + dy, zz = O.Vf[m][2] + dz;
+  let cD = O.julia ? O.K : [O.Vf[0][0] + dc[0], O.Vf[0][1] + dc[1], O.Vf[0][2] + dc[2]];   // the pixel's own c, for the direct run
   while (it < maxIter) {
+    if (sch) { const P = boxAt(p, it); S = P.scale; aS = Math.abs(S); m2 = P.m2; F2 = P.F2; kA = P.kA; L2 = 2 * P.fold; R = P.hasRot ? P.R : null;
+      if (O.julia) cD = O.KS[Math.min(it, O.KS.length - 1)]; }
+    if (direct) {                                // PER-ITERATION PARAMETERS (grep): from the first rebase on, z itself
+      let x = zx, y = zy, w = zz;
+      if (R) { x = R[0][0]*zx + R[0][1]*zy + R[0][2]*zz; y = R[1][0]*zx + R[1][1]*zy + R[1][2]*zz; w = R[2][0]*zx + R[2][1]*zy + R[2][2]*zz; }
+      const L = 0.5 * L2; x = Math.max(-L, Math.min(L, x)) * 2 - x; y = Math.max(-L, Math.min(L, y)) * 2 - y; w = Math.max(-L, Math.min(L, w)) * 2 - w;
+      const k = Math.max(1, Math.min(kA, F2 / Math.max(x*x + y*y + w*w, 1e-300)));
+      zx = x * k * S + cD[0]; zy = y * k * S + cD[1]; zz = w * k * S + cD[2];
+      dr = dr * k * aS + 1; it++;
+      const z2 = zx*zx + zy*zy + zz*zz;
+      if (z2 < trap2) trap2 = z2;
+      if (!fixed && z2 > BOX_ESC2) { escaped = true; break; }
+      continue;
+    }
     if (R) { const a = R[0][0]*dx + R[0][1]*dy + R[0][2]*dz, b = R[1][0]*dx + R[1][1]*dy + R[1][2]*dz, c = R[2][0]*dx + R[2][1]*dy + R[2][2]*dz; dx = a; dy = b; dz = c; }
     let ex, ey, ez;
     if (p.kali) { ex = burnDeltaJS(GH[0][m], dx, -1); ey = burnDeltaJS(GH[1][m], dy, -1); ez = burnDeltaJS(GH[2][m], dz, -1); }   // KALIBOX (grep): abs as a delta, by BURNING's table; GH is the signed coordinate (L = 0)
@@ -3967,7 +4121,9 @@ function boxOrbitJS(O, dc, maxIter, fixed, jump){
     const z2 = zx*zx + zy*zy + zz*zz;
     if (z2 < trap2) trap2 = z2;
     if (!fixed && z2 > BOX_ESC2) { escaped = true; break; }
-    if (z2 < dx*dx + dy*dy + dz*dz || m >= O.len - 1) { dx = zx - V0[0]; dy = zy - V0[1]; dz = zz - V0[2]; m = 0; }   // the page's rebase: onto the reference's first point
+    if (z2 < dx*dx + dy*dy + dz*dz || m >= O.len - 1) {
+      if (sch) { direct = true; continue; }       // PER-ITERATION PARAMETERS (grep): no rebase; z runs direct from here
+      dx = zx - V0[0]; dy = zy - V0[1]; dz = zz - V0[2]; m = 0; }   // the page's rebase: onto the reference's first point
   }
   const r = Math.hypot(zx, zy, zz);
   return { de: (r - 1) / dr, escaped, r, it, dr, trap: Math.sqrt(trap2), z: [zx, zy, zz] };
@@ -4596,9 +4752,9 @@ function keyLightDir(right, up, fwd){
    deCPU, deCPUesc, hpDirectDE and hpDirectTrap are for the bulb, and reached through them. No reference orbit,
    no delta: the direct referees of the probes. An iteration is tested after its step, as the kernel tests it. */
 function boxDirectF64(pos, N){
-  const p = boxP, R = p.hasRot ? p.R : null, aS = Math.abs(p.scale), c = juliaOn ? juliaF : pos;   // JULIA MODE (grep)
-  let z = pos.slice(), dr = 1, r2 = 0, escaped = false, it = 0, trap2 = Infinity;
+  let z = pos.slice(), dr = 1, r2 = 0, escaped = false, it = 0, trap2 = Infinity;   // JULIA MODE (grep): c below
   for (let i = 0; i < N; i++) {
+    const p = boxAt(boxP, i), aS = Math.abs(p.scale), R = p.hasRot ? p.R : null, c = juliaOn ? (p.kOverF ? boxKf(p) : juliaF) : pos;   // PER-ITERATION PARAMETERS (grep)
     const u = R ? R.map(r => r[0]*z[0] + r[1]*z[1] + r[2]*z[2]) : z;
     const w = p.kali ? u.map((x, j) => Math.abs(x) + p.T[j]) : u.map(x => Math.max(-p.fold, Math.min(p.fold, x)) * 2 - x);   // KALIBOX (grep): its fold and translation
     const k = Math.max(1, Math.min(p.kA, p.F2 / Math.max(w[0]*w[0] + w[1]*w[1] + w[2]*w[2], 1e-300)));
@@ -4610,11 +4766,12 @@ function boxDirectF64(pos, N){
   return { de: (Math.sqrt(r2) - 1) / dr, escaped, iters: it, trap: Math.sqrt(trap2) };
 }
 function boxDirectHP(posFp, maxIter){
-  const B = boxP.fixed, SC = Number(hp.SCALE), aS = Math.abs(boxP.scale);
+  const SC = Number(hp.SCALE);
   let v = posFp.slice(), dr = 1, r2 = 0, escaped = false, it = 0, trap2 = Infinity;
   for (let i = 0; i < maxIter; i++) {
+    const P = boxAt(boxP, i), B = P.fixed, aS = Math.abs(P.scale);   // PER-ITERATION PARAMETERS (grep)
     const q = hp.boxParts(v, B);
-    v = hp.boxStep(q, cOfHP(posFp), B); dr = dr * (Number(q.k) / SC) * aS + 1; it++;
+    v = hp.boxStep(q, juliaOn && P.kOver ? boxK(P) : cOfHP(posFp), B); dr = dr * (Number(q.k) / SC) * aS + 1; it++;
     r2 = Number(hp.norm2(v)) / SC;
     if (r2 < trap2) trap2 = r2;
     if (r2 > BOX_ESC2) { escaped = true; break; }
@@ -5251,6 +5408,15 @@ function setFormulaNow(kind, params){
   orbitDirty = true; accumReset = true; snapDist = true;
 }
 api.setFormula = setFormulaNow;
+/* PER-ITERATION PARAMETERS (grep): null to clear, or an array of entries an iteration (null, or any of scale, minR,
+   fold, fixedR; the rest from the base). Iterations past the array take the base. The Mandelbox only. */
+api.setBoxSchedule = (arr)=>{
+  boxSched = Array.isArray(arr) && arr.length ? arr.slice(0, BOX_ITER_MAX).map(q => (q && typeof q === 'object' ? { ...q } : null)) : null;
+  boxP = boxDerive(); formulaStamp++;
+  if (boxOn()) kickBoxVariantAsync();            // the schedule's program (USE_SCHED) builds in the background; the f32 baseline draws meanwhile
+  orbitDirty = true; accumReset = true; snapDist = true;
+};
+api.boxSchedule = ()=>(boxSched ? boxSched.map(q => (q ? { ...q } : null)) : null);
 api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), kaliScale: kali.scale, kaliMinRad2: kali.minRad2, kaliTrans: kali.trans.slice(), kaliRot: kali.rot, julia: juliaOn, c: juliaHP.map(String), cNum: juliaF.slice(), burning: burnOn, burnMix });   // cNum: the constant as doubles, for a host's number rows; burning, burnMix: BURNING (grep), the bulb's, kept while the box is drawn
 api.formulaState = ()=>{ if (!boxOn() && !burnActive()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
   const v = variants[pictureKey()]; return v ? 'on' : v === null ? 'failed' : 'building'; };   // the Mandelbox's variant, or BURNING's (grep)

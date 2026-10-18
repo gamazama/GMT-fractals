@@ -40,6 +40,7 @@ import { DepthScale } from './components/DepthScale';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { ModeNotice } from './components/ModeNotice';
 import { IterationReadout, FrameReadout } from './components/Readouts';
+import { ScheduleButton, ScheduleTool } from './components/ScheduleTool';
 
 // Type-only: declaration-merges the dz* slices into the store's type, so
 // `useSlice('dzFormula')` and `setDzFormula(...)` are typed. No runtime content.
@@ -71,6 +72,9 @@ componentRegistry.register(DZ_DEPTH_SCALE_OVERLAY, DepthScale);
 componentRegistry.register('dz-mode-notice', ModeNotice);
 componentRegistry.register('dz-iteration-readout', IterationReadout);
 componentRegistry.register('dz-frame-readout', FrameReadout);
+// The Mandelbox's iteration schedule: the button on its four rows and the tool (components/ScheduleTool.tsx).
+componentRegistry.register('dz-schedule-button', ScheduleButton);
+componentRegistry.register('dz-schedule-tool', ScheduleTool);
 
 // ── The palette suite (stage 5) ──────────────────────────────────────────────
 // The same seam app-gmt and fluid-toy use: the My Gradients panel and its

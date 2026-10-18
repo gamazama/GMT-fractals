@@ -34,6 +34,10 @@
  *     it is sent before any other push of the same patch: `setIters` clamps to the ceiling of the
  *     formula IN FORCE (400 for the bulb, 500 for the box), so a box place's 450 iterations sent
  *     ahead of its formula would arrive as 400.
+ *   - THE SCHEDULE (2026-10-18). `dzFormula.boxSchedule` is the box's iteration rules, an object: it is compiled
+ *     (`compileBoxSchedule`, deep-zoom/boxSchedule.ts) and sent as `api.setBoxSchedule(table)` only when the
+ *     TABLE differs from the one sent last, so a scene load or an undo that brings back the same rules as new
+ *     objects rebuilds nothing. The default (no rules) is the module's own start, and sends nothing.
  *   - THE CONSTANT (2026-10-12). The Julia constant has two writings: the renderer's own, exact
  *     (three 256-bit numbers that arrive as strings with a VIEW), and the store's three doubles
  *     (`dzFormula.juliaX` / `Y` / `Z`, the Constant row). The doubles must never overwrite the
@@ -77,6 +81,8 @@ import { channelToRenderer, compareToRenderer } from '../features/inspect';
 import { shadingToRenderer, lightTypeToRenderer } from '../features/light';
 import { colourToRenderer } from '../features/colour';
 import { formulaToRenderer, validBoxScale } from '../features/formula';
+import { compileBoxSchedule } from '../boxSchedule';
+import type { DzBoxSchedule } from '../boxSchedule';
 
 export interface ParamPusher {
     /** Store values by id. Unchanged values are dropped; each changed group is pushed once. */
@@ -113,6 +119,9 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         return { c: known ? known.c : rows };
     };
 
+    /** The schedule's table as last sent (see THE SCHEDULE): the module starts with none. */
+    let scheduleSent = 'null';
+
     /** One push per group; `look` is called per field. */
     const PUSH: Record<Exclude<DzPushGroup, 'look'>, () => void> = {
         // The store keeps the scale out of the band the renderer cannot draw (deep-zoom/boxScale.ts); `validBoxScale`
@@ -132,6 +141,14 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
             burnMix: num('dzFormula', 'burningMix'),
             ...constant(),                             // only when the rows say another constant than the renderer holds
         }),
+        // THE SCHEDULE: the store's rules go as the renderer's table, and only when the table changes.
+        schedule: () => {
+            const table = compileBoxSchedule(v[paramId('dzFormula', 'boxSchedule')] as unknown as DzBoxSchedule);
+            const text = JSON.stringify(table);
+            if (text === scheduleSent) return;
+            scheduleSent = text;
+            api.setBoxSchedule(table);
+        },
         power: () => api.setPower(num('dzFormula', 'power')),
         phase: () => api.setPhase(num('dzFormula', 'phaseTheta'), num('dzFormula', 'phasePhi')),
         iters: () => api.setIters(num('dzFormula', 'iterations')),

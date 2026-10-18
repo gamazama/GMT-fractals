@@ -55,6 +55,7 @@ import type { BaseVectorInputProps } from './vector-input/types';
 import { Knob } from './Knob';
 import { collectHelpIds } from '../utils/helpUtils';
 import { componentRegistry } from './registry/ComponentRegistry';
+import type { LabelSuffixProps } from '../engine/PanelManifest';
 import { useInputSkin } from './inputs';
 import { AlertIcon, CloseIcon } from './Icons';
 import { Hint } from './Hint';
@@ -93,7 +94,8 @@ interface AutoFeaturePanelProps {
     excludeParams?: string[];
     whitelistParams?: string[]; // New: Render ONLY these params, ignore group
     labelOverrides?: Record<string, string>; // Override labels for specific params by key
-    /** Param key → componentRegistry widget drawn after that row's label (PanelItem `labelSuffixes`). */
+    /** Param key → componentRegistry widget drawn after that row's label (PanelItem `labelSuffixes`). The widget is
+     *  given `featureId` and `paramKey` (LabelSuffixProps), so one widget can serve several rows. */
     labelSuffixes?: Record<string, string>;
     variant?: 'default' | 'dense';
     // New Props for Engine Panel Interception
@@ -358,8 +360,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         }
         const isParamDisabled = isDisabled || disabledParams.includes(key);
         // A live reading after the label (PanelItem `labelSuffixes`), joined to whatever suffix the row has of its own.
-        const Reading = labelSuffixes?.[key] ? componentRegistry.get(labelSuffixes[key]) as React.FC | undefined : undefined;
-        const withReading = (own: React.ReactNode): React.ReactNode => (Reading ? <>{own}<Reading /></> : own);
+        const Reading = labelSuffixes?.[key] ? componentRegistry.get(labelSuffixes[key]) as React.FC<LabelSuffixProps> | undefined : undefined;
+        const withReading = (own: React.ReactNode): React.ReactNode => (Reading ? <>{own}<Reading featureId={featureId} paramKey={key} /></> : own);
         
         // Engine Panel Dense Rendering Logic
         if (variant === 'dense') {
@@ -555,7 +557,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const y = val?.y ?? config.default?.y ?? 0;
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y'], composeFrom: config.composeFrom });
             const liveVec2 = readLiveVec(liveModulations, binding, { x, y }) as THREE.Vector2 | undefined;
-            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={keyframes ? binding.trackKeys : undefined} trackLabels={binding.trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
+            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={keyframes ? binding.trackKeys : undefined} trackLabels={binding.trackLabels} liveValue={liveVec2} showLiveIndicator={true} labelSuffix={withReading(null)} /></div>;
         }
         if (config.type === 'vec3') {
             const x = val?.x ?? config.default?.x ?? 0;
@@ -564,7 +566,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const v3 = new THREE.Vector3(x, y, z);
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z'], composeFrom: config.composeFrom });
             const liveVec3 = readLiveVec(liveModulations, binding, { x, y, z }) as THREE.Vector3 | undefined;
-            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={keyframes ? binding.trackKeys : undefined} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
+            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={keyframes ? binding.trackKeys : undefined} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} labelSuffix={withReading(null)} /></div>;
         }
         if (config.type === 'vec4') {
             const x = val?.x ?? config.default?.x ?? 0;

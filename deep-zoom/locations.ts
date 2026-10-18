@@ -124,7 +124,7 @@ import { colourToRenderer } from './features/colour';
 import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS, FORMULA_KALI, juliaRowsOf } from './features/formula';
 import type { DzFormulaChoice } from './features/formula';
 import { paramId } from './host/paramMap';
-import type { DeepZoomHost, DzParams } from './host/DeepZoomHost';
+import type { DeepZoomHost, DzParams, DzParamValue } from './host/DeepZoomHost';
 import { formatDepth, validDepth } from './components/depthFormat';
 import { depthNow } from './depthNow';
 import { isFlying } from './navigationState';
@@ -187,9 +187,9 @@ const THUMBNAIL_PX = 128;
 /** Which formula the store says is drawn, with the box's numbers. */
 function formulaChoiceNow(): DzFormulaChoice {
     const f = useEngineStore.getState().dzFormula;
-    const out = {} as Record<string, number | boolean>;
+    const out: Record<string, unknown> = {};
     for (const key of FORMULA_CHOICE_KEYS) out[key] = f[key];
-    return out as DzFormulaChoice;
+    return out as unknown as DzFormulaChoice;   // every key of the choice, read off the slice that declares them
 }
 
 /** Tell the renderer the store's formula NOW, ahead of the sync's own (delayed) push, so that the
@@ -199,7 +199,8 @@ const JULIA_ROW_KEYS = ['juliaX', 'juliaY', 'juliaZ'] as const;
 function pushFormulaNow(host: DeepZoomHost, withConstant = false): void {
     if (!host.bootParams()) return;
     const patch: DzParams = {};
-    for (const [key, value] of Object.entries(formulaChoiceNow())) patch[paramId('dzFormula', key)] = value;
+    // The schedule is an object, as the gradient is: the host's push compiles it (host/looseParams.ts, THE SCHEDULE).
+    for (const [key, value] of Object.entries(formulaChoiceNow())) patch[paramId('dzFormula', key)] = value as DzParamValue;
     // The Constant row too, for the switch that re-enters a Julia set: the constant it shows is in force before
     // the renderer is asked where that set is. (The host sends it only if it differs from the one it holds.)
     if (withConstant) for (const key of JULIA_ROW_KEYS) patch[paramId('dzFormula', key)] = useEngineStore.getState().dzFormula[key];
@@ -229,6 +230,7 @@ function applyFormula(state: DzLocationState): void {
         kind: FORMULA_BULB,
         juliaMode: false,                                            // every place from before Julia mode, and every card
         burning: false,                                              // and from before Burning (its mix stays as the row has it)
+        boxSchedule: {},                                             // and from before the iteration schedule (2026-10-18), and every card
         ...saved,
         ...(v.julia ? juliaRowsOf(v.julia) : {}),
     });
@@ -508,7 +510,9 @@ export function jumpToTrailEnd(trail: readonly TrailSample[], flownIn: TrailForm
     const host = getHost(), end = trail[trail.length - 1];
     if (!host || !flownIn || !end) return false;
     const now = useEngineStore.getState().dzFormula, { roll: _roll, julia, ...here } = host.getView();
-    if (SHAPE_KEYS.every((key) => flownIn.formula[key] === now[key]) && String(flownIn.julia) === String(julia)) return false;
+    // The schedule is an object: compared by its content (a scene load brings the same rules as a new object).
+    const same = (a: unknown, b: unknown): boolean => a === b || (typeof a === 'object' && typeof b === 'object' && JSON.stringify(a) === JSON.stringify(b));
+    if (SHAPE_KEYS.every((key) => same(flownIn.formula[key], now[key])) && String(flownIn.julia) === String(julia)) return false;
     const cam = [String(end.p[0]), String(end.p[1]), String(end.p[2])] as [string, string, string];
     return jumpTo({
         // The look fields are the store's anyway (`viewForHost`): the camera and the count are the sample's.

@@ -61,15 +61,20 @@ export const DeepZoomPanels: PanelManifest = [
     ] },
     { id: 'Formula', dock: 'left', order: 2, items: [
         // One formula's rows at a time: each row carries its own condition on `kind` (features/formula.ts).
-        { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'burning', 'burningMix', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation', 'kaliScale', 'kaliMinRad2', 'kaliTranslation', 'kaliRot'] },
+        // The box's four rows and Pre-Rotation carry the iteration schedule's button after their labels, as the Julia
+        // Constant row does below while the Mandelbox is drawn (components/ScheduleTool.tsx).
+        { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'burning', 'burningMix', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation', 'kaliScale', 'kaliMinRad2', 'kaliTranslation', 'kaliRot'],
+            labelSuffixes: { boxScale: 'dz-schedule-button', boxMinRadius: 'dz-schedule-button', boxFold: 'dz-schedule-button', boxFixedRadius: 'dz-schedule-button', boxRotation: 'dz-schedule-button' } },
         // Julia mode, for either formula: the switch, the constant's three numbers while it is on, and the button
         // that takes the constant from the place looked at.
         { type: 'section', label: 'Julia' },
-        { type: 'feature', id: 'dzFormula', whitelistParams: ['juliaMode', 'juliaConstant'] },
+        { type: 'feature', id: 'dzFormula', whitelistParams: ['juliaMode', 'juliaConstant'], labelSuffixes: { juliaConstant: 'dz-schedule-button' } },
         { type: 'widget', id: 'dz-julia-here' },
         // "Iterations 56 · in use 70": the floor and the count in force, one row.
         { type: 'section', label: 'Iterations' },
         { type: 'feature', id: 'dzFormula', whitelistParams: ['iterations', 'autoIterations'], labelSuffixes: { iterations: 'dz-iteration-readout' } },
+        // The schedule tool's window, while one of the box's rows has it open (it draws nothing in the panel).
+        { type: 'widget', id: 'dz-schedule-tool' },
     ] },
     // Eleven rows in four sections and a closed fold (the owner's mock, round-3/m3-light-today-vs-proposed.jpg).
     // The lamp's three rows come under Light type for Lamp or Both (their own conditions hide them under Direct).

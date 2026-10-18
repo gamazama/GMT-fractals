@@ -64,6 +64,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     onDragStart, 
     onDragEnd, 
     headerRight,
+    labelSuffix,
     showDualAxisPads = true,
     // Link feature for scale controls
     linkable = false,
@@ -451,7 +452,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                         {modeToggleable && renderModeToggle()}
                         {headerRight}
                         <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-fg-faint' : 'text-fg-muted'}`}>
-                            {label}
+                            {label}{labelSuffix}
                         </label>
                     </div>
                     {/* Right side: link toggle */}

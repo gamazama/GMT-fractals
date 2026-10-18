@@ -95,7 +95,8 @@ export type IconName =
   | 'wrap'
   | 'height'
   | 'wallHide'
-  | 'wallShow';
+  | 'wallShow'
+  | 'schedule';
 
 /**
  * The hero's USE glyphs — the owner's pick in Figma (GE v2 Hero, 2026-09-07): Material
@@ -199,6 +200,14 @@ const PATHS: Record<Exclude<IconName, keyof typeof FILLED | keyof typeof SOLID>,
     </>
   ),
   close: <path d="M4 4l8 8M12 4l-8 8" />,
+  // The deep zoomer's iteration schedule (2026-10-18; drafted, not the owner's sheet): a value that steps up and down
+  // along a line of iterations, over a dotted base.
+  schedule: (
+    <>
+      <path d="M2.2 10.5h2.6V5.5h2.6v5h2.2V3.8h2.4v6.7h1.8" />
+      <path d="M2.2 13.3h11.6" strokeDasharray="1.2 1.6" />
+    </>
+  ),
   plus: <path d="M8 3.5v9M3.5 8h9" />,
   swap: <path d="M3 5.5h8M9 3l2 2.5-2 2.5M13 10.5H5M7 8l-2 2.5 2 2.5" />,
   // The trash zone that appears while a favourite is in flight. Drawn, not 🗑 — no
