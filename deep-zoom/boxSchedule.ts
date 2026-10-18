@@ -71,11 +71,12 @@ export const isScheduledKey = (key: string): key is DzScheduledKey => key in SCH
 /** The box's iteration ceiling (BOX_ITER_MAX in renderer/core.js): no orbit runs past it. */
 export const SCHEDULE_ITERATIONS = 500;
 
-export interface DzScheduleKey { at: number; value: number }
+/** `id`: stable within the schedule (THE VALUES ARE ANIMATABLE): a keyframe track is bound to it, not to a position. */
+export interface DzScheduleKey { at: number; value: number; id?: number }
 export type DzScheduleRule =
-    | { kind: 'keys'; off?: boolean; keys: DzScheduleKey[] }
-    | { kind: 'switch'; off?: boolean; at: number; until: number | null; value: number }
-    | { kind: 'pattern'; off?: boolean; start: number; every: number; width: number; until: number | null; value: number };
+    | { kind: 'keys'; id?: number; off?: boolean; keys: DzScheduleKey[] }
+    | { kind: 'switch'; id?: number; off?: boolean; at: number; until: number | null; value: number }
+    | { kind: 'pattern'; id?: number; off?: boolean; start: number; every: number; width: number; until: number | null; value: number };
 export type DzScheduleRuleKind = DzScheduleRule['kind'];
 /** The store's value: the rules of each scheduled parameter. An absent or empty list: that parameter is not scheduled. */
 export type DzBoxSchedule = Partial<Record<DzScheduledKey, DzScheduleRule[]>>;
@@ -104,7 +105,7 @@ export function ruleValueAt(rule: DzScheduleRule, i: number): number | undefined
 
 /** The keys in order of iteration, each iteration a whole number (a later key at the same iteration wins). */
 export function sortedKeys(keys: readonly DzScheduleKey[]): DzScheduleKey[] {
-    return keys.map((k) => ({ at: int(k.at), value: k.value })).sort((a, b) => a.at - b.at);
+    return keys.map((k) => ({ ...k, at: int(k.at) })).sort((a, b) => a.at - b.at);
 }
 
 /** The value a list of rules gives at iteration i: the last rule that touches i, else undefined (the base). */
@@ -148,12 +149,71 @@ export function compileBoxSchedule(schedule: DzBoxSchedule | null | undefined): 
     return table.length ? table : null;
 }
 
-/** A new rule of a kind, its value(s) from the base and its iterations around `near` (the count in use). */
-export function newRule(kind: DzScheduleRuleKind, base: number, near: number): DzScheduleRule {
+/** A new rule of a kind, its value(s) from the base and its iterations around `near` (the count in use); its ids
+ *  from `id` up (nextScheduleId). */
+export function newRule(kind: DzScheduleRuleKind, base: number, near: number, id = 1): DzScheduleRule {
     const at = Math.max(1, Math.round(near * 0.3));
-    if (kind === 'switch') return { kind, at, until: null, value: base };
-    if (kind === 'pattern') return { kind, start: 0, every: 2, width: 1, until: null, value: base };
-    return { kind, keys: [{ at, value: base }, { at: Math.max(at + 1, Math.round(near * 0.7)), value: base }] };
+    if (kind === 'switch') return { kind, id, at, until: null, value: base };
+    if (kind === 'pattern') return { kind, id, start: 0, every: 2, width: 1, until: null, value: base };
+    return { kind, id, keys: [{ at, value: base, id: id + 1 }, { at: Math.max(at + 1, Math.round(near * 0.7)), value: base, id: id + 2 }] };
+}
+
+/* ════════ THE VALUES ARE ANIMATABLE (2026-10-18) ════════
+   Each rule's value (a key's value, for a keys rule) can be keyframed like a slider: its track id is
+   `dzSchedule.<param>.r<rule id>` (`.k<key id>` for a key), bound by one prefix binder
+   (binderRegistry.registerPrefix, components/ScheduleTool.tsx) that writes the value into the store's rules. The ids
+   are stable: a rule or key keeps its id when others are added, removed or sorted, so its track stays its own. A
+   track whose rule is gone writes nothing. The track id holds the param's name, so a rotation's and a phase's track
+   is interpolated as an angle (grep isRotationTrack), as theirs should be. */
+export const SCHEDULE_TRACK_PREFIX = 'dzSchedule.';
+export const scheduleTrackId = (key: DzScheduledKey, ruleId: number, keyId?: number): string =>
+    `${SCHEDULE_TRACK_PREFIX}${key}.r${ruleId}${keyId === undefined ? '' : `.k${keyId}`}`;
+export function parseScheduleTrackId(id: string): { key: DzScheduledKey; ruleId: number; keyId?: number } | null {
+    const m = /^dzSchedule\.(\w+)\.r(\d+)(?:\.k(\d+))?$/.exec(id);
+    if (!m || !isScheduledKey(m[1])) return null;
+    return { key: m[1], ruleId: Number(m[2]), ...(m[3] !== undefined ? { keyId: Number(m[3]) } : {}) };
+}
+/** One more than the largest id in the schedule. */
+export function nextScheduleId(schedule: DzBoxSchedule | null | undefined): number {
+    let mx = 0;
+    for (const key of SCHEDULED_KEYS) for (const r of schedule?.[key] ?? []) {
+        mx = Math.max(mx, r.id ?? 0);
+        if (r.kind === 'keys') for (const k of r.keys) mx = Math.max(mx, k.id ?? 0);
+    }
+    return mx + 1;
+}
+/** The schedule with an id on every rule and key that has none (rules made before the ids), or itself when all have one. */
+export function withScheduleIds(schedule: DzBoxSchedule): DzBoxSchedule {
+    let next = nextScheduleId(schedule), changed = false;
+    const out: DzBoxSchedule = {};
+    for (const key of SCHEDULED_KEYS) {
+        const rules = schedule[key];
+        if (!rules) continue;
+        out[key] = rules.map((r) => {
+            let rr = r;
+            if (rr.id === undefined) { rr = { ...rr, id: next++ }; changed = true; }
+            if (rr.kind === 'keys' && rr.keys.some((k) => k.id === undefined)) { rr = { ...rr, keys: rr.keys.map((k) => (k.id === undefined ? { ...k, id: next++ } : k)) }; changed = true; }
+            return rr;
+        });
+    }
+    return changed ? out : schedule;
+}
+/** The schedule with one value set (a track's write), or null when that rule or key is not in it. */
+export function withScheduleValue(schedule: DzBoxSchedule, key: DzScheduledKey, ruleId: number, keyId: number | undefined, v: number): DzBoxSchedule | null {
+    const rules = schedule[key];
+    if (!rules) return null;
+    let hit = false;
+    const next = rules.map((r) => {
+        if (r.id !== ruleId) return r;
+        if (r.kind === 'keys') {
+            if (keyId === undefined) return r;
+            return { ...r, keys: r.keys.map((k) => (k.id === keyId ? ((hit = k.value !== v || hit), { ...k, value: v }) : k)) };
+        }
+        if (keyId !== undefined) return r;
+        hit = r.value !== v;
+        return { ...r, value: v };
+    });
+    return hit ? { ...schedule, [key]: next } : null;
 }
 
 /** The rule in words, for its card and a screen reader. */

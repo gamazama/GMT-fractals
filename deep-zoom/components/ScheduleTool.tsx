@@ -17,6 +17,9 @@
  * undo step: a click or a typed number is bracketed here (`beginParamTransaction`), a drag from its start to its
  * end. Which tab is open is not saved anywhere (`scheduleTool` below, a module value).
  *
+ * THE VALUES ARE ANIMATABLE (deep-zoom/boxSchedule.ts): each rule's value, and each key's, carries the keyframe
+ * diamond of its own track (ValueRow; the binder is registered below), and is auto-keyed while recording.
+ *
  * PITFALLS
  *   - IT LIVES IN THE FORMULA TAB: the dock showing another tab unmounts it, and it closes. Escape closes it too
  *     (it holds nothing Escape could lose: every edit is already in the store).
@@ -31,6 +34,9 @@ import React, { useMemo, useRef, useSyncExternalStore } from 'react';
 import DraggableWindow from '../../components/DraggableWindow';
 import Button from '../../components/Button';
 import { BaseSlider } from '../../components/Slider';
+import { KeyframeButton } from '../../components/KeyframeButton';
+import { useTrackAnimation } from '../../hooks/useTrackAnimation';
+import { binderRegistry } from '../../engine/animation/binderRegistry';
 import { Icon } from '../../components/ui/Icon';
 import { z } from '../../components/ui/zIndex';
 import type { LabelSuffixProps } from '../../engine/PanelManifest';
@@ -41,7 +47,8 @@ import type { ValueMapping } from '../../components/inputs/primitives/FormatUtil
 import { DzFormulaFeature, FORMULA_BOX, FORMULA_BULB, validBoxScale } from '../features/formula';
 import {
     SCHEDULED_KEYS, SCHEDULED_PARAMS, SCHEDULE_GROUPS, SCHEDULE_ITERATIONS, SCHEDULE_ROW_OPENS, describeRule, isScheduled,
-    isScheduledKey, newRule, scheduleValueAt, sortedKeys,
+    isScheduledKey, newRule, scheduleValueAt, sortedKeys, SCHEDULE_TRACK_PREFIX, scheduleTrackId, parseScheduleTrackId,
+    nextScheduleId, withScheduleIds, withScheduleValue,
 } from '../boxSchedule';
 import type { DzBoxSchedule, DzScheduleGroup, DzScheduleRule, DzScheduleRuleKind, DzScheduledKey } from '../boxSchedule';
 
@@ -60,8 +67,21 @@ const scheduleNow = (): DzBoxSchedule => useEngineStore.getState().dzFormula.box
 function writeRules(key: DzScheduledKey, rules: DzScheduleRule[]): void {
     const next: DzBoxSchedule = { ...scheduleNow() };
     if (rules.length) next[key] = rules; else delete next[key];
-    useEngineStore.getState().setDzFormula({ boxSchedule: next });
+    useEngineStore.getState().setDzFormula({ boxSchedule: withScheduleIds(next) });   // every rule and key keeps an id (THE VALUES ARE ANIMATABLE)
 }
+
+/* THE VALUES ARE ANIMATABLE (deep-zoom/boxSchedule.ts): one binder for every schedule track, registered when this module
+   loads (registerFeatures.ts imports it before the store is built). A track writes its rule's value into the store as
+   playback or a scrub moves - not an undo step, as no track write is. A track whose rule is gone writes nothing. */
+binderRegistry.registerPrefix({
+    prefix: SCHEDULE_TRACK_PREFIX,
+    write: (id, v) => {
+        const t = parseScheduleTrackId(id);
+        if (!t) return;
+        const next = withScheduleValue(scheduleNow(), t.key, t.ruleId, t.keyId, domainOf(t.key).hold(v));
+        if (next) useEngineStore.getState().setDzFormula({ boxSchedule: next });
+    },
+});
 /** A discrete edit (a click, a typed number): one undo step of its own. */
 function commit(key: DzScheduledKey, rules: DzScheduleRule[]): void {
     const s = useEngineStore.getState();
@@ -138,6 +158,19 @@ const Graph: React.FC<{ rules: DzScheduleRule[] | undefined; base: number; n: nu
 // ── one rule ────────────────────────────────────────────────────────────────────────────────────────────────
 const KIND_LABEL: Record<DzScheduleRuleKind, string> = { keys: 'Keys', switch: 'Switch', pattern: 'Pattern' };
 
+/** A rule's value: the slider with its keyframe diamond (the track of that rule or key), auto-keyed while recording. */
+const ValueRow: React.FC<{ paramKey: DzScheduledKey; label: string; trackLabel: string; trackId: string | undefined; value: number; set: (v: number) => void; drag: { onDragStart: () => void; onDragEnd: () => void } }> =
+    ({ paramKey, label, trackLabel, trackId, value, set, drag }) => {
+    const dom = domainOf(paramKey);
+    const k = useTrackAnimation(trackId, value, trackLabel);
+    return (
+        <BaseSlider label={label} value={value} min={dom.min} max={dom.max} step={dom.step} mapping={dom.mapping} mapTextInput={!!dom.mapping}
+            headerRight={trackId ? <KeyframeButton status={k.status} label={trackLabel} onClick={k.setKey} onDeleteKey={k.deleteKey} onDeleteTrack={k.deleteTrack} /> : undefined}
+            onDragStart={() => { drag.onDragStart(); k.autoKeyOnDragStart(); }} onDragEnd={drag.onDragEnd}
+            onChange={(v) => { const h = dom.hold(v); set(h); k.autoKeyOnChange(h); }} />
+    );
+};
+
 const RuleCard: React.FC<{ paramKey: DzScheduledKey; index: number; rules: DzScheduleRule[]; n: number }> = ({ paramKey, index, rules, n }) => {
     const rule = rules[index], dom = domainOf(paramKey);
     const dragging = useRef(false);
@@ -155,8 +188,11 @@ const RuleCard: React.FC<{ paramKey: DzScheduledKey; index: number; rules: DzSch
         <BaseSlider label={label} value={value} min={0} max={iterMax} step={1} hardMin={0} hardMax={SCHEDULE_ITERATIONS} {...drag}
             onChange={(v) => set(Math.round(v))} />
     );
-    const val = (label: string, value: number, set: (v: number) => void) => (
-        <BaseSlider label={label} value={value} min={dom.min} max={dom.max} step={dom.step} mapping={dom.mapping} mapTextInput={!!dom.mapping} {...drag} onChange={(v) => set(dom.hold(v))} />
+    const ruleName = `${titleOf(paramKey)} · ${KIND_LABEL[rule.kind]} ${index + 1}`;
+    const val = (label: string, value: number, set: (v: number) => void, keyId?: number, keyAt?: number) => (
+        <ValueRow paramKey={paramKey} label={label} value={value} set={set} drag={drag}
+            trackId={rule.id === undefined ? undefined : scheduleTrackId(paramKey, rule.id, keyId)}
+            trackLabel={keyAt === undefined ? ruleName : `${ruleName}, key at ${keyAt}`} />
     );
     const ends = (until: number | null, from: number, set: (u: number | null) => void) => (
         <div className="space-y-1">
@@ -192,14 +228,14 @@ const RuleCard: React.FC<{ paramKey: DzScheduledKey; index: number; rules: DzSch
                 {sortedKeys(rule.keys).map((k, ki, all) => (
                     <div key={ki} data-dz-schedule-key className="flex items-end gap-1">
                         <div className="w-[42%]">{iter(`Key ${ki + 1} at`, k.at, (v) => put({ ...rule, keys: all.map((o, j) => (j === ki ? { ...o, at: v } : o)) }))}</div>
-                        <div className="flex-1">{val('Value', k.value, (v) => put({ ...rule, keys: all.map((o, j) => (j === ki ? { ...o, value: v } : o)) }))}</div>
+                        <div className="flex-1">{val('Value', k.value, (v) => put({ ...rule, keys: all.map((o, j) => (j === ki ? { ...o, value: v } : o)) }), k.id, k.at)}</div>
                         <button type="button" className="text-fg-faint hover:text-danger p-px mb-1" title="Remove this key" disabled={all.length < 2}
                             onClick={() => put({ ...rule, keys: all.filter((_, j) => j !== ki) })}><Icon name="close" size={10} /></button>
                     </div>
                 ))}
                 <Button size="small" label="Add key" icon={<Icon name="plus" size={10} />} onClick={() => {
                     const all = sortedKeys(rule.keys), last = all[all.length - 1];
-                    put({ ...rule, keys: [...all, { at: Math.min(SCHEDULE_ITERATIONS, (last?.at ?? 0) + 10), value: last?.value ?? 0 }] });
+                    put({ ...rule, keys: [...all, { at: Math.min(SCHEDULE_ITERATIONS, (last?.at ?? 0) + 10), value: last?.value ?? 0, id: nextScheduleId(scheduleNow()) }] });
                 }} />
                 <div className="text-fg-faint">The base before the first key; the last key's value from it on. Straight lines between keys.</div>
             </>}
@@ -225,7 +261,7 @@ export const ScheduleTool: React.FC = () => {
         else for (const k of r.keys) reach = Math.max(reach, k.at + 8);
     }
     const n = Math.min(SCHEDULE_ITERATIONS, reach);
-    const add = (kind: DzScheduleRuleKind) => commit(key, [...rules, newRule(kind, base, inUse || 40)]);
+    const add = (kind: DzScheduleRuleKind) => commit(key, [...rules, newRule(kind, base, inUse || 40, nextScheduleId(schedule))]);
     return (
         <DraggableWindow title={`Iteration schedule: ${label}`} onClose={() => scheduleTool.open(null)} dismissOnEscape
             initialPos={{ x: 340, y: 72 }} zIndex={z('tool')} initialSize={{ width: 400, height: Math.max(380, Math.min(720, window.innerHeight - 110)) }}>

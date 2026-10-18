@@ -14,6 +14,10 @@
  *   - Features whose slice setter doesn't follow the `set${FeatureId}`
  *     convention — F6 in the fragility audit.
  *   - Non-feature globals an app wants to animate (tint, debug knobs).
+ *   - Values of a COLLECTION whose members come and go (`registerPrefix`): one writer for every id
+ *     under a prefix, told the id. The deep zoomer's iteration-schedule rules are the first
+ *     (`dzSchedule.<param>.<rule>...`). An exact registration still wins over a prefix, and the
+ *     longest matching prefix over a shorter one.
  *
  * Apps call `registerBinder({ id, write })` at install time; the
  * registry is consulted by AnimationEngine *before* any name-inference
@@ -37,7 +41,14 @@ export interface BinderEntry {
     label?: string;
 }
 
+/** A writer for every track id that starts with `prefix` (see the header). */
+export interface PrefixBinderEntry {
+    prefix: string;
+    write: (id: string, v: number) => void;
+}
+
 const _registry = new Map<string, BinderEntry>();
+const _prefixes = new Map<string, PrefixBinderEntry>();
 
 export const binderRegistry = {
     /** Register a binder. Returns an unregister fn so install*() teardowns
@@ -52,10 +63,21 @@ export const binderRegistry = {
         };
     },
 
-    /** Lookup a binder by track id. AnimationEngine.getBinder calls this
-     *  before falling through to its convention-based chain. */
+    /** Register a writer for every id under a prefix (see the header). Returns an unregister fn;
+     *  re-registering a prefix replaces it, as `register` does. */
+    registerPrefix(entry: PrefixBinderEntry): () => void {
+        _prefixes.set(entry.prefix, entry);
+        return () => { if (_prefixes.get(entry.prefix) === entry) _prefixes.delete(entry.prefix); };
+    },
+
+    /** Lookup a binder by track id: an exact registration, else the longest matching prefix.
+     *  AnimationEngine.getBinder calls this before falling through to its convention-based chain. */
     lookup(id: string): BinderEntry | undefined {
-        return _registry.get(id);
+        const exact = _registry.get(id);
+        if (exact) return exact;
+        let best: PrefixBinderEntry | undefined;
+        for (const pe of _prefixes.values()) if (id.startsWith(pe.prefix) && (!best || pe.prefix.length > best.prefix.length)) best = pe;
+        return best ? { id, write: (v: number) => best!.write(id, v) } : undefined;
     },
 
     /** Every registered entry. For the track-picker UI, introspection,
@@ -68,6 +90,7 @@ export const binderRegistry = {
      *  boot and never clear. */
     clear() {
         _registry.clear();
+        _prefixes.clear();
     },
 };
 
