@@ -76,19 +76,19 @@ export const DeepZoomPanels: PanelManifest = [
         // The schedule tool's window, while one of the box's rows has it open (it draws nothing in the panel).
         { type: 'widget', id: 'dz-schedule-tool' },
     ] },
-    // Eleven rows in four sections and a closed fold (the owner's mock, round-3/m3-light-today-vs-proposed.jpg).
-    // The lamp's three rows come under Light type for Lamp or Both (their own conditions hide them under Direct).
+    // Four sections and a closed fold (the owner's mock, round-3/m3-light-today-vs-proposed.jpg; three rows since: lamp and key brightness, reflection).
+    // The lamp's four rows come under Light type for Lamp or Both (their own conditions hide them under Direct).
     { id: 'Light', dock: 'right', order: 0, active: true, items: [
         { type: 'widget', id: 'dz-mode-notice' },
         { type: 'section', label: 'Lights' },
-        { type: 'feature', id: 'dzLight', whitelistParams: ['lightType', 'lampFalloff', 'lampShadows', 'lampOffset', 'keyElevation', 'keyTurn', 'fill', 'kicker'] },
+        { type: 'feature', id: 'dzLight', whitelistParams: ['lightType', 'lampStrength', 'lampFalloff', 'lampShadows', 'lampOffset', 'keyStrength', 'keyElevation', 'keyTurn', 'fill', 'kicker'] },
         { type: 'section', label: 'Ambient', showIf: newShading },
         { type: 'feature', id: 'dzLight', whitelistParams: ['sky'] },
         { type: 'feature', id: 'dzLight', whitelistParams: ['lightTint'] },
         { type: 'section', label: 'Shadow', showIf: newShading },
         { type: 'feature', id: 'dzLight', whitelistParams: ['shadows', 'occlusion'] },
         { type: 'section', label: 'Surface and air', showIf: newShading },
-        { type: 'feature', id: 'dzLight', whitelistParams: ['roughness', 'haze'] },
+        { type: 'feature', id: 'dzLight', whitelistParams: ['roughness', 'reflection', 'haze'] },
         { type: 'collapsible', label: 'More: Bounce, occlusion accuracy, Shading', defaultOpen: false, items: [
             { type: 'feature', id: 'dzLight', whitelistParams: ['bounce'] },
             { type: 'feature', id: 'dzLight', whitelistParams: ['occlusionRadius', 'occlusionSamples'] },

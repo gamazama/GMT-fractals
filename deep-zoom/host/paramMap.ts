@@ -162,6 +162,8 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     { feature: 'dzLight', key: 'lampFalloff', cls: 'A', group: 'light', read: (api) => api.dz.settings().falloff },
     look('lampShadows', 'lampShadow'),
     look('lampOffset', 'lampOffset'),
+    look('lampStrength', 'lamp'),
+    look('keyStrength', 'key'),
     look('keyElevation', 'keyElev'),
     look('keyTurn', 'keyTurn'),
     look('lightTint', 'tint'),
@@ -174,6 +176,7 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     look('bounce', 'bounce'),
     look('sky', 'sky'),
     look('roughness', 'rough'),
+    look('reflection', 'refl'),
     look('haze', 'haze'),
 
     // ── dzColour: three values, one `setColor` ──

@@ -2066,7 +2066,7 @@ uniform float uSplitX;           // compare view: the divider's framebuffer x (<
 uniform int   uCompare;          // 1 = normals: packed 4-tap left of the divider, from depth right of it
 uniform int   uFarLook;          // 1 = far ground wears the near surface's albedo and palette (grep FAR LOOK in pass G); 0 = the page's mid grey
 uniform vec4  uLookA;            // occlusion strength, occlusion radius (fraction of picture height), shadow strength, haze strength
-uniform vec4  uLookB;            // key intensity, sky (dome) strength, -, colour saturation
+uniform vec4  uLookB;            // key intensity, sky (dome) strength, the lamp's intensity (New shading), colour saturation
 uniform vec4  uLookC;            // -, light softness (tan of its half-angle), shadow reach (in depths), exposure
 uniform vec4  uMat;              // GMT's material: roughness, metallic, reflectivity, diffuse
 uniform vec3  uFillDir, uKickDir;// toward the fill light and the kicker (the key is uLightDir)
@@ -2387,8 +2387,8 @@ void main(){
                    close to the eye shadows the wall far behind it. Held further off the eye (uLookD.w) the
                    shadows grow, and more of their casters fall outside the picture. */
                 if (uLookD.z > 0.0 && nl > 0.0) nl *= mix(1.0, shadowed(c, g.x, rd, n, lh, 227.0, 0.95), uLookD.z);
-                col += (dif + spc * pow(max(dot(n, normalize(lh + v)), 0.0), shin)) * (uLookB.x * nl / (1.0 + a*a));
-                difL += dif * (uLookB.x * nl / (1.0 + a*a));
+                col += (dif + spc * pow(max(dot(n, normalize(lh + v)), 0.0), shin)) * (uLookB.z * nl / (1.0 + a*a));   // uLookB.z: the lamp's own strength (look.lamp, 2026-10-18; it was the key's)
+                difL += dif * (uLookB.z * nl / (1.0 + a*a));
             }
             col *= open;                                     // as GMT: the occlusion multiplies the whole shaded colour
             if (uStage == 1) { o = vec4(difL * open, 1.0); return; }   // BOUNCE FROM DEPTH (grep), stage 1: this point's light, as it is
@@ -2873,7 +2873,7 @@ const look = { mode: 1, view: 0, compare: 0, split: 0.5,
   ao: 1.0, aoRadius: 0.12, aoTaps: 10, shadow: 1.0, soft: 0.05, shadowLen: 0.6, haze: 0.0, hazeCol: [0.03, 0.05, 0.07],
   key: 3.0, sky: 0.3, rough: 0.75, metal: 0.2, refl: 0.6, diffuse: 1.0, sat: 1.0, exposure: 1.0,
   keyElev: 40, keyTurn: 0, keyAz: 152, fillAz: -40, fillElev: 21,
-  fill: 0.5, fillCol: [1.0, 0.246, 0.0], kick: 0.25, kickCol: [0.0, 0.246, 1.0], tint: 0.5, nrmTap: 1, bounce: 0, bounceRadius: 0.4, lampShadow: 1, lampOffset: 1 };   // tint: 1 = GMT's light colours, 0 = all lights white · nrmTap: how many pixels away normals-from-depth read their neighbours · aoRadius, aoTaps: grep OCCLUSION FROM DEPTH
+  fill: 0.5, fillCol: [1.0, 0.246, 0.0], kick: 0.25, kickCol: [0.0, 0.246, 1.0], tint: 0.5, nrmTap: 1, bounce: 0, bounceRadius: 0.4, lampShadow: 1, lampOffset: 1, lamp: 3.0 };   // tint: 1 = GMT's light colours, 0 = all lights white · lamp: the New shading's lamp strength, the key's 3 until 2026-10-18 · nrmTap: how many pixels away normals-from-depth read their neighbours · aoRadius, aoTaps: grep OCCLUSION FROM DEPTH
 api.look = look;
 api.setLook = (o)=>{ Object.assign(look, o); accumReset = true; };
 const RIG_N = 32, rigPx = new Float32Array(RIG_N * RIG_N * 4);
@@ -3132,7 +3132,7 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
     gl.uniform3fv(us.planeN, rig.n); gl.uniform2f(us.depthRange, rig.near, rig.far);
     gl.uniform4f(us.lookA, look.ao, look.aoRadius, look.shadow, look.haze);
     gl.uniform1i(us.aoTaps, Math.max(1, Math.min(32, Math.round(look.aoTaps) || 10)));   // 32 is the shader's loop bound (grep MAX_TAPS)
-    gl.uniform4f(us.lookB, look.key, look.sky * 0.33, 0, look.sat);
+    gl.uniform4f(us.lookB, look.key, look.sky * 0.33, look.lamp, look.sat);
     gl.uniform4f(us.lookC, 0, look.soft, look.shadowLen, look.exposure);
     gl.uniform3fv(us.haze, look.hazeCol);
     gl.uniform4f(us.mat, look.rough, look.metal, look.refl, look.diffuse);

@@ -247,7 +247,7 @@ The three tabs on the right change how the picture looks, never where you are. \
 
 ## Light
 - **Light type**: Direct, Lamp (a light at the camera that fades with distance) or Both. \`L\` steps through them.
-- The other rows place the key light and set the sky, the shadows, the occlusion, the surface and the haze.
+- **Key** and **Lamp** are how bright the key light and the lamp are. The other rows place the key light and set the sky, the shadows, the occlusion, the surface and the haze; **Reflection** tones down a surface that mirrors too much light.
 - The fold at the foot of the tab holds the rest. **Occlusion radius** is how far round each point the occlusion looks. **Occlusion samples**: more of them take the grain out of a picture that is moving. **Shading**: Classic is one light fixed to the camera, with no shadows; New, the default, has lights that follow the surface in view, with shadows.
 
 ## Colour

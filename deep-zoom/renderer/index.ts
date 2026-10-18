@@ -244,6 +244,12 @@ export interface DzLook {
     lampShadow?: number;
     /** How far off the eye the lamp is held (1 at the start: where it always was). */
     lampOffset?: number;
+    /** The lamp's strength under the New shading (3 at the start: the key's, which it borrowed until 2026-10-18). */
+    lamp?: number;
+    /** The key's strength (3 at the start). */
+    key?: number;
+    /** How much the surface reflects: the sky's reflection and every highlight (0.6 at the start). */
+    refl?: number;
     shadow?: number;
     haze?: number;
     sky?: number;

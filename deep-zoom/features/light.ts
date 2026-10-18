@@ -26,10 +26,12 @@
  *     shading        api.setLook({ mode })         mode = shadingToRenderer(index): 0 classic, 1 new
  *     lightType      api.setLight(m, falloff)      m = lightTypeToRenderer(index): 0, 1, 2. ALWAYS
  *     lampFalloff    api.setLight(m, falloff)        both arguments: see pitfalls
+ *     lampStrength   api.setLook({ lamp })         0 to 10; 3 = the key's, which it borrowed until 2026-10-18
  *     lampShadows    api.setLook({ lampShadow })   0 = none; default 1 since 2026-10-16 (grep THE
  *     lampOffset     api.setLook({ lampOffset })     LAMP'S SHADOWS in core.js); 1 = where it was
  *     keyElevation   api.setLook({ keyElev })      degrees
  *     keyTurn        api.setLook({ keyTurn })      degrees
+ *     keyStrength    api.setLook({ key })          0 to 10; 3 at the start (`key: 3.0` in `const look = {`)
  *     lightTint      api.setLook({ tint })
  *     fill           api.setLook({ fill })         0 to 3, the key's strength (2026-10-17)
  *     kicker         api.setLook({ kick })         0 to 3
@@ -42,6 +44,7 @@
  *                                                  has no row)
  *     sky            api.setLook({ sky })
  *     roughness      api.setLook({ rough })
+ *     reflection     api.setLook({ refl })         0 to 1; scales the sky's reflection AND every light's highlight (uMat.z)
  *     haze           api.setLook({ haze })
  *   `api.setLook(o)` is `Object.assign(look, o)`: one call may carry several keys, and a key it
  *   does not know is stored and ignored. Read-back: `api.dz.settings()` gives `lookMode`, `light`
@@ -62,11 +65,11 @@
  *   (grep `if (uLook == 1)`, `uLightMode != 1`, `uLightMode != 0` in core.js):
  *     shading, lightType                              always
  *     lampFalloff                                     lightType is Lamp or Both
- *     lampShadows, lampOffset                         shading is New AND lightType is Lamp or Both
- *     keyElevation, keyTurn, lightTint, fill, kicker,
+ *     lampStrength, lampShadows, lampOffset           shading is New AND lightType is Lamp or Both
+ *     keyStrength, keyElevation, keyTurn, lightTint, fill, kicker,
  *     shadows                                         shading is New AND lightType is not Lamp
  *     occlusion, occlusionRadius, occlusionSamples,
- *     bounce, sky, roughness, haze                    shading is New
+ *     bounce, sky, roughness, reflection, haze        shading is New
  *   This departs from BLUEPRINT section 3, which shows `lightType` and `lampFalloff` under the
  *   Classic shading only. The New shading reads the light type too: Lamp switches the key, the
  *   fill, the kicker and every shadow OFF and lights with the camera lamp and the sky alone; Both
@@ -114,7 +117,7 @@
  *     under OCCLUSION FROM DEPTH in core.js). 32 samples cost 0.3 to 0.5 ms a frame more than
  *     10 at 1024 x 1024 (same place).
  *   - FOURTEEN MORE LOOK FIELDS ARE NOT HERE. `look` in core.js also holds exposure, saturation,
- *     shadow softness and length, haze colour, the key's strength, the fill and kicker colours, metallic, reflectivity, diffuse, and three more
+ *     shadow softness and length, haze colour, the fill and kicker colours, metallic, diffuse, and three more
  *     angles (key azimuth, fill azimuth, fill elevation). They have defaults and no
  *     range anywhere in the renderer; a slider with a guessed range is a control the renderer may
  *     not honour (BLUEPRINT section 3, DECISIONS D13). Add one only with a range read out of the
@@ -229,6 +232,22 @@ export const DzLightFeature = {
             condition: NEW_SHADING_LAMP_LIT,
             description: 'How far off the eye the lamp is held, up and to the right. 1: where it always was. Larger: longer shadows and stronger modelling. 0: at the eye, where its shadows hide behind what casts them.',
         },
+        // ── The lamp's and the key's strengths, and the reflection (the owner, 2026-10-18: the reflection is "sometimes
+        //    too bright", the lights need a brightness). Lights, so at L5 the two strengths go with the lamp and the key.
+        lampStrength: {
+            type: 'float',
+            default: 3, min: 0, max: 10, step: 0.1,
+            label: 'Lamp',
+            condition: NEW_SHADING_LAMP_LIT,
+            description: 'Strength of the lamp at the camera. 3: as strong as the key, which is what it was before it had a row.',
+        },
+        keyStrength: {
+            type: 'float',
+            default: 3, min: 0, max: 10, step: 0.1,
+            label: 'Key',
+            condition: NEW_SHADING_KEY_LIT,
+            description: 'Strength of the key, the main light. The fill and the kicker are set on their own rows.',
+        },
         keyElevation: {
             type: 'float',
             default: 40, min: 5, max: 85, step: 1,
@@ -320,6 +339,13 @@ export const DzLightFeature = {
             label: 'Roughness',
             condition: NEW_SHADING,
             description: 'Low: a tight, bright highlight. High: a broad, soft sheen.',
+        },
+        reflection: {
+            type: 'float',
+            default: 0.6, min: 0, max: 1, step: 0.05,
+            label: 'Reflection',
+            condition: NEW_SHADING,
+            description: 'How much the surface reflects: the sky mirrored in it, brightest at grazing angles, and the highlights of every light. 0: a matt surface.',
         },
         haze: {
             type: 'float',
