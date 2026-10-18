@@ -2939,13 +2939,19 @@ function measureRig(w, h, fwd, right, up, alone){
   return fitRig(rigPx, w, h, fwd, right, up, alone);
 }
 /* measure without blocking, for flying frames: the read-back goes into a pixel buffer behind a
-   fence, and pollRig() hands the fit over a frame or two later. One request in flight at a time. */
+   fence, and pollRig() hands the fit over a frame or two later. One request in flight at a time.
+   Every request gives the buffer fresh storage (bufferData) before writing it. Chrome keeps a copy of
+   a READ-usage buffer at each fence after a write (ReadbackBufferShadowTracker) and frees it only when
+   the buffer is re-specified or deleted; its getBufferSubData never reads that copy. Reusing the
+   storage made every request after the first print "READ-usage buffer was written, then fenced, but
+   written again before being read back", and at Chrome's 256th message a long flight hid every later
+   WebGL message (Chrome 155, 2026-10-18: 256 by the end of a dive to 1e-9 and 4 s of W; 0 with this). */
 let rigPbo = null, rigSync = null, rigAsk = null;
 function requestRig(w, h, fwd, right, up){
   if (rigSync) return;
   rigBlit(w, h);
-  if (!rigPbo) { rigPbo = gl.createBuffer(); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, rigPbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, rigPx.byteLength, gl.STREAM_READ); }
-  else gl.bindBuffer(gl.PIXEL_PACK_BUFFER, rigPbo);
+  if (!rigPbo) rigPbo = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, rigPbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, rigPx.byteLength, gl.STREAM_READ);
   gl.readPixels(0, 0, RIG_N, RIG_N, gl.RGBA, gl.FLOAT, 0);
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
   rigSync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush();
