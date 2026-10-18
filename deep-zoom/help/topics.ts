@@ -277,7 +277,7 @@ The three tabs on the right change how the picture looks, never where you are. \
 ## 0.1.0 — Deep Zoom
 - **Fly into a Mandelbulb, a Mandelbox or a KaliBox, down to 1e-77.** Each has a Julia mode.
 - **Fly or Orbit** (\`Tab\`), or type a depth and **Dive** to it; \`B\` saves a place and \`1\` to \`9\` go back to them.
-- **Schedule the Mandelbox by iteration**: the button beside Scale, the radii, Folding Limit, Pre-Rotation or the Julia constant gives it other values at chosen iterations, so a dive changes as it goes deeper; each value can be keyframed.
+- **Schedule by iteration**: the button beside the Mandelbox's rows, the Mandelbulb's phase or the Julia constant gives it other values at chosen iterations, so a dive changes as it goes deeper; each value can be keyframed.
 - **Routes**: \`K\` drops a keyframe as you fly, and **Play** flies through them.
 - **Render** a route as a video (MP4 or WebM) or as PNG or JPG frames, at GMT's sizes; **Fixed** gives the picture its own size and shape.
 
