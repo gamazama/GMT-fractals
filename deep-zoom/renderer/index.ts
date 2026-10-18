@@ -187,12 +187,14 @@ export interface DzTelemetry {
     frameW: number;
     frameH: number;
     iters: number;
+    /** The iteration at which the camera's own reference orbit escapes; 0 when it does not or there is none. */
+    escIt: number;
     power: number;
     accumN: number;
     accumMax: number;
     /** A render owns the context (the page's export, `renderFrame`): the frame loop draws nothing. */
     exporting: boolean;
-    // 12 keys. The page had 16: `recording`, `playing`, `pathFrames` (its recorder and path preview:
+    // 13 keys (escIt since 2026-10-18). The page had 16: `recording`, `playing`, `pathFrames` (its recorder and path preview:
     // grep `CAMERA PATHS` in core.js) and `bla` (the skip table) went on 2026-10-11 with the parity
     // smoke, which had compared the 16.
 }

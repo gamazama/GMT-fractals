@@ -260,6 +260,10 @@ export interface DzTelemetry {
     frameH: number;
     /** The live iteration count (auto iterations raise it with depth). */
     iters: number;
+    /** The iteration at which the camera's own orbit escapes (0 when it does not, or there is no orbit yet): about
+     *  where the detail on screen starts to be shaped. The schedule tool's "the iterations on screen" run from
+     *  here to `iters` (deep-zoom/components/ScheduleTool.tsx). */
+    escIt: number;
     power: number;
     /** The still's progress: `accumN` of `accumMax` samples. It drops back when the still restarts. */
     accumN: number;

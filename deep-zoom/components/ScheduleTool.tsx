@@ -53,7 +53,7 @@ import { Vector3Input } from '../../components/vector-input';
 import type { BaseVectorInputProps } from '../../components/vector-input/types';
 import {
     SCHEDULED_KEYS, SCHEDULED_PARAMS, SCHEDULE_GROUPS, SCHEDULE_ITERATIONS, VEC_AXES, comp, describeRule, isScheduled, isVecKey,
-    isScheduledKey, newRule, scheduleValueAt, sortedKeys, SCHEDULE_TRACK_PREFIX, scheduleTrackId, parseScheduleTrackId,
+    isScheduledKey, newRule, newRuleSpan, visibleIterations, scheduleValueAt, sortedKeys, SCHEDULE_TRACK_PREFIX, scheduleTrackId, parseScheduleTrackId,
     nextScheduleId, withScheduleIds, withScheduleValue,
 } from '../boxSchedule';
 import type { DzBoxSchedule, DzScheduleGroup, DzScheduleRule, DzScheduleRuleKind, DzScheduleValue, DzScheduledKey } from '../boxSchedule';
@@ -142,7 +142,7 @@ export const ScheduleButton: React.FC<LabelSuffixProps> = ({ paramKey }) => {
 // ── the graph: one line, or three (x red, y green, z blue) for a vec3 ────────────────────────────────────────
 const GW = 360, GH = 96;
 const AXIS_LINE = ['text-red-400', 'text-green-400', 'text-blue-400'];
-const Graph: React.FC<{ rules: DzScheduleRule[] | undefined; base: DzScheduleValue; n: number; inUse: number; fmt: (v: DzScheduleValue) => string }> = ({ rules, base, n, inUse, fmt }) => {
+const Graph: React.FC<{ rules: DzScheduleRule[] | undefined; base: DzScheduleValue; n: number; inUse: number; onScreen: [number, number]; fmt: (v: DzScheduleValue) => string }> = ({ rules, base, n, inUse, onScreen, fmt }) => {
     const lines = typeof base === 'number' ? 1 : 3;
     const values = useMemo(() => Array.from({ length: n + 1 }, (_, i) => scheduleValueAt(rules, i) ?? base), [rules, base, n]);
     const all: number[] = []; for (const v of values) for (let j = 0; j < lines; j++) all.push(comp(v, j)); for (let j = 0; j < lines; j++) all.push(comp(base, j));
@@ -154,6 +154,8 @@ const Graph: React.FC<{ rules: DzScheduleRule[] | undefined; base: DzScheduleVal
     return (
         <div data-dz-schedule-graph className="rounded border border-line/10 bg-surface-inset">
             <svg viewBox={`0 0 ${GW} ${GH}`} width="100%" height={GH} preserveAspectRatio="none" className="block">
+                {/* the iterations on screen (visibleIterations): where a new rule goes */}
+                <rect data-dz-schedule-onscreen x={x(Math.min(onScreen[0], n))} width={Math.max(0, x(Math.min(onScreen[1], n)) - x(Math.min(onScreen[0], n)))} y={0} height={GH} fill="currentColor" className="text-accent-500 opacity-10" />
                 {Array.from({ length: lines }, (_, j) => (
                     <line key={`b${j}`} x1={0} x2={GW} y1={y(comp(base, j))} y2={y(comp(base, j))} stroke="currentColor" className={lines === 1 ? 'text-fg-faint' : `${AXIS_LINE[j]} opacity-40`} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
                 ))}
@@ -164,7 +166,7 @@ const Graph: React.FC<{ rules: DzScheduleRule[] | undefined; base: DzScheduleVal
             </svg>
             <div className="flex justify-between px-1 pb-0.5 text-[9px] tabular-nums text-fg-faint">
                 <span>iteration 0</span>
-                <span>{lines === 1 && !flat ? `${fmt(vLo)} to ${fmt(vHi)} · ` : ''}base {fmt(base)}{inUse > 0 ? ` · in use ${inUse}` : ''}</span>
+                <span>{lines === 1 && !flat ? `${fmt(vLo)} to ${fmt(vHi)} · ` : ''}base {fmt(base)} · on screen {onScreen[0]} to {onScreen[1]}</span>
                 <span>{n}</span>
             </div>
         </div>
@@ -287,17 +289,20 @@ export const ScheduleTool: React.FC = () => {
     const baseText = useEngineStore((s) => (key ? JSON.stringify(baseOf(key, s.dzFormula as unknown as Record<string, unknown>)) : '0'));   // a vec3's base as text: one stable value for the selector
     const base = useMemo<DzScheduleValue>(() => JSON.parse(baseText), [baseText]);
     const inUse = useDzTelemetry((t) => t.iters);
+    const escIt = useDzTelemetry((t) => t.escIt);
     if (!key || !formula || !SCHEDULE_GROUPS[groupOf(key)].formulas.includes(formula)) return null;
     const rules = schedule?.[key] ?? [], dom = domainOf(key), label = titleOf(key), group = groupOf(key);
     // The graph's reach: past the last iteration a rule names and the count in use, at least 20.
-    let reach = Math.max(20, inUse + 4);
+    const onScreen = visibleIterations(escIt, inUse || 40);
+    let reach = Math.max(20, inUse + 4, onScreen[1] + 4);
     for (const r of rules) {
         if (r.kind === 'switch') reach = Math.max(reach, r.at + 8, (r.until ?? 0) + 8);
         else if (r.kind === 'pattern') reach = Math.max(reach, r.start + 3 * r.every, (r.until ?? 0) + 8);
         else for (const k of r.keys) reach = Math.max(reach, k.at + 8);
     }
     const n = Math.min(SCHEDULE_ITERATIONS, reach);
-    const add = (kind: DzScheduleRuleKind) => commit(key, [...rules, newRule(kind, base, inUse || 40, nextScheduleId(schedule))]);
+    /* a new rule goes after the rules there are, over the iterations on screen (newRuleSpan) */
+    const add = (kind: DzScheduleRuleKind) => { const [a, b] = newRuleSpan(rules, escIt, inUse || 40); commit(key, [...rules, newRule(kind, base, a, b, nextScheduleId(schedule))]); };
     return (
         <DraggableWindow title={`Iteration schedule: ${label}`} onClose={() => scheduleTool.open(null)} dismissOnEscape
             initialPos={{ x: 340, y: 72 }} zIndex={z('tool')} initialSize={{ width: 400, height: Math.max(380, Math.min(720, window.innerHeight - 110)) }}>
@@ -321,7 +326,7 @@ export const ScheduleTool: React.FC = () => {
                     {group === 'julia' && !juliaMode && (
                         <div data-dz-schedule-julia-off className="text-warn">Julia mode is off: no constant is added, so these rules do nothing until it is on. They are kept.</div>
                     )}
-                    <Graph rules={rules} base={base} n={n} inUse={inUse} fmt={dom.fmt} />
+                    <Graph rules={rules} base={base} n={n} inUse={inUse} onScreen={onScreen} fmt={dom.fmt} />
                     {rules.length === 0 && (
                         <div className="text-fg-faint">
                             No rules: {label} is {dom.fmt(base)} (the row) at every iteration. Add a rule to give it other values at chosen

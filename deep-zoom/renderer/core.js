@@ -5716,6 +5716,14 @@ api.setBoxSchedule = (arr)=>{
   orbitDirty = true; accumReset = true; snapDist = true;
 };
 api.boxSchedule = ()=>(boxSched ? boxSched.map(q => (q ? { ...q } : null)) : null);
+/* the iteration at which the camera's own reference orbit escapes (the box's radius, or the bulb's 2), 0 when it does
+   not: about where the detail on screen begins to be shaped (telemetry escIt; the schedule tool's default span) */
+function orbitEscIt(){
+  if (!curOrbit || !curOrbit.Rk) return 0;
+  const R = curOrbit.box ? BOX_ESC : 2;
+  for (let k = 0; k < curOrbit.len; k++) if (curOrbit.Rk[k] > R) return k;
+  return 0;
+}
 /* PER-ITERATION PARAMETERS, THE BULB (grep): the orbit's slots as they stand - how many, and the shifts from where most
    rebases come that have none (a pixel rebasing there runs direct, in plain f32); null without a schedule */
 api.bulbSlots = ()=>(curOrbit && curOrbit.slots ? { slots: curOrbit.slots.length - 1, shifts: curOrbit.slots.map(o => o.shift), miss: curOrbit.slotMiss, len: curOrbit.len,
@@ -6499,8 +6507,8 @@ const dzThumbCv = document.createElement('canvas');
 api.dz = {
   version: 1,
   telemetry: () => ({ ready: !!deepReady && !!deepNow(), error: deepCompileErr || ((boxOn() || burnActive()) && variantErr[pictureKey()]) || '', mode: deepActive ? 'deep' : 'f32',
-    depth: smoothedDist, fps, frameW: canvas.width, frameH: canvas.height, iters: cam.iters, power: nPower,
-    accumN, accumMax: ACCUM_MAX, exporting }),    // 12 keys; `recording`, `playing`, `pathFrames` and `bla` went 2026-10-11 with what they reported (grep CAMERA PATHS, "deep program variants")
+    depth: smoothedDist, fps, frameW: canvas.width, frameH: canvas.height, iters: cam.iters, escIt: orbitEscIt(), power: nPower,
+    accumN, accumMax: ACCUM_MAX, exporting }),    // 13 keys (escIt: 2026-10-18, the schedule tool's iterations on screen); `recording`, `playing`, `pathFrames` and `bla` went 2026-10-11 with what they reported (grep CAMERA PATHS, "deep program variants")
   settings: () => ({ detail: surfMul, reach: reachMode(), power: nPower, phase: [phaseTheta, phasePhi],
     color: colorMode, cscale: colorScale, light: lightMode, falloff: falloffMul, normals: normalMode,
     land: !!landMode, frame: frameLong, accum: accumEnabled, lookMode: look.mode }),

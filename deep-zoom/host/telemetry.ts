@@ -62,6 +62,7 @@ export const DZ_TELEMETRY_INITIAL: Readonly<DzTelemetryState> = Object.freeze({
     frameW: 0,
     frameH: 0,
     iters: 0,
+    escIt: 0,
     power: 0,
     accumN: 0,
     accumMax: 0,

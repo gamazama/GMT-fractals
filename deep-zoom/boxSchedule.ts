@@ -157,13 +157,42 @@ export function compileBoxSchedule(schedule: DzBoxSchedule | null | undefined): 
     return table.length ? table : null;
 }
 
-/** A new rule of a kind, its value(s) from the base and its iterations around `near` (the count in use); its ids
- *  from `id` up (nextScheduleId). */
-export function newRule(kind: DzScheduleRuleKind, base: DzScheduleValue, near: number, id = 1): DzScheduleRule {
-    const at = Math.max(1, Math.round(near * 0.3));
-    if (kind === 'switch') return { kind, id, at, until: null, value: base };
-    if (kind === 'pattern') return { kind, id, start: 0, every: 2, width: 1, until: null, value: base };
-    return { kind, id, keys: [{ at, value: base, id: id + 1 }, { at: Math.max(at + 1, Math.round(near * 0.7)), value: base, id: id + 2 }] };
+/** A new rule of a kind over the iterations [from, to) - a switch and a pattern back to the base at `to`, a keys
+ *  rule keyed at both ends - its value(s) the base; its ids from `id` up (nextScheduleId). Where the span comes from:
+ *  newRuleSpan. */
+export function newRule(kind: DzScheduleRuleKind, base: DzScheduleValue, from: number, to: number, id = 1): DzScheduleRule {
+    const a = int(from), b = Math.max(a + 1, int(to));
+    if (kind === 'switch') return { kind, id, at: a, until: b, value: base };
+    if (kind === 'pattern') return { kind, id, start: a, every: 2, width: 1, until: b, value: base };
+    return { kind, id, keys: [{ at: a, value: base, id: id + 1 }, { at: b, value: base, id: id + 2 }] };
+}
+
+/** The last iteration the rules name (a rule's end, or its start or last key when it has no end); -1 for none. */
+export function queueEnd(rules: readonly DzScheduleRule[] | undefined): number {
+    let end = -1;
+    for (const r of rules ?? []) {
+        if (r.kind === 'switch') end = Math.max(end, int(r.until ?? r.at));
+        else if (r.kind === 'pattern') end = Math.max(end, int(r.until ?? r.start));
+        else for (const k of r.keys) end = Math.max(end, int(k.at));
+    }
+    return end;
+}
+
+/** The iterations that shape the picture on screen: from just before the camera's own orbit escapes (`escIt`; when
+ *  unknown, 30 % of the count) to the count in use. */
+export function visibleIterations(escIt: number, inUse: number): [number, number] {
+    const lo = escIt > 0 ? Math.max(1, escIt - 2) : Math.max(1, Math.round(0.3 * inUse));
+    return [lo, Math.max(lo + 4, inUse)];
+}
+
+/** A new rule's span (the owner, 2026-10-18: "set to perform after the current queue, and if possible to represent
+ *  the range of iterations currently visible on screen"): the iterations on screen, begun no earlier than just after
+ *  the last iteration the rules already name. A queue that runs past the screen puts it after the queue, as long as
+ *  the screen's span. */
+export function newRuleSpan(rules: readonly DzScheduleRule[] | undefined, escIt: number, inUse: number): [number, number] {
+    const [lo, hi] = visibleIterations(escIt, inUse), after = queueEnd(rules) + 1;
+    const from = Math.max(lo, after);
+    return [from, from < hi ? hi : from + (hi - lo)];
 }
 
 /* ════════ THE VALUES ARE ANIMATABLE (2026-10-18) ════════
