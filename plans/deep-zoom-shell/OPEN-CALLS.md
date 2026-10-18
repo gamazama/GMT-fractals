@@ -480,6 +480,5 @@ section."** Nothing is open. S1 is with a builder (session started 2026-10-16).
 
 ## J. The streamline (`STREAMLINE.md`, built from 2026-10-17)
 Delete a line when he answers. His answers of 2026-10-17 to the first eight are in the commits of that day.
-- F14, the light rig's readback flood (your kernel), measured as you asked: in a dive to 1e-9, 733 asks, 559 turned away while a read was pending, 174 writes, 174 reads, 0 failures, and 175 Chrome warnings. Every write is read once before the next, so the protocol is right and Chrome warns on every readback anyway. Ask less often (the warnings fall in proportion), accept them, or measure synchronously every N frames?
 - Starter places: yours. You generate proper ones and review them; the cards take them when they come (2026-10-17: "the place/zooms are generally random").
 - Frame size is the LONG edge the renderer draws (the width in a wide picture, the height in a tall one), with "drawn W x H" on its row; the canvas's scale pill stays hidden beside it. Keep the name "Frame size", or call it "Long edge"? (He asked: "rename frame size to frame width is it?")

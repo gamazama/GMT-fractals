@@ -23,6 +23,12 @@ the build:
   re-armed only after the previous one is collected (grep `requestRig` / `pollRig` in core.js),
   proven by the warning count while flying (256 and the cap today) and `smoke:deep-zoom-direct`.
   If that reading is wrong he says so before stage 3 runs.
+  **DONE 2026-10-18, his yes.** That reading was wrong: the readback already waited for its read.
+  Chrome's WebGL warns at every fence that follows a write to a STREAM_READ buffer it is still
+  holding a shadow copy of, and its getBufferSubData never releases that copy; only re-specifying
+  the buffer does. So `requestRig` now gives the buffer fresh storage (`bufferData`) every time:
+  236 warnings in a dive to 1e-9 plus 4 s of W became 0, at the same frame rate at three depths.
+  The comment above `requestRig` names the Chromium class it rests on (ReadbackBufferShadowTracker).
 - F16 (Hit landing): two stills, Hit landing on and off, at the same place and samples, in one split
   image for him BEFORE anything is removed.
 
