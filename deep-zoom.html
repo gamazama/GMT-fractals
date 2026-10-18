@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="darkreader-lock">
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>GMT — Deep Zoom</title>
+    <style>
+      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; min-height: 100%; }
+      body { margin: 0; padding: 0; width: 100%; min-height: 100%; background-color: #000; overscroll-behavior-y: none; }
+      @media (hover: hover) and (pointer: fine) {
+        html, body { height: 100vh; overflow: hidden; }
+      }
+      ::-webkit-scrollbar { width: 3px; height: 3px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+      .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+      .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
+
+      /* Boot splash — inline so it paints IMMEDIATELY, before the JS bundle parses and React
+         mounts, and it stays up through the renderer's own start: creating it compiles three
+         shaders on the main thread, and on a GPU without parallel shader compile the deep
+         shader too (about 15 s cold), with the page frozen meanwhile. Lives OUTSIDE #root so
+         React's render() never touches it. The app takes it down on the first drawn frame
+         (grep dismissBootSplash in deep-zoom/); the script under the element takes it down
+         after 12 s whatever happened, so a boot that died cannot leave it over the error page. */
+      @keyframes dz-spin { to { transform: rotate(360deg); } }
+      #dz-boot-splash {
+        position: fixed; inset: 0; z-index: 99999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+        background: rgb(var(--app-bg)); color: rgb(var(--fg-dim));
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        font-size: 12px; letter-spacing: 0.04em;
+        transition: opacity 450ms ease;
+      }
+      #dz-boot-splash .dz-spinner {
+        width: 32px; height: 32px; border-radius: 9999px;
+        border: 2px solid rgb(var(--line) / 0.15); border-top-color: rgb(var(--accent-400));
+        animation: dz-spin 0.8s linear infinite;
+      }
+      #dz-boot-splash.dz-hidden { opacity: 0; pointer-events: none; }
+    </style>
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <!-- Paint the saved UI theme before first frame (shared gmt.themeVars cache). -->
+    <script>try{var s=localStorage.getItem('gmt.themeVars');if(s)document.documentElement.style.cssText+=s;}catch(e){}</script>
+    <script type="module" crossorigin src="./assets/deep-zoom-DkbRHNWQ.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/react-KfUPlHYY.js">
+    <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
+    <link rel="modulepreload" crossorigin href="./assets/three-dPzokJkq.js">
+    <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-4tnOC6Ox.js">
+    <link rel="modulepreload" crossorigin href="./assets/gradientStopReducer-C2wBV-e6.js">
+    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-UWix00HC.js">
+    <link rel="modulepreload" crossorigin href="./assets/FavientsToggleButton-BfVKEMjI.js">
+    <link rel="modulepreload" crossorigin href="./assets/cameraKeyRegistry-Dw_xU0XS.js">
+    <link rel="modulepreload" crossorigin href="./assets/installStateLibrary-DGA6pUYK.js">
+    <link rel="modulepreload" crossorigin href="./assets/DraggableWindow-DT1mnSKV.js">
+    <link rel="modulepreload" crossorigin href="./assets/AutoFeaturePanel-b9lJ00QX.js">
+    <link rel="modulepreload" crossorigin href="./assets/accordionReveal-DBuFOf5J.js">
+    <link rel="modulepreload" crossorigin href="./assets/Undo-DM_mkAti.js">
+    <link rel="modulepreload" crossorigin href="./assets/PwaUpdate-B0mXeQ96.js">
+    <link rel="modulepreload" crossorigin href="./assets/Icon-COccCZMO.js">
+    <link rel="modulepreload" crossorigin href="./assets/paintStore-T0pMyhI9.js">
+    <link rel="modulepreload" crossorigin href="./assets/installGradientStudio-B8C-qJz7.js">
+    <link rel="modulepreload" crossorigin href="./assets/AppErrorBoundary-Bz1Mo_S9.js">
+    <link rel="modulepreload" crossorigin href="./assets/ViewportFrame-6qxjdZ6p.js">
+    <link rel="modulepreload" crossorigin href="./assets/Help-Ctuf23OH.js">
+    <link rel="modulepreload" crossorigin href="./assets/Segmented-Dvq39vZD.js">
+    <link rel="modulepreload" crossorigin href="./assets/index-CaKBVg3_.js">
+    <link rel="modulepreload" crossorigin href="./assets/RenderLoop-C02sqAEc.js">
+    <link rel="modulepreload" crossorigin href="./assets/WhatsNew-DeQaqfJF.js">
+    <link rel="modulepreload" crossorigin href="./assets/FlyIntegrator-HQAXiJRB.js">
+    <link rel="modulepreload" crossorigin href="./assets/colorSchemeStore-NqX-YoIT.js">
+    <link rel="modulepreload" crossorigin href="./assets/support-D_Geh4mm.js">
+    <link rel="modulepreload" crossorigin href="./assets/SettingsAccess-CWfA17v9.js">
+    <link rel="modulepreload" crossorigin href="./assets/pickedFile-DxZUqX5U.js">
+    <link rel="modulepreload" crossorigin href="./assets/AnchoredMenu-a6cMPFzg.js">
+    <link rel="modulepreload" crossorigin href="./assets/Session-CcrLDmFr.js">
+    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-Tdz09p4e.css">
+  <link rel="manifest" href="./manifest.webmanifest"></head>
+  <body>
+    <div id="root"></div>
+    <div id="dz-boot-splash"><div class="dz-spinner"></div><span>Loading Deep Zoom…</span></div>
+    <!-- The 12 s fallback. Here and not in the app, so it still fires when the app's script never ran. -->
+    <script>setTimeout(function(){var e=document.getElementById('dz-boot-splash');if(e)e.remove();},12000);</script>
+  </body>
+</html>

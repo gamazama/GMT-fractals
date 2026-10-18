@@ -1,0 +1,1 @@
+import{j as t,av as e}from"./CollapsibleSection-4tnOC6Ox.js";import{o,j as a,S as i,k as r}from"./support-D_Geh4mm.js";const l=()=>t.jsx("button",{onClick:o,className:"icon-btn",title:"Settings","aria-label":"Settings",children:t.jsx(e,{})}),g=({storage:s})=>{const n=a();return t.jsx(i,{open:n,onClose:r,storage:s})};export{g as S,l as a};
