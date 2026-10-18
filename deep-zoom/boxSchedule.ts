@@ -36,57 +36,64 @@
  *   - No key here may start with `is`: saved scenes drop such keys (features/formula.ts, PITFALLS).
  */
 
-/** The parameters that can be scheduled: the store's key, the renderer's name, the label, and the group of the
+/** The parameters that can be scheduled: the store's key, the renderer's name(s), the label, and the group of the
  *  tool's tabs. The Julia constant's three apply in Julia mode only (outside it no constant is added). */
 export const SCHEDULED_PARAMS = {
-    boxScale: { field: 'scale', label: 'Scale', group: 'box' },
-    boxMinRadius: { field: 'minR', label: 'Min Radius', group: 'box' },
-    boxFold: { field: 'fold', label: 'Folding Limit', group: 'box' },
-    boxFixedRadius: { field: 'fixedR', label: 'Fixed Radius', group: 'box' },
-    boxRotX: { field: 'rx', label: 'X', group: 'rotation' },
-    boxRotY: { field: 'ry', label: 'Y', group: 'rotation' },
-    boxRotZ: { field: 'rz', label: 'Z', group: 'rotation' },
-    juliaX: { field: 'cx', label: 'X', group: 'julia' },
-    juliaY: { field: 'cy', label: 'Y', group: 'julia' },
-    juliaZ: { field: 'cz', label: 'Z', group: 'julia' },
+    boxScale: { fields: ['scale'], label: 'Scale', group: 'box' },
+    boxMinRadius: { fields: ['minR'], label: 'Min Radius', group: 'box' },
+    boxFold: { fields: ['fold'], label: 'Folding Limit', group: 'box' },
+    boxFixedRadius: { fields: ['fixedR'], label: 'Fixed Radius', group: 'box' },
+    // ONE VEC3 (2026-10-18, the owner: "so they can be keyed together"): a rule's value is (x, y, z); its row in the
+    // store is the composed one, and the slice's three scalars are the base (`baseFrom`)
+    boxRotation: { fields: ['rx', 'ry', 'rz'], label: 'Pre-Rotation', group: 'rotation', baseFrom: ['boxRotX', 'boxRotY', 'boxRotZ'] },
+    juliaConstant: { fields: ['cx', 'cy', 'cz'], label: 'Julia constant', group: 'julia', baseFrom: ['juliaX', 'juliaY', 'juliaZ'] },
     // the Mandelbulb's (2026-10-18; grep PER-ITERATION PARAMETERS, THE BULB in renderer/core.js)
-    phaseTheta: { field: 'pt', label: 'Theta', group: 'phase' },
-    phasePhi: { field: 'pp', label: 'Phi', group: 'phase' },
+    phaseTheta: { fields: ['pt'], label: 'Theta', group: 'phase' },
+    phasePhi: { fields: ['pp'], label: 'Phi', group: 'phase' },
 } as const;
 export type DzScheduleGroup = (typeof SCHEDULED_PARAMS)[keyof typeof SCHEDULED_PARAMS]['group'];
 /** The tool's groups, with the formulas each belongs to: the Julia constant is both formulas' (the table carries
  *  every formula's fields; each formula's renderer reads its own). */
-export const SCHEDULE_GROUPS: Record<DzScheduleGroup, { label: string; row: string; formulas: readonly ('box' | 'bulb')[] }> = {
-    box: { label: 'Box', row: '', formulas: ['box'] },
-    rotation: { label: 'Pre-Rotation', row: 'boxRotation', formulas: ['box'] },
-    phase: { label: 'Phase', row: '', formulas: ['bulb'] },
-    julia: { label: 'Julia constant', row: 'juliaConstant', formulas: ['box', 'bulb'] },
+export const SCHEDULE_GROUPS: Record<DzScheduleGroup, { label: string; formulas: readonly ('box' | 'bulb')[] }> = {
+    box: { label: 'Box', formulas: ['box'] },
+    rotation: { label: 'Pre-Rotation', formulas: ['box'] },
+    phase: { label: 'Phase', formulas: ['bulb'] },
+    julia: { label: 'Julia constant', formulas: ['box', 'bulb'] },
 };
-/** The composed rows whose button opens a group (the row's key -> its first parameter). */
-export const SCHEDULE_ROW_OPENS: Record<string, DzScheduledKey> = { boxRotation: 'boxRotX', juliaConstant: 'juliaX' };
 export type DzScheduledKey = keyof typeof SCHEDULED_PARAMS;
 export const SCHEDULED_KEYS = Object.keys(SCHEDULED_PARAMS) as DzScheduledKey[];
 export const isScheduledKey = (key: string): key is DzScheduledKey => key in SCHEDULED_PARAMS;
+/** True for a parameter whose value is three numbers (x, y, z). */
+export const isVecKey = (key: DzScheduledKey): boolean => SCHEDULED_PARAMS[key].fields.length === 3;
+/** The axes of a vec3 parameter, for its tracks and its graph's three lines. */
+export const VEC_AXES = ['x', 'y', 'z'] as const;
 
 /** The box's iteration ceiling (BOX_ITER_MAX in renderer/core.js): no orbit runs past it. */
 export const SCHEDULE_ITERATIONS = 500;
 
+/** A rule's value: one number, or three (x, y, z) for a vec3 parameter. */
+export type DzScheduleValue = number | readonly number[];
 /** `id`: stable within the schedule (THE VALUES ARE ANIMATABLE): a keyframe track is bound to it, not to a position. */
-export interface DzScheduleKey { at: number; value: number; id?: number }
+export interface DzScheduleKey { at: number; value: DzScheduleValue; id?: number }
 export type DzScheduleRule =
     | { kind: 'keys'; id?: number; off?: boolean; keys: DzScheduleKey[] }
-    | { kind: 'switch'; id?: number; off?: boolean; at: number; until: number | null; value: number }
-    | { kind: 'pattern'; id?: number; off?: boolean; start: number; every: number; width: number; until: number | null; value: number };
+    | { kind: 'switch'; id?: number; off?: boolean; at: number; until: number | null; value: DzScheduleValue }
+    | { kind: 'pattern'; id?: number; off?: boolean; start: number; every: number; width: number; until: number | null; value: DzScheduleValue };
 export type DzScheduleRuleKind = DzScheduleRule['kind'];
 /** The store's value: the rules of each scheduled parameter. An absent or empty list: that parameter is not scheduled. */
 export type DzBoxSchedule = Partial<Record<DzScheduledKey, DzScheduleRule[]>>;
+type Field = (typeof SCHEDULED_PARAMS)[DzScheduledKey]['fields'][number];
 /** One entry of the renderer's table (`api.setBoxSchedule`). */
-export type DzScheduleEntry = Partial<Record<(typeof SCHEDULED_PARAMS)[DzScheduledKey]['field'], number>> | null;
+export type DzScheduleEntry = Partial<Record<Field, number>> | null;
 
 const int = (v: number, lo = 0): number => Math.max(lo, Math.min(SCHEDULE_ITERATIONS, Math.round(Number.isFinite(v) ? v : lo)));
+/** a value's component j (a number is its own every component) */
+export const comp = (v: DzScheduleValue, j: number): number => (typeof v === 'number' ? v : v[j] ?? 0);
+const lerp = (a: DzScheduleValue, b: DzScheduleValue, f: number): DzScheduleValue =>
+    (typeof a === 'number' && typeof b === 'number' ? a + (b - a) * f : [0, 1, 2].map((j) => comp(a, j) + (comp(b, j) - comp(a, j)) * f));
 
 /** The rule's value at iteration i, or undefined where it leaves the parameter alone. */
-export function ruleValueAt(rule: DzScheduleRule, i: number): number | undefined {
+export function ruleValueAt(rule: DzScheduleRule, i: number): DzScheduleValue | undefined {
     if (rule.off) return undefined;
     if (rule.kind === 'switch') return i >= int(rule.at) && (rule.until === null || i < int(rule.until)) ? rule.value : undefined;
     if (rule.kind === 'pattern') {
@@ -98,7 +105,7 @@ export function ruleValueAt(rule: DzScheduleRule, i: number): number | undefined
     if (!keys.length || i < keys[0].at) return undefined;
     for (let k = 1; k < keys.length; k++) {
         const a = keys[k - 1], b = keys[k];
-        if (i < b.at) return b.at === a.at ? b.value : a.value + (b.value - a.value) * (i - a.at) / (b.at - a.at);
+        if (i < b.at) return b.at === a.at ? b.value : lerp(a.value, b.value, (i - a.at) / (b.at - a.at));
     }
     return keys[keys.length - 1].value;
 }
@@ -109,8 +116,8 @@ export function sortedKeys(keys: readonly DzScheduleKey[]): DzScheduleKey[] {
 }
 
 /** The value a list of rules gives at iteration i: the last rule that touches i, else undefined (the base). */
-export function scheduleValueAt(rules: readonly DzScheduleRule[] | undefined, i: number): number | undefined {
-    let out: number | undefined;
+export function scheduleValueAt(rules: readonly DzScheduleRule[] | undefined, i: number): DzScheduleValue | undefined {
+    let out: DzScheduleValue | undefined;
     for (const rule of rules ?? []) { const v = ruleValueAt(rule, i); if (v !== undefined) out = v; }
     return out;
 }
@@ -140,7 +147,8 @@ export function compileBoxSchedule(schedule: DzBoxSchedule | null | undefined): 
         let entry: Record<string, number> | null = null;
         for (const key of SCHEDULED_KEYS) {
             const v = scheduleValueAt(schedule[key], i);
-            if (v !== undefined && Number.isFinite(v)) (entry ??= {})[SCHEDULED_PARAMS[key].field] = v;
+            if (v === undefined) continue;
+            SCHEDULED_PARAMS[key].fields.forEach((f, j) => { const x = comp(v, j); if (Number.isFinite(x)) (entry ??= {})[f] = x; });
         }
         table.push(entry);
         if (entry) last = i;
@@ -151,7 +159,7 @@ export function compileBoxSchedule(schedule: DzBoxSchedule | null | undefined): 
 
 /** A new rule of a kind, its value(s) from the base and its iterations around `near` (the count in use); its ids
  *  from `id` up (nextScheduleId). */
-export function newRule(kind: DzScheduleRuleKind, base: number, near: number, id = 1): DzScheduleRule {
+export function newRule(kind: DzScheduleRuleKind, base: DzScheduleValue, near: number, id = 1): DzScheduleRule {
     const at = Math.max(1, Math.round(near * 0.3));
     if (kind === 'switch') return { kind, id, at, until: null, value: base };
     if (kind === 'pattern') return { kind, id, start: 0, every: 2, width: 1, until: null, value: base };
@@ -160,18 +168,19 @@ export function newRule(kind: DzScheduleRuleKind, base: number, near: number, id
 
 /* ════════ THE VALUES ARE ANIMATABLE (2026-10-18) ════════
    Each rule's value (a key's value, for a keys rule) can be keyframed like a slider: its track id is
-   `dzSchedule.<param>.r<rule id>` (`.k<key id>` for a key), bound by one prefix binder
-   (binderRegistry.registerPrefix, components/ScheduleTool.tsx) that writes the value into the store's rules. The ids
-   are stable: a rule or key keeps its id when others are added, removed or sorted, so its track stays its own. A
-   track whose rule is gone writes nothing. The track id holds the param's name, so a rotation's and a phase's track
-   is interpolated as an angle (grep isRotationTrack), as theirs should be. */
+   `dzSchedule.<param>.r<rule id>` (`.k<key id>` for a key; then `.x` / `.y` / `.z` for a vec3's three tracks, keyed
+   together by one diamond as a vec3 row's are), bound by one prefix binder (binderRegistry.registerPrefix,
+   components/ScheduleTool.tsx) that writes the value into the store's rules. The ids are stable: a rule or key keeps
+   its id when others are added, removed or sorted, so its track stays its own. A track whose rule is gone writes
+   nothing. The track id holds the param's name, so a rotation's and a phase's track is interpolated as an angle
+   (grep isRotationTrack), as theirs should be. */
 export const SCHEDULE_TRACK_PREFIX = 'dzSchedule.';
-export const scheduleTrackId = (key: DzScheduledKey, ruleId: number, keyId?: number): string =>
-    `${SCHEDULE_TRACK_PREFIX}${key}.r${ruleId}${keyId === undefined ? '' : `.k${keyId}`}`;
-export function parseScheduleTrackId(id: string): { key: DzScheduledKey; ruleId: number; keyId?: number } | null {
-    const m = /^dzSchedule\.(\w+)\.r(\d+)(?:\.k(\d+))?$/.exec(id);
+export const scheduleTrackId = (key: DzScheduledKey, ruleId: number, keyId?: number, axis?: number): string =>
+    `${SCHEDULE_TRACK_PREFIX}${key}.r${ruleId}${keyId === undefined ? '' : `.k${keyId}`}${axis === undefined ? '' : `.${VEC_AXES[axis]}`}`;
+export function parseScheduleTrackId(id: string): { key: DzScheduledKey; ruleId: number; keyId?: number; axis?: number } | null {
+    const m = /^dzSchedule\.(\w+)\.r(\d+)(?:\.k(\d+))?(?:\.([xyz]))?$/.exec(id);
     if (!m || !isScheduledKey(m[1])) return null;
-    return { key: m[1], ruleId: Number(m[2]), ...(m[3] !== undefined ? { keyId: Number(m[3]) } : {}) };
+    return { key: m[1], ruleId: Number(m[2]), ...(m[3] !== undefined ? { keyId: Number(m[3]) } : {}), ...(m[4] !== undefined ? { axis: VEC_AXES.indexOf(m[4] as 'x') } : {}) };
 }
 /** One more than the largest id in the schedule. */
 export function nextScheduleId(schedule: DzBoxSchedule | null | undefined): number {
@@ -198,8 +207,12 @@ export function withScheduleIds(schedule: DzBoxSchedule): DzBoxSchedule {
     }
     return changed ? out : schedule;
 }
-/** The schedule with one value set (a track's write), or null when that rule or key is not in it. */
-export function withScheduleValue(schedule: DzBoxSchedule, key: DzScheduledKey, ruleId: number, keyId: number | undefined, v: number): DzBoxSchedule | null {
+/** a value with component `axis` set to v (the whole value when axis is undefined) */
+const setComp = (old: DzScheduleValue, axis: number | undefined, v: number): DzScheduleValue =>
+    (axis === undefined || typeof old === 'number' ? v : old.map((x, j) => (j === axis ? v : x)));
+/** The schedule with one value set (a track's write: one component of a vec3), or null when that rule or key is not
+ *  in it, or holds that value already. */
+export function withScheduleValue(schedule: DzBoxSchedule, key: DzScheduledKey, ruleId: number, keyId: number | undefined, v: number, axis?: number): DzBoxSchedule | null {
     const rules = schedule[key];
     if (!rules) return null;
     let hit = false;
@@ -207,17 +220,18 @@ export function withScheduleValue(schedule: DzBoxSchedule, key: DzScheduledKey, 
         if (r.id !== ruleId) return r;
         if (r.kind === 'keys') {
             if (keyId === undefined) return r;
-            return { ...r, keys: r.keys.map((k) => (k.id === keyId ? ((hit = k.value !== v || hit), { ...k, value: v }) : k)) };
+            return { ...r, keys: r.keys.map((k) => { if (k.id !== keyId) return k; const nv = setComp(k.value, axis, v); hit = hit || comp(nv, axis ?? 0) !== comp(k.value, axis ?? 0); return { ...k, value: nv }; }) };
         }
         if (keyId !== undefined) return r;
-        hit = r.value !== v;
-        return { ...r, value: v };
+        const nv = setComp(r.value, axis, v);
+        hit = comp(nv, axis ?? 0) !== comp(r.value, axis ?? 0);
+        return { ...r, value: nv };
     });
     return hit ? { ...schedule, [key]: next } : null;
 }
 
 /** The rule in words, for its card and a screen reader. */
-export function describeRule(rule: DzScheduleRule, fmt: (v: number) => string): string {
+export function describeRule(rule: DzScheduleRule, fmt: (v: DzScheduleValue) => string): string {
     if (rule.kind === 'switch') return `${fmt(rule.value)} from iteration ${int(rule.at)}${rule.until === null ? ' on' : `, base again at ${int(rule.until)}`}`;
     if (rule.kind === 'pattern') {
         const width = int(rule.width, 1), every = int(rule.every, 1);

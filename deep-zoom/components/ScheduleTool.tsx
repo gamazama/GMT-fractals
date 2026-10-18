@@ -2,13 +2,16 @@
  * deep-zoom/components/ScheduleTool.tsx - the Mandelbox's iteration schedule: the button on a row and the tool.
  *
  *   `dz-schedule-button`  a label suffix (panels.ts, `labelSuffixes`) on Scale, Min Radius, Folding Limit, Fixed
- *                         Radius, Pre-Rotation and the Julia Constant. Lit while that row has a rule in force (on a
- *                         three-axis row: any axis). A click opens the tool on that row (its X).
+ *                         Radius, Pre-Rotation, Phase theta and phi and the Julia Constant. Lit while that row has a
+ *                         rule in force. A click opens the tool on that row.
  *   `dz-schedule-tool`    the tool itself, a DraggableWindow: one tab a parameter, the graph of its value over the
  *                         iterations (the base dashed, the count in use marked), and its rules, each a card (keys,
  *                         switch, pattern; deep-zoom/boxSchedule.ts says what each does). The tabs come in three
- *                         groups: the box's four numbers, the Pre-Rotation's angles (shown in degrees, as the row
- *                         shows them) and the Julia constant (Julia mode only). A widget at the foot of
+ *                         groups: the box's four numbers, the Pre-Rotation, the bulb's phase and the Julia constant
+ *                         (Julia mode only). Pre-Rotation and the Julia constant are ONE VEC3 each (the owner: "so they
+ *                         can be keyed together"): a rule's value is (x, y, z), edited with the panel's own three-axis
+ *                         control - one diamond keys its three tracks - and the graph draws three lines (x red, y green,
+ *                         z blue). A widget at the foot of
  *                         the Formula tab, so ONE window serves the four buttons and keeps its place when another
  *                         row's button is pressed.
  *
@@ -45,12 +48,15 @@ import { useDzTelemetry } from '../host/telemetry';
 import { degreesMapping } from '../../components/inputs/primitives/FormatUtils';
 import type { ValueMapping } from '../../components/inputs/primitives/FormatUtils';
 import { DzFormulaFeature, FORMULA_BOX, FORMULA_BULB, validBoxScale } from '../features/formula';
+import * as THREE from 'three';
+import { Vector3Input } from '../../components/vector-input';
+import type { BaseVectorInputProps } from '../../components/vector-input/types';
 import {
-    SCHEDULED_KEYS, SCHEDULED_PARAMS, SCHEDULE_GROUPS, SCHEDULE_ITERATIONS, SCHEDULE_ROW_OPENS, describeRule, isScheduled,
+    SCHEDULED_KEYS, SCHEDULED_PARAMS, SCHEDULE_GROUPS, SCHEDULE_ITERATIONS, VEC_AXES, comp, describeRule, isScheduled, isVecKey,
     isScheduledKey, newRule, scheduleValueAt, sortedKeys, SCHEDULE_TRACK_PREFIX, scheduleTrackId, parseScheduleTrackId,
     nextScheduleId, withScheduleIds, withScheduleValue,
 } from '../boxSchedule';
-import type { DzBoxSchedule, DzScheduleGroup, DzScheduleRule, DzScheduleRuleKind, DzScheduledKey } from '../boxSchedule';
+import type { DzBoxSchedule, DzScheduleGroup, DzScheduleRule, DzScheduleRuleKind, DzScheduleValue, DzScheduledKey } from '../boxSchedule';
 
 // ── which tab is open: a module value, not saved ────────────────────────────────────────────────────────────
 let openKey: DzScheduledKey | null = null;
@@ -71,14 +77,15 @@ function writeRules(key: DzScheduledKey, rules: DzScheduleRule[]): void {
 }
 
 /* THE VALUES ARE ANIMATABLE (deep-zoom/boxSchedule.ts): one binder for every schedule track, registered when this module
-   loads (registerFeatures.ts imports it before the store is built). A track writes its rule's value into the store as
-   playback or a scrub moves - not an undo step, as no track write is. A track whose rule is gone writes nothing. */
+   loads (registerFeatures.ts imports it before the store is built). A track writes its rule's value (one axis of a
+   vec3's) into the store as playback or a scrub moves - not an undo step, as no track write is. A track whose rule
+   is gone writes nothing. */
 binderRegistry.registerPrefix({
     prefix: SCHEDULE_TRACK_PREFIX,
     write: (id, v) => {
         const t = parseScheduleTrackId(id);
         if (!t) return;
-        const next = withScheduleValue(scheduleNow(), t.key, t.ruleId, t.keyId, domainOf(t.key).hold(v));
+        const next = withScheduleValue(scheduleNow(), t.key, t.ruleId, t.keyId, t.axis === undefined ? domainOf(t.key).hold(v) : v, t.axis);
         if (next) useEngineStore.getState().setDzFormula({ boxSchedule: next });
     },
 });
@@ -89,33 +96,36 @@ function commit(key: DzScheduledKey, rules: DzScheduleRule[]): void {
     try { writeRules(key, rules); } finally { useEngineStore.getState().endParamTransaction(); }
 }
 
-/** The param's slider range, step, display mapping and the value a rule may hold. The angles are shown in degrees,
- *  as the Pre-Rotation row shows them (the store holds radians). */
-function domainOf(key: DzScheduledKey): { min: number; max: number; step: number; hold: (v: number) => number; fmt: (v: number) => string; mapping?: ValueMapping } {
-    const c = DzFormulaFeature.params[key] as { min: number; max: number; step: number };
+type Dom = { min: number; max: number; step: number; hold: (v: number) => number; fmt: (v: DzScheduleValue) => string; mapping?: ValueMapping; mode?: string; scale?: string };
+/** The param's range, step, display and the value a rule may hold: a vec3's from its composed row (Pre-Rotation in
+ *  degrees, as the row shows it; the store holds radians). */
+function domainOf(key: DzScheduledKey): Dom {
+    const c = DzFormulaFeature.params[key] as { min: number; max: number; step: number; scale?: string; mode?: string };
     const hold = (v: number): number => (key === 'boxScale' ? validBoxScale(v) : v);
-    if (SCHEDULED_PARAMS[key].group === 'rotation') return { min: c.min, max: c.max, step: c.step, hold, mapping: degreesMapping, fmt: (v: number) => `${(v * 180 / Math.PI).toFixed(1)}°` };
-    const digits = Math.max(0, Math.ceil(-Math.log10(c.step)));
-    return { min: c.min, max: c.max, step: c.step, hold, fmt: (v: number) => v.toFixed(digits) };
+    const one = groupOf(key) === 'rotation' ? (v: number) => `${(v * 180 / Math.PI).toFixed(1)}°` : (v: number) => v.toFixed(Math.max(0, Math.ceil(-Math.log10(c.step))));
+    const fmt = (v: DzScheduleValue): string => (typeof v === 'number' ? one(v) : `(${[0, 1, 2].map((j) => one(comp(v, j))).join(', ')})`);
+    return { min: c.min, max: c.max, step: c.step, hold, fmt, mapping: groupOf(key) === 'rotation' && !isVecKey(key) ? degreesMapping : undefined, mode: c.mode, scale: c.scale };
 }
 const groupOf = (key: DzScheduledKey): DzScheduleGroup => SCHEDULED_PARAMS[key].group;
 const keysOf = (group: DzScheduleGroup): DzScheduledKey[] => SCHEDULED_KEYS.filter((k) => groupOf(k) === group);
-const titleOf = (key: DzScheduledKey): string => (groupOf(key) === 'box' ? SCHEDULED_PARAMS[key].label : `${SCHEDULE_GROUPS[groupOf(key)].label} ${SCHEDULED_PARAMS[key].label}`);
+const titleOf = (key: DzScheduledKey): string => (groupOf(key) === 'phase' ? `Phase ${SCHEDULED_PARAMS[key].label}` : SCHEDULED_PARAMS[key].label);
+/** The base (the row's own value): the slice's three scalars for a vec3. */
+const baseOf = (key: DzScheduledKey, f: Record<string, unknown>): DzScheduleValue => {
+    const p = SCHEDULED_PARAMS[key] as { baseFrom?: readonly string[] };
+    return p.baseFrom ? p.baseFrom.map((k) => Number(f[k] ?? 0)) : Number(f[key] ?? 0);
+};
 /** The formula the store draws, as the groups name it: the box, the bulb, or neither (KaliBox has no schedule). */
 const useScheduleFormula = (): 'box' | 'bulb' | null => useEngineStore((s) => (s.dzFormula.kind === FORMULA_BOX ? 'box' : s.dzFormula.kind === FORMULA_BULB ? 'bulb' : null));
 const groupsOf = (f: 'box' | 'bulb'): DzScheduleGroup[] => (Object.keys(SCHEDULE_GROUPS) as DzScheduleGroup[]).filter((g) => SCHEDULE_GROUPS[g].formulas.includes(f));
 
 // ── the button on a row ─────────────────────────────────────────────────────────────────────────────────────
 export const ScheduleButton: React.FC<LabelSuffixProps> = ({ paramKey }) => {
-    /* a three-axis row (Pre-Rotation, Constant) opens its group on X and is lit while any axis is scheduled */
-    const first: DzScheduledKey | null = isScheduledKey(paramKey) ? paramKey : SCHEDULE_ROW_OPENS[paramKey] ?? null;
-    const keys = first ? (isScheduledKey(paramKey) ? [first] : keysOf(groupOf(first))) : [];
-    const on = useEngineStore((s) => keys.some((k) => isScheduled(s.dzFormula.boxSchedule?.[k])));
+    const key: DzScheduledKey | null = isScheduledKey(paramKey) ? paramKey : null;
+    const on = useEngineStore((s) => !!key && isScheduled(s.dzFormula.boxSchedule?.[key]));
     const formula = useScheduleFormula();
     const open = useOpenKey();
-    if (!first || !formula || !SCHEDULE_GROUPS[groupOf(first)].formulas.includes(formula)) return null;
-    const mine = open !== null && keys.includes(open), paramKeyOpen: DzScheduledKey = first;
-    const label = isScheduledKey(paramKey) ? titleOf(paramKey) : SCHEDULE_GROUPS[groupOf(first)].label;
+    if (!key || !formula || !SCHEDULE_GROUPS[groupOf(key)].formulas.includes(formula)) return null;
+    const mine = open === key, label = titleOf(key);
     return (
         <button type="button" data-dz-schedule-button={paramKey}
             // pointer-events-auto: a slider's label is `pointer-events: none` (it must not catch the track's drag)
@@ -123,32 +133,38 @@ export const ScheduleButton: React.FC<LabelSuffixProps> = ({ paramKey }) => {
             aria-pressed={mine}
             title={on ? `${label} is scheduled: other values at some iterations. Click to edit the schedule.` : `Give ${label} other values at chosen iterations (deeper detail comes from later iterations)`}
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); scheduleTool.open(mine ? null : paramKeyOpen); }}>
+            onClick={(e) => { e.stopPropagation(); scheduleTool.open(mine ? null : key); }}>
             <Icon name="schedule" size={12} />
         </button>
     );
 };
 
-// ── the graph ───────────────────────────────────────────────────────────────────────────────────────────────
+// ── the graph: one line, or three (x red, y green, z blue) for a vec3 ────────────────────────────────────────
 const GW = 360, GH = 96;
-const Graph: React.FC<{ rules: DzScheduleRule[] | undefined; base: number; n: number; inUse: number; fmt: (v: number) => string }> = ({ rules, base, n, inUse, fmt }) => {
+const AXIS_LINE = ['text-red-400', 'text-green-400', 'text-blue-400'];
+const Graph: React.FC<{ rules: DzScheduleRule[] | undefined; base: DzScheduleValue; n: number; inUse: number; fmt: (v: DzScheduleValue) => string }> = ({ rules, base, n, inUse, fmt }) => {
+    const lines = typeof base === 'number' ? 1 : 3;
     const values = useMemo(() => Array.from({ length: n + 1 }, (_, i) => scheduleValueAt(rules, i) ?? base), [rules, base, n]);
-    const vLo = Math.min(base, ...values), vHi = Math.max(base, ...values), flat = vHi - vLo < 1e-9;
+    const all: number[] = []; for (const v of values) for (let j = 0; j < lines; j++) all.push(comp(v, j)); for (let j = 0; j < lines; j++) all.push(comp(base, j));
+    const vLo = Math.min(...all), vHi = Math.max(...all), flat = vHi - vLo < 1e-9;
     let lo = flat ? vLo - 0.5 : vLo, hi = flat ? vHi + 0.5 : vHi;
     const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
     const x = (i: number) => (i / n) * GW, y = (v: number) => GH - ((v - lo) / (hi - lo)) * GH;
-    let d = '';
-    values.forEach((v, i) => { d += `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}H${x(i + 1).toFixed(1)}`; });
+    const path = (j: number) => { let d = ''; values.forEach((v, i) => { d += `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(comp(v, j)).toFixed(1)}H${x(i + 1).toFixed(1)}`; }); return d; };
     return (
         <div data-dz-schedule-graph className="rounded border border-line/10 bg-surface-inset">
             <svg viewBox={`0 0 ${GW} ${GH}`} width="100%" height={GH} preserveAspectRatio="none" className="block">
-                <line x1={0} x2={GW} y1={y(base)} y2={y(base)} stroke="currentColor" className="text-fg-faint" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                {Array.from({ length: lines }, (_, j) => (
+                    <line key={`b${j}`} x1={0} x2={GW} y1={y(comp(base, j))} y2={y(comp(base, j))} stroke="currentColor" className={lines === 1 ? 'text-fg-faint' : `${AXIS_LINE[j]} opacity-40`} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                ))}
                 {inUse > 0 && inUse <= n && <line x1={x(inUse)} x2={x(inUse)} y1={0} y2={GH} stroke="currentColor" className="text-warn/60" vectorEffect="non-scaling-stroke" />}
-                <path d={d} fill="none" stroke="currentColor" className="text-accent-300" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                {Array.from({ length: lines }, (_, j) => (
+                    <path key={`v${j}`} d={path(j)} fill="none" stroke="currentColor" className={lines === 1 ? 'text-accent-300' : AXIS_LINE[j]} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                ))}
             </svg>
             <div className="flex justify-between px-1 pb-0.5 text-[9px] tabular-nums text-fg-faint">
                 <span>iteration 0</span>
-                <span>{flat ? '' : `${fmt(vLo)} to ${fmt(vHi)} · `}base {fmt(base)}{inUse > 0 ? ` · in use ${inUse}` : ''}</span>
+                <span>{lines === 1 && !flat ? `${fmt(vLo)} to ${fmt(vHi)} · ` : ''}base {fmt(base)}{inUse > 0 ? ` · in use ${inUse}` : ''}</span>
                 <span>{n}</span>
             </div>
         </div>
@@ -170,14 +186,27 @@ const ValueRow: React.FC<{ paramKey: DzScheduledKey; label: string; trackLabel: 
             onChange={(v) => { const h = dom.hold(v); set(h); k.autoKeyOnChange(h); }} />
     );
 };
+/** A vec3 rule's value: the panel's own three-axis control, whose one diamond keys the three tracks together and
+ *  which brackets its own drag as one undo step (a typed number is one step here). */
+const VecValueRow: React.FC<{ paramKey: DzScheduledKey; label: string; trackLabel: string; trackBase: ((axis: number) => string) | undefined; value: DzScheduleValue; set: (v: number[]) => void }> =
+    ({ paramKey, label, trackLabel, trackBase, value, set }) => {
+    const dom = domainOf(paramKey);
+    return (
+        <Vector3Input label={label} value={new THREE.Vector3(comp(value, 0), comp(value, 1), comp(value, 2))} min={dom.min} max={dom.max} step={dom.step}
+            mode={dom.mode as BaseVectorInputProps['mode']} scale={dom.scale as BaseVectorInputProps['scale']}
+            trackKeys={trackBase ? [0, 1, 2].map(trackBase) : undefined} trackLabels={VEC_AXES.map((a) => `${trackLabel} ${a.toUpperCase()}`)}
+            onChange={(v) => set([v.x, v.y, v.z])} />
+    );
+};
 
 const RuleCard: React.FC<{ paramKey: DzScheduledKey; index: number; rules: DzScheduleRule[]; n: number }> = ({ paramKey, index, rules, n }) => {
-    const rule = rules[index], dom = domainOf(paramKey);
+    const rule = rules[index], dom = domainOf(paramKey), vec = isVecKey(paramKey);
     const dragging = useRef(false);
-    /** Replace this rule; a drag writes as it goes and is one undo step from its start to its end. */
+    /** Replace this rule; a drag writes as it goes and is one undo step from its start to its end (the vec3 control's
+     *  drag is bracketed by the control itself: isUserInteracting) */
     const put = (next: DzScheduleRule) => {
         const all = rules.map((r, i) => (i === index ? next : r));
-        if (dragging.current) writeRules(paramKey, all); else commit(paramKey, all);
+        if (dragging.current || useEngineStore.getState().isUserInteracting) writeRules(paramKey, all); else commit(paramKey, all);
     };
     const drag = {
         onDragStart: () => { dragging.current = true; useEngineStore.getState().beginParamTransaction(); },
@@ -189,11 +218,13 @@ const RuleCard: React.FC<{ paramKey: DzScheduledKey; index: number; rules: DzSch
             onChange={(v) => set(Math.round(v))} />
     );
     const ruleName = `${titleOf(paramKey)} · ${KIND_LABEL[rule.kind]} ${index + 1}`;
-    const val = (label: string, value: number, set: (v: number) => void, keyId?: number, keyAt?: number) => (
-        <ValueRow paramKey={paramKey} label={label} value={value} set={set} drag={drag}
-            trackId={rule.id === undefined ? undefined : scheduleTrackId(paramKey, rule.id, keyId)}
-            trackLabel={keyAt === undefined ? ruleName : `${ruleName}, key at ${keyAt}`} />
-    );
+    const val = (label: string, value: DzScheduleValue, set: (v: DzScheduleValue) => void, keyId?: number, keyAt?: number) => {
+        const trackLabel = keyAt === undefined ? ruleName : `${ruleName}, key at ${keyAt}`;
+        if (vec) return <VecValueRow paramKey={paramKey} label={label} value={value} set={set} trackLabel={trackLabel}
+            trackBase={rule.id === undefined ? undefined : (axis) => scheduleTrackId(paramKey, rule.id!, keyId, axis)} />;
+        return <ValueRow paramKey={paramKey} label={label} value={comp(value, 0)} set={set} drag={drag}
+            trackId={rule.id === undefined ? undefined : scheduleTrackId(paramKey, rule.id, keyId)} trackLabel={trackLabel} />;
+    };
     const ends = (until: number | null, from: number, set: (u: number | null) => void) => (
         <div className="space-y-1">
             <label className="flex items-center gap-1.5 t-label cursor-pointer">
@@ -226,11 +257,15 @@ const RuleCard: React.FC<{ paramKey: DzScheduledKey; index: number; rules: DzSch
             </>}
             {rule.kind === 'keys' && <>
                 {sortedKeys(rule.keys).map((k, ki, all) => (
-                    <div key={ki} data-dz-schedule-key className="flex items-end gap-1">
-                        <div className="w-[42%]">{iter(`Key ${ki + 1} at`, k.at, (v) => put({ ...rule, keys: all.map((o, j) => (j === ki ? { ...o, at: v } : o)) }))}</div>
+                    <div key={ki} data-dz-schedule-key className={vec ? 'space-y-1' : 'flex items-end gap-1'}>
+                        <div className={vec ? 'flex items-end gap-1' : 'w-[42%]'}>
+                            <div className="flex-1">{iter(`Key ${ki + 1} at`, k.at, (v) => put({ ...rule, keys: all.map((o, j) => (j === ki ? { ...o, at: v } : o)) }))}</div>
+                            {vec && <button type="button" className="text-fg-faint hover:text-danger p-px mb-1" title="Remove this key" disabled={all.length < 2}
+                                onClick={() => put({ ...rule, keys: all.filter((_, j) => j !== ki) })}><Icon name="close" size={10} /></button>}
+                        </div>
                         <div className="flex-1">{val('Value', k.value, (v) => put({ ...rule, keys: all.map((o, j) => (j === ki ? { ...o, value: v } : o)) }), k.id, k.at)}</div>
-                        <button type="button" className="text-fg-faint hover:text-danger p-px mb-1" title="Remove this key" disabled={all.length < 2}
-                            onClick={() => put({ ...rule, keys: all.filter((_, j) => j !== ki) })}><Icon name="close" size={10} /></button>
+                        {!vec && <button type="button" className="text-fg-faint hover:text-danger p-px mb-1" title="Remove this key" disabled={all.length < 2}
+                            onClick={() => put({ ...rule, keys: all.filter((_, j) => j !== ki) })}><Icon name="close" size={10} /></button>}
                     </div>
                 ))}
                 <Button size="small" label="Add key" icon={<Icon name="plus" size={10} />} onClick={() => {
@@ -249,7 +284,8 @@ export const ScheduleTool: React.FC = () => {
     const formula = useScheduleFormula();
     const juliaMode = useEngineStore((s) => s.dzFormula.juliaMode);
     const schedule = useEngineStore((s) => s.dzFormula.boxSchedule);
-    const base = useEngineStore((s) => (key ? s.dzFormula[key] : 0));
+    const baseText = useEngineStore((s) => (key ? JSON.stringify(baseOf(key, s.dzFormula as unknown as Record<string, unknown>)) : '0'));   // a vec3's base as text: one stable value for the selector
+    const base = useMemo<DzScheduleValue>(() => JSON.parse(baseText), [baseText]);
     const inUse = useDzTelemetry((t) => t.iters);
     if (!key || !formula || !SCHEDULE_GROUPS[groupOf(key)].formulas.includes(formula)) return null;
     const rules = schedule?.[key] ?? [], dom = domainOf(key), label = titleOf(key), group = groupOf(key);
@@ -266,27 +302,29 @@ export const ScheduleTool: React.FC = () => {
         <DraggableWindow title={`Iteration schedule: ${label}`} onClose={() => scheduleTool.open(null)} dismissOnEscape
             initialPos={{ x: 340, y: 72 }} zIndex={z('tool')} initialSize={{ width: 400, height: Math.max(380, Math.min(720, window.innerHeight - 110)) }}>
             <div data-dz-schedule-tool={key} className="flex flex-col h-full text-[10px] text-fg-tertiary">
-                {/* two rows of tabs: the group, then its parameters; a dot on whatever holds a rule */}
+                {/* the groups, then (where a group has more than one) its parameters; a dot on whatever holds a rule */}
                 <div className="flex gap-1 px-2 pt-2">
                     {groupsOf(formula).map((g) => (
                         <Button key={g} size="small" active={g === group} data-dz-schedule-group={g} onClick={() => scheduleTool.open(keysOf(g)[0])}
                             label={`${SCHEDULE_GROUPS[g].label}${keysOf(g).some((k) => isScheduled(schedule?.[k])) ? ' •' : ''}`} />
                     ))}
                 </div>
-                <div className="flex gap-1 px-2 pt-1 pb-1">
-                    {keysOf(group).map((k) => (
-                        <Button key={k} size="small" active={k === key} data-dz-schedule-tab={k} onClick={() => scheduleTool.open(k)}
-                            label={`${SCHEDULED_PARAMS[k].label}${isScheduled(schedule?.[k]) ? ' •' : ''}`} />
-                    ))}
-                </div>
-                <div className="flex-1 overflow-y-auto custom-scroll px-2 pb-2 space-y-2">
+                {keysOf(group).length > 1 && (
+                    <div className="flex gap-1 px-2 pt-1 pb-1">
+                        {keysOf(group).map((k) => (
+                            <Button key={k} size="small" active={k === key} data-dz-schedule-tab={k} onClick={() => scheduleTool.open(k)}
+                                label={`${SCHEDULED_PARAMS[k].label}${isScheduled(schedule?.[k]) ? ' •' : ''}`} />
+                        ))}
+                    </div>
+                )}
+                <div className="flex-1 overflow-y-auto custom-scroll px-2 pb-2 pt-1 space-y-2">
                     {group === 'julia' && !juliaMode && (
                         <div data-dz-schedule-julia-off className="text-warn">Julia mode is off: no constant is added, so these rules do nothing until it is on. They are kept.</div>
                     )}
                     <Graph rules={rules} base={base} n={n} inUse={inUse} fmt={dom.fmt} />
                     {rules.length === 0 && (
                         <div className="text-fg-faint">
-                            No rules: {label} is {dom.fmt(base)} (the slider) at every iteration. Add a rule to give it other values at chosen
+                            No rules: {label} is {dom.fmt(base)} (the row) at every iteration. Add a rule to give it other values at chosen
                             iterations. Later iterations shape deeper detail (about three iterations a decade of zoom), so the picture
                             changes from the depth a rule starts at and stays as it was above it.
                         </div>
