@@ -215,6 +215,7 @@ console.log('[8] vector widgets that are keyframeable are also modulation-aware'
     'engine-gmt/components/panels/lighting/LightPanelControls.tsx',
     'engine-gmt/features/lighting/components/LightControls.tsx',
     'engine-gmt/components/panels/scene_widgets.tsx',
+    'deep-zoom/components/ScheduleTool.tsx',
   ];
   // Widgets that intentionally omit liveValue, with the reason. Keep this list
   // short and justified — it is the escape hatch that makes the check honest
@@ -222,6 +223,10 @@ console.log('[8] vector widgets that are keyframeable are also modulation-aware'
   const EXEMPT = new Set([
     // rotDeg is DEGREES, the stored camera.rotation.* offset is RADIANS.
     "trackKeys={['camera.rotation.x', 'camera.rotation.y', 'camera.rotation.z']}",
+    // Deep zoom installs no modulation UI (grep installModulation in deep-zoom/main.tsx:
+    // an LFO would rebuild the reference orbit every frame), so nothing drives a
+    // schedule rule's track and there is no live value to show.
+    "trackKeys={trackBase ? [0, 1, 2].map(trackBase) : undefined}",
   ]);
 
   // The `(?=[\s/>])` lookahead is load-bearing: without it this also matches the
@@ -285,7 +290,7 @@ console.log('[8] vector widgets that are keyframeable are also modulation-aware'
     // still green — measured 2026-07-29. A partial shrink is the realistic form of
     // this failure, so record a floor. Raise it when you add widgets; if you have
     // deliberately REMOVED one, lower it in the same commit that removes it.
-    const SCAN_FLOOR = 10; // measured 2026-07-29 across the five files above
+    const SCAN_FLOOR = 11; // 10 measured 2026-07-29 across five files; +1 ScheduleTool 2026-10-18
     assert(scanned >= SCAN_FLOOR,
       `the Vector*Input scan did not shrink (expected >= ${SCAN_FLOOR})`,
       { scanned, floor: SCAN_FLOOR, discoveredFiles: found });
