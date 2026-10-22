@@ -4,8 +4,8 @@
  *
  * WHAT IT IS
  *   A schedule changes Scale, Min Radius, Folding Limit, Fixed Radius, the Pre-Rotation's three angles, the
- *   Mandelbulb's two phase angles or (in Julia mode, either formula) the Julia constant's three coordinates at some
- *   iterations of the orbit and leaves
+ *   Mandelbulb's two phase angles, KaliBox's Scale, MinRad2, Translation and Rotation, or (in Julia mode, any of
+ *   the three formulas) the Julia constant's three coordinates at some iterations of the orbit and leaves
  *   the rest at the slider's value (the BASE). The iteration index is roughly depth: at the box's 2.6 to 3.1
  *   iterations a decade, a change at iteration k reshapes the picture from about 10^-(k/3) down and leaves
  *   everything shallower as it was. So a schedule makes a dive change its look as it goes.
@@ -50,15 +50,23 @@ export const SCHEDULED_PARAMS = {
     // the Mandelbulb's (2026-10-18; grep PER-ITERATION PARAMETERS, THE BULB in renderer/core.js)
     phaseTheta: { fields: ['pt'], label: 'Theta', group: 'phase' },
     phasePhi: { fields: ['pp'], label: 'Phi', group: 'phase' },
+    // KaliBox's (2026-10-22; grep PER-ITERATION PARAMETERS, KALIBOX in renderer/core.js)
+    kaliScale: { fields: ['ks'], label: 'Scale', group: 'kali' },
+    kaliMinRad2: { fields: ['kmr2'], label: 'MinRad2', group: 'kali' },
+    kaliRot: { fields: ['krot'], label: 'Rotation', group: 'kali' },
+    kaliTranslation: { fields: ['ktx', 'kty', 'ktz'], label: 'Translation', group: 'kaliTrans', baseFrom: ['kaliTransX', 'kaliTransY', 'kaliTransZ'] },
 } as const;
 export type DzScheduleGroup = (typeof SCHEDULED_PARAMS)[keyof typeof SCHEDULED_PARAMS]['group'];
 /** The tool's groups, with the formulas each belongs to: the Julia constant is both formulas' (the table carries
  *  every formula's fields; each formula's renderer reads its own). */
-export const SCHEDULE_GROUPS: Record<DzScheduleGroup, { label: string; formulas: readonly ('box' | 'bulb')[] }> = {
+export type DzScheduleFormula = 'box' | 'bulb' | 'kali';
+export const SCHEDULE_GROUPS: Record<DzScheduleGroup, { label: string; formulas: readonly DzScheduleFormula[] }> = {
     box: { label: 'Box', formulas: ['box'] },
     rotation: { label: 'Pre-Rotation', formulas: ['box'] },
     phase: { label: 'Phase', formulas: ['bulb'] },
-    julia: { label: 'Julia constant', formulas: ['box', 'bulb'] },
+    kali: { label: 'KaliBox', formulas: ['kali'] },
+    kaliTrans: { label: 'Translation', formulas: ['kali'] },
+    julia: { label: 'Julia constant', formulas: ['box', 'bulb', 'kali'] },
 };
 export type DzScheduledKey = keyof typeof SCHEDULED_PARAMS;
 export const SCHEDULED_KEYS = Object.keys(SCHEDULED_PARAMS) as DzScheduledKey[];

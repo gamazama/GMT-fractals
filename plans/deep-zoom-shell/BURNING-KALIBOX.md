@@ -158,6 +158,10 @@ which the specks from far and the occlusion work are ahead of (`OPEN-CALLS.md`, 
    with the card saying so, and no cap on Detail keyed to the formula.
 2. **Which KaliBox opens first?** Recommendation: Scale 1.8 with c = the point (`bk-kali-s18-sheet.png`):
    it has an inside and holds under Detail. The preset numbers with c = the point must not be a default: black.
+   > **Update 2026-10-22 (superseded by the owner):** "lets also fix the kalibox defaults so that julia is enabled
+   > and it matches the gmt parameters so that we get a proper kalibox". The defaults are GMT's preset (Scale
+   > 2.04348) and a switch to KaliBox turns Julia mode on with GMT's constant when there is none. The point-added
+   > black this call warned of is what Julia mode off at those numbers gives; the Scale 1.8 cards keep that solid.
 3. **Burning's orbits: resumed with the test, or whole?** Recommendation: build whole first (stage 2 needs
    it anyway), add the 12 lines, decide by milliseconds at stage 3.
 4. **The mix row in the first build?** Recommendation: yes, with a line of the direct proof at mix 0.5; it

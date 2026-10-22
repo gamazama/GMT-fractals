@@ -27,7 +27,8 @@
  *   - IT LIVES IN THE FORMULA TAB: the dock showing another tab unmounts it, and it closes. Escape closes it too
  *     (it holds nothing Escape could lose: every edit is already in the store).
  *   - The tool shows the groups of the formula drawn: the Mandelbox's (Box, Pre-Rotation, Julia constant) or the
- *     Mandelbulb's (Phase, Julia constant). KaliBox has no schedule; a switch to a formula a tab is not of closes it.
+ *     Mandelbulb's (Phase, Julia constant) or KaliBox's (KaliBox, Translation, Julia constant); a switch to a formula a
+ *     tab is not of closes it.
  *     The Mandelbulb's first schedule builds its renderer (the ray march's, about 15 s), the box's about 2 s.
  *   - The Julia constant's rules do nothing outside Julia mode; the tool says so, and keeps them.
  *   - A rule's value goes through the store's own hold for Scale (`validBoxScale`): the renderer cannot draw
@@ -47,7 +48,9 @@ import { useEngineStore } from '../../store/engineStore';
 import { useDzTelemetry } from '../host/telemetry';
 import { degreesMapping } from '../../components/inputs/primitives/FormatUtils';
 import type { ValueMapping } from '../../components/inputs/primitives/FormatUtils';
-import { DzFormulaFeature, FORMULA_BOX, FORMULA_BULB, validBoxScale } from '../features/formula';
+import { DzFormulaFeature, FORMULA_BOX, FORMULA_BULB, FORMULA_KALI, validBoxScale } from '../features/formula';
+import { mappingForParam } from '../../engine/features/modulation/paramMapping';
+import type { ParamConfig } from '../../engine/FeatureSystem';
 import * as THREE from 'three';
 import { Vector3Input } from '../../components/vector-input';
 import type { BaseVectorInputProps } from '../../components/vector-input/types';
@@ -56,7 +59,7 @@ import {
     isScheduledKey, newRule, newRuleSpan, visibleIterations, scheduleValueAt, sortedKeys, SCHEDULE_TRACK_PREFIX, scheduleTrackId, parseScheduleTrackId,
     nextScheduleId, withScheduleIds, withScheduleValue,
 } from '../boxSchedule';
-import type { DzBoxSchedule, DzScheduleGroup, DzScheduleRule, DzScheduleRuleKind, DzScheduleValue, DzScheduledKey } from '../boxSchedule';
+import type { DzBoxSchedule, DzScheduleFormula, DzScheduleGroup, DzScheduleRule, DzScheduleRuleKind, DzScheduleValue, DzScheduledKey } from '../boxSchedule';
 
 // ── which tab is open: a module value, not saved ────────────────────────────────────────────────────────────
 let openKey: DzScheduledKey | null = null;
@@ -101,10 +104,12 @@ type Dom = { min: number; max: number; step: number; hold: (v: number) => number
  *  degrees, as the row shows it; the store holds radians). */
 function domainOf(key: DzScheduledKey): Dom {
     const c = DzFormulaFeature.params[key] as { min: number; max: number; step: number; scale?: string; mode?: string };
-    const hold = (v: number): number => (key === 'boxScale' ? validBoxScale(v) : v);
+    const hold = (v: number): number => (key === 'boxScale' || key === 'kaliScale' ? validBoxScale(v) : v);
     const one = groupOf(key) === 'rotation' ? (v: number) => `${(v * 180 / Math.PI).toFixed(1)}°` : (v: number) => v.toFixed(Math.max(0, Math.ceil(-Math.log10(c.step))));
     const fmt = (v: DzScheduleValue): string => (typeof v === 'number' ? one(v) : `(${[0, 1, 2].map((j) => one(comp(v, j))).join(', ')})`);
-    return { min: c.min, max: c.max, step: c.step, hold, fmt, mapping: groupOf(key) === 'rotation' && !isVecKey(key) ? degreesMapping : undefined, mode: c.mode, scale: c.scale };
+    /* a scalar row's own display mapping (KaliBox's Rotation in pi, as its row) */
+    const mapping = isVecKey(key) ? undefined : groupOf(key) === 'rotation' ? degreesMapping : mappingForParam(c as ParamConfig);
+    return { min: c.min, max: c.max, step: c.step, hold, fmt, mapping, mode: c.mode, scale: c.scale };
 }
 const groupOf = (key: DzScheduledKey): DzScheduleGroup => SCHEDULED_PARAMS[key].group;
 const keysOf = (group: DzScheduleGroup): DzScheduledKey[] => SCHEDULED_KEYS.filter((k) => groupOf(k) === group);
@@ -114,9 +119,9 @@ const baseOf = (key: DzScheduledKey, f: Record<string, unknown>): DzScheduleValu
     const p = SCHEDULED_PARAMS[key] as { baseFrom?: readonly string[] };
     return p.baseFrom ? p.baseFrom.map((k) => Number(f[k] ?? 0)) : Number(f[key] ?? 0);
 };
-/** The formula the store draws, as the groups name it: the box, the bulb, or neither (KaliBox has no schedule). */
-const useScheduleFormula = (): 'box' | 'bulb' | null => useEngineStore((s) => (s.dzFormula.kind === FORMULA_BOX ? 'box' : s.dzFormula.kind === FORMULA_BULB ? 'bulb' : null));
-const groupsOf = (f: 'box' | 'bulb'): DzScheduleGroup[] => (Object.keys(SCHEDULE_GROUPS) as DzScheduleGroup[]).filter((g) => SCHEDULE_GROUPS[g].formulas.includes(f));
+/** The formula the store draws, as the groups name it. */
+const useScheduleFormula = (): DzScheduleFormula | null => useEngineStore((s) => (s.dzFormula.kind === FORMULA_BOX ? 'box' : s.dzFormula.kind === FORMULA_BULB ? 'bulb' : s.dzFormula.kind === FORMULA_KALI ? 'kali' : null));
+const groupsOf = (f: DzScheduleFormula): DzScheduleGroup[] => (Object.keys(SCHEDULE_GROUPS) as DzScheduleGroup[]).filter((g) => SCHEDULE_GROUPS[g].formulas.includes(f));
 
 // ── the button on a row ─────────────────────────────────────────────────────────────────────────────────────
 export const ScheduleButton: React.FC<LabelSuffixProps> = ({ paramKey }) => {

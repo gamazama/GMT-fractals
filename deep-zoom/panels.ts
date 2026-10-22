@@ -64,7 +64,8 @@ export const DeepZoomPanels: PanelManifest = [
         // The bulb's two phase rows, the box's four rows and Pre-Rotation carry the iteration schedule's button after their
         // labels, as the Julia Constant row does below (components/ScheduleTool.tsx).
         { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'burning', 'burningMix', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation', 'kaliScale', 'kaliMinRad2', 'kaliTranslation', 'kaliRot'],
-            labelSuffixes: { phaseTheta: 'dz-schedule-button', phasePhi: 'dz-schedule-button', boxScale: 'dz-schedule-button', boxMinRadius: 'dz-schedule-button', boxFold: 'dz-schedule-button', boxFixedRadius: 'dz-schedule-button', boxRotation: 'dz-schedule-button' } },
+            labelSuffixes: { phaseTheta: 'dz-schedule-button', phasePhi: 'dz-schedule-button', boxScale: 'dz-schedule-button', boxMinRadius: 'dz-schedule-button', boxFold: 'dz-schedule-button', boxFixedRadius: 'dz-schedule-button', boxRotation: 'dz-schedule-button',
+                kaliScale: 'dz-schedule-button', kaliMinRad2: 'dz-schedule-button', kaliTranslation: 'dz-schedule-button', kaliRot: 'dz-schedule-button' } },
         // Julia mode, for either formula: the switch, the constant's three numbers while it is on, and the button
         // that takes the constant from the place looked at.
         { type: 'section', label: 'Julia' },

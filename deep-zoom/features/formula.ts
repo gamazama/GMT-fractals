@@ -53,11 +53,15 @@
  *   abs(z) + Translation in the box fold's place. Its rows carry GMT's own labels - Scale, MinRad2,
  *   Translation (one row over three scalars, as `boxRotation`), Rotation - and are its own values,
  *   kept apart from the Mandelbox's. Three differences from GMT's rows:
- *     defaults    Scale 1.8 with the point added, not GMT's 2.043 in Julia mode: the owner's call
- *                 (plans/deep-zoom-shell/BURNING-KALIBOX.md, call 2). GMT's preset is a Julia set with
- *                 no inside, and its numbers with the point added draw NOTHING: they must never be a
- *                 default. MinRad2 and Translation start as that preset's (0.3492; 0.0365, -1.9183,
- *                 0.0365), which is the set the study drew at Scale 1.8.
+ *     defaults    GMT's own (since 2026-10-22, the owner: "lets also fix the kalibox defaults so that
+ *                 julia is enabled and it matches the gmt parameters so that we get a proper kalibox";
+ *                 it supersedes call 2 of plans/deep-zoom-shell/BURNING-KALIBOX.md, which had Scale 1.8
+ *                 with the point added): Scale 2.04348, MinRad2 0.3492, Translation 0.0365, -1.9183,
+ *                 0.0365, Rotation 0 - GMT's preset (engine-gmt/formulas/KaliBox.ts, defaultPreset).
+ *                 A switch to KaliBox turns Julia mode on (deep-zoom/locations.ts, the formula switch) and,
+ *                 with no constant yet, takes GMT's (-0.6691, -1.3028, -0.45775: `KALI_GMT_CONSTANT`).
+ *                 These numbers with the point added draw NOTHING (call 2 said so): with Julia mode off at
+ *                 Scale 2.04 the picture is empty, and the Scale 1.8 cards are where that solid is.
  *     Scale       held out of the band (-1.02, 1.02), as the Mandelbox's is (`deep-zoom/boxScale.ts`).
  *     MinRad2     runs to 1, not 2: from 1 up GMT's map has no sphere fold left, and the renderer holds
  *                 the value at 1 (grep `MinRad2 IS HELD` in core.js).
@@ -227,6 +231,10 @@ export const FORMULA_KALI = FORMULA_OPTIONS.indexOf('kalibox');
 /** `api.setFormula(kind, ...)`: index -> the renderer's name; a missing or odd index is the Mandelbulb. */
 export const formulaToRenderer = (index: number | undefined) => formulaParam.fromIndex(index);
 
+/** GMT's KaliBox constant (engine-gmt/formulas/KaliBox.ts, defaultPreset): the one a switch to KaliBox takes when
+ *  there is none yet (see KALIBOX: defaults). */
+export const KALI_GMT_CONSTANT = { juliaX: -0.6691, juliaY: -1.3028, juliaZ: -0.45775 } as const;
+
 /** The least |scale| the renderer draws (grep `applyFormula` in core.js). */
 export const BOX_SCALE_MIN = 1.02;
 /** A scale the renderer can draw: one inside (-1.02, 1.02) goes to the nearer end, 0 to the positive one. */
@@ -364,7 +372,7 @@ export const DzFormulaFeature = {
         // ── KaliBox: GMT's rows (engine-gmt/formulas/KaliBox.ts), see KALIBOX in the header ──
         kaliScale: {
             type: 'float',
-            default: 1.8, min: -3, max: 3, step: 0.001,
+            default: 2.04348, min: -3, max: 3, step: 0.001,   // GMT's (see KALIBOX: defaults)
             label: 'Scale',
             condition: onKali,
             description: 'How much each fold scales space. At 1.8 there is a solid that holds its shapes; from about 2 up, with Julia mode off, there is nothing to draw. Negative values put the shape on the other side. Between -1.02 and 1.02 there is nothing to draw: the slider passes over that band.',

@@ -121,7 +121,7 @@ import { getHost, subscribeHost } from './host/current';
 import type { DzView } from './host/DeepZoomHost';
 import { lightTypeToRenderer } from './features/light';
 import { colourToRenderer } from './features/colour';
-import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS, FORMULA_KALI, juliaRowsOf } from './features/formula';
+import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS, FORMULA_KALI, KALI_GMT_CONSTANT, juliaRowsOf } from './features/formula';
 import type { DzFormulaChoice } from './features/formula';
 import { paramId } from './host/paramMap';
 import type { DeepZoomHost, DzParams, DzParamValue } from './host/DeepZoomHost';
@@ -693,7 +693,17 @@ export function installLocations(): void {
         if (jumping || kind === was || !host || !host.bootParams()) return;
         backStack.push({ view: host.getView(), formula: { ...formulaChoiceNow(), kind: was ?? FORMULA_BULB } });
         trailEnds();                                                 // a deep place exists only under the formula it was found with
-        pushFormulaNow(host);
+        /* KaliBox opens as GMT's (features/formula.ts, KALIBOX: defaults): Julia mode on, and GMT's constant when
+           there is none yet. Written with `jumping` held, so the Julia switch's own subscription does not move the
+           camera a second time; the same undo entry. */
+        let kaliJulia = false;
+        if (kind === FORMULA_KALI && !formulaChoiceNow().juliaMode) {
+            jumping = true;
+            try { useEngineStore.getState().setDzFormula({ juliaMode: true, ...(hasConstant(host) ? {} : KALI_GMT_CONSTANT) }); }
+            finally { jumping = false; }
+            kaliJulia = true;
+        }
+        pushFormulaNow(host, kaliJulia);
         jumpSeq++;                                                   // the open bracket's undo entry takes the view with it
         // in Julia mode the other formula's set of the SAME constant is shown; without one, its Mandelbrot-mode view
         if (!(formulaChoiceNow().juliaMode && showJuliaSet(host, undefined))) host.setView(viewForHost(formulaHome(formulaChoiceNow())));

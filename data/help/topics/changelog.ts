@@ -46,6 +46,13 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         content: `
 Every GMT release, newest first.
 
+## Unreleased
+
+- **Deep Zoom: KaliBox by iteration.** Scale, MinRad2, Translation, Rotation and the Julia constant can now be given other values at chosen iterations, as the Mandelbox's rows can.
+- **Deep Zoom: KaliBox opens as GMT's.** Switching to KaliBox turns Julia mode on with GMT's preset numbers and constant, so it shows GMT's KaliBox from outside.
+
+---
+
 ## 0.9.8.6 — Deep Zoom
 > October 18, 2026
 

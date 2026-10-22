@@ -427,7 +427,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       if (uSchedRot == 1) zD = schedRot(orbit, min(it, sW), zD); else
 #endif
       if (uBoxHasRot == 1) zD = uBoxRot * zD;
-#if defined(USE_KALI)
+#if defined(USE_KALI) && defined(USE_SCHED)
+      zD = abs(zD) + texelFetch(orbit, ivec2(min(it, sW), 16), 0).xyz;   // PER-ITERATION PARAMETERS, KALIBOX (grep): this iteration's translation
+#elif defined(USE_KALI)
       zD = abs(zD) + uKaliT;                                 // KALIBOX (grep): its fold in the box fold's place
 #elif defined(USE_SCHED)
       zD = clamp(zD, -pa.z, pa.z) * 2.0 - zD;
@@ -1415,7 +1417,11 @@ void boxStepF32(inout vec3 z, inout float dr, vec3 c, int i) {
     int sW = textureSize(uOrbit, 0).x - 1, j = min(i, sW);
     vec4 pa = texelFetch(uOrbit, ivec2(j, 10), 0), pb = texelFetch(uOrbit, ivec2(j, 11), 0);
     if (uSchedRot == 1) z = schedRot(uOrbit, j, z); else if (uBoxHasRot == 1) z = uBoxRot * z;
+#ifdef USE_KALI
+    z = abs(z) + texelFetch(uOrbit, ivec2(j, 16), 0).xyz;   // PER-ITERATION PARAMETERS, KALIBOX (grep): this iteration's translation
+#else
     z = clamp(z, -pa.z, pa.z) * 2.0 - z;
+#endif
     float k = clamp(pb.y / max(dot(z, z), 1e-30), 1.0, pb.z);
     z = z * (k * pa.x) + (uAddC > 0.5 ? c : texelFetch(uOrbit, ivec2(j, 15), 0).xyz);   // JULIA MODE: this iteration's constant
     dr = dr * k * pa.y + 1.0;
@@ -2636,7 +2642,7 @@ function ensureRayVariant(t){
    compiles. A probe or a study that asks for it before then builds it at once, blocking.
    KALIBOX (grep) is this variant with USE_KALI as well - its fold in the box fold's place and nothing else - under
    keys K and KT: the same two functions build it, by the formula selected when they are called. */
-const schedOn = () => !kaliOn() && !!boxP.sched;  // PER-ITERATION PARAMETERS (grep): the Mandelbox with a schedule is its own program, XS / XST
+const schedOn = () => !!boxP.sched;  // PER-ITERATION PARAMETERS (grep): the Mandelbox with a schedule is its own program, XS / XST; KaliBox's KS / KST
 const xKey = (t) => (kaliOn() ? 'K' : 'X') + (schedOn() ? 'S' : '') + (t ? 'T' : '');
 const xSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_BOX' + (kaliOn() ? '\n#define USE_KALI' : '') + (schedOn() ? '\n#define USE_SCHED' : ''));
 function ensureBoxVariant(t){
@@ -3323,7 +3329,7 @@ let formulaStamp = 0;                            // bumped by every change of fo
 const boxOn = () => dzFormula !== 'mandelbulb';  // the Mandelbox, or KALIBOX (grep): both are drawn by the box's kernel, march and rules
 const kaliOn = () => dzFormula === 'kalibox';
 const box = { scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] };
-const kali = { scale: 1.8, minRad2: 0.3492, trans: [0.0365, -1.9183, 0.0365], rot: 0 };   // KALIBOX (grep): its own numbers, kept apart from the box's
+const kali = { scale: 2.04348, minRad2: 0.3492, trans: [0.0365, -1.9183, 0.0365], rot: 0 };   // KALIBOX (grep): its own numbers, kept apart from the box's - GMT's preset since 2026-10-22 (deep-zoom/features/formula.ts, KALIBOX: defaults)
 /* the pre-rotation as one matrix (rows), from the formula's three mat2 steps: X on (y, z), Y on (x, z), Z on (x, y) */
 function boxRotMat(r){
   const sx = Math.sin(r[0]), cx = Math.cos(r[0]), sy = Math.sin(r[1]), cy = Math.cos(r[1]), sz = Math.sin(r[2]), cz = Math.cos(r[2]);
@@ -3335,8 +3341,9 @@ function boxRotMat(r){
 function boxDerive(){
   if (kaliOn()) {                                // KALIBOX (grep): the same record, with a folding limit of 0, a fixed radius of 1 and its translation
     const hasRot = Math.abs(kali.rot) > 0.001, m2 = kali.minRad2;   // GMT's own threshold
-    const p = { scale: kali.scale, fold: 0, m2, F2: 1, kA: 1 / m2, hasRot, R: kaliRotMat(hasRot ? kali.rot : 0), kali: true, T: kali.trans.slice() };
+    const p = { scale: kali.scale, fold: 0, m2, F2: 1, kA: 1 / m2, hasRot, R: kaliRotMat(hasRot ? kali.rot : 0), kali: true, T: kali.trans.slice(), rot: [kali.rot, 0, 0] };
     p.fixed = hp.boxFixed(p);
+    if (boxSched) p.sched = boxSched.map(q => kaliSchedAt(q, p)).concat([p]);   // PER-ITERATION PARAMETERS, KALIBOX (grep)
     return p;
   }
   const m2 = box.minR * box.minR, F2 = box.fixedR * box.fixedR, hasRot = Math.hypot(box.rot[0], box.rot[1], box.rot[2]) > 0.001;   // GMT's own threshold
@@ -3345,7 +3352,7 @@ function boxDerive(){
   if (boxSched) p.sched = boxSched.map(q => boxSchedAt(q, p)).concat([p]);   // PER-ITERATION PARAMETERS (grep): the last entry is the base, for every iteration past the table
   return p;
 }
-/* ════════ PER-ITERATION PARAMETERS (2026-10-18; a feasibility build, the Mandelbox only) ════════
+/* ════════ PER-ITERATION PARAMETERS (2026-10-18; the Mandelbox, and KaliBox since 2026-10-22: grep PER-ITERATION PARAMETERS, KALIBOX) ════════
    boxSched: null, or one entry an iteration, each null (the base) or { scale, minR, fold, fixedR } with any field
    left out taken from the base (api.setBoxSchedule). The pre-rotation stays one for the whole orbit. boxDerive
    expands it into p.sched, a derived record an iteration (boxAt), and every copy of the map reads it by the
@@ -3381,7 +3388,7 @@ function boxDerive(){
        delta step; from outside the whole box 8 to 25 % slower, on frames under 1 ms (the far field's fetches);
      - real schedules at matched depths: from 0.1 to 3.9 times the unscheduled frame, median 0.9 to 1.1. The
        cost follows the shape a schedule makes (march steps), as it does from one place to another without one.
-   Not scheduled: KaliBox, and the f32 baseline program (drawn while the deep variant compiles). A schedule moves
+   Not scheduled: the f32 baseline program (drawn while the deep variant compiles). A schedule moves
    the surface at every depth past the iterations it changes: a kept place is not on it. */
 let boxSched = null;
 function boxSchedAt(q, base){
@@ -3394,6 +3401,24 @@ function boxSchedAt(q, base){
   const m2 = minR * minR, F2 = fixedR * fixedR, r = { scale, fold, m2, F2, kA: F2 / m2, hasRot, R: boxRotMat(hasRot ? rot : [0, 0, 0]), rot };
   /* the Julia constant's axes this iteration overrides, as doubles and in fixed point (null: the base constant's,
      which is read when an orbit is built - boxK - so a new base constant needs no new record) */
+  const kx = num(q.cx, null), ky = num(q.cy, null), kz = num(q.cz, null);
+  if (kx !== null || ky !== null || kz !== null) { r.kOverF = [kx, ky, kz]; r.kOver = r.kOverF.map(v => (v === null ? null : hp.fromNum(v))); }
+  r.fixed = hp.boxFixed(r);
+  return r;
+}
+/* PER-ITERATION PARAMETERS, KALIBOX (2026-10-22): KaliBox's own fields of the table - ks (Scale), kmr2 (MinRad2), ktx /
+   kty / ktz (the Translation) and krot (its Rotation, radians) - and the Julia constant's cx / cy / cz, as the box's.
+   KaliBox is drawn by the box's kernel, march and rules, so everything else is the box's: the reference rows, the
+   prefix jump, the direct run after a rebase, the referees. Its translation is not in a delta (it is the pixel's and
+   the reference's alike): only the reference orbit, the direct run and the far field read it - row 16 on the GPU. */
+function kaliSchedAt(q, base){
+  if (!q) return base;
+  const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+  let s = num(q.ks, base.scale); if (Math.abs(s) < 1.02) s = s < 0 ? -1.02 : 1.02;   // applyFormula's holds
+  const scale = Math.max(-8, Math.min(8, s)), m2 = Math.max(1e-9, Math.min(1, num(q.kmr2, base.m2)));
+  const T = [num(q.ktx, base.T[0]), num(q.kty, base.T[1]), num(q.ktz, base.T[2])].map(v => Math.max(-8, Math.min(8, v)));
+  const a = num(q.krot, base.rot[0]), hasRot = Math.abs(a) > 0.001;
+  const r = { scale, fold: 0, m2, F2: 1, kA: 1 / m2, hasRot, R: kaliRotMat(hasRot ? a : 0), kali: true, T, rot: [a, 0, 0] };
   const kx = num(q.cx, null), ky = num(q.cy, null), kz = num(q.cz, null);
   if (kx !== null || ky !== null || kz !== null) { r.kOverF = [kx, ky, kz]; r.kOver = r.kOverF.map(v => (v === null ? null : hp.fromNum(v))); }
   r.fixed = hp.boxFixed(r);
@@ -3864,7 +3889,8 @@ function applyFormula(kind, params){
    boxFar: the distance from the CAMERA beyond which a ray has left the box for good. */
 function boxExtent(){
   if (kaliOn()) {
-    const aS = Math.abs(kali.scale), t = Math.hypot(kali.trans[0], kali.trans[1], kali.trans[2]);
+    /* PER-ITERATION PARAMETERS, KALIBOX (grep): at the schedule's least |scale| and largest translation */
+    const KS = boxP.sched || [boxP], aS = Math.min(...KS.map(q => Math.abs(q.scale))), t = Math.max(...KS.map(q => Math.hypot(q.T[0], q.T[1], q.T[2])));
     return juliaOn ? 1.1 * Math.max((aS * t + Math.hypot(juliaF[0], juliaF[1], juliaF[2])) / (aS - 1), t + 1) : KALI_OPEN;
   }
   /* PER-ITERATION PARAMETERS (grep): the bound taken at the schedule's least |scale| and largest fold and fixed radius.
@@ -3909,7 +3935,7 @@ function buildBoxOrbit(CHP, lenMax) {
      (minR², fixedR², fixedR² / minR², 0), the pre-rotation's three rows (12 to 14; the identity where there is none) and
      the Julia constant (15, as doubles), as wide as the count asks for (texW), since a pixel that runs direct after a
      rebase reads them past the orbit's end. Without a schedule the texture is as it was. O.KS: row 15 in f64. */
-  const len = Vs.length, texW = p.sched ? Math.max(len, lenMax) : len, rows = p.sched ? 16 : 10, data = new Float32Array(texW * rows * 4), A = () => new Float64Array(len);
+  const len = Vs.length, texW = p.sched ? Math.max(len, lenMax) : len, rows = p.sched ? 17 : 10, data = new Float32Array(texW * rows * 4), A = () => new Float64Array(len);
   const O = { box: p, julia: juliaOn, len, texW, rows, data, K: cHP.map(hp.toNum), Vf: [], Wf: [], Rk: [], DRk: [], GH: [A(), A(), A()], GL: [A(), A(), A()], R2: A(), GM: A(), GF: A(), REG: new Int8Array(len) };
   const put = (row, k, vals) => { for (let j = 0; j < 4; j++) data[(row * texW + k) * 4 + j] = vals[j]; };
   if (p.sched) {
@@ -3919,6 +3945,7 @@ function buildBoxOrbit(CHP, lenMax) {
       put(10, k, [P.scale, Math.abs(P.scale), P.fold, 2 * P.fold]); put(11, k, [P.m2, P.F2, P.kA, 0]);
       for (let a = 0; a < 3; a++) put(12 + a, k, [Rr[a][0], Rr[a][1], Rr[a][2], 0]);
       put(15, k, [Kf[0], Kf[1], Kf[2], 0]); O.KS.push(Kf);
+      if (P.kali) put(16, k, [P.T[0], P.T[1], P.T[2], 0]);   // PER-ITERATION PARAMETERS, KALIBOX (grep): its translation
     }
     /* the GPU's switch: the pre-rotation is read from rows 12 to 14 only when some iteration's is not the base's */
     O.schedRot = p.sched.some(P => P.hasRot !== p.hasRot || (P.hasRot && P.rot.some((a, i) => a !== p.rot[i]))) ? 1 : 0;
@@ -4357,7 +4384,8 @@ function boxFoldJS(gh, gl, d, L2){
   return 2 * cd - d;
 }
 function boxOrbitJS(O, dc, maxIter, fixed, jump){
-  const p = O.box, sch = p.sched && !p.kali;   // PER-ITERATION PARAMETERS (grep): the map is read by the iteration's index
+  const p = O.box, sch = !!p.sched;   // PER-ITERATION PARAMETERS (grep): the map is read by the iteration's index (KaliBox's too)
+  let Tk = p.T;
   let R = p.hasRot ? p.R : null;
   let S = p.scale, aS = Math.abs(S), m2 = p.m2, F2 = p.F2, kA = p.kA, L2 = 2 * p.fold, direct = false;
   const GH = O.GH, GL = O.GL, cx = O.julia ? 0 : dc[0], cy = O.julia ? 0 : dc[1], cz = O.julia ? 0 : dc[2];   // JULIA MODE (grep): nothing is added after the start
@@ -4367,12 +4395,12 @@ function boxOrbitJS(O, dc, maxIter, fixed, jump){
   let zx = O.Vf[m][0] + dx, zy = O.Vf[m][1] + dy, zz = O.Vf[m][2] + dz;
   let cD = O.julia ? O.K : [O.Vf[0][0] + dc[0], O.Vf[0][1] + dc[1], O.Vf[0][2] + dc[2]];   // the pixel's own c, for the direct run
   while (it < maxIter) {
-    if (sch) { const P = boxAt(p, it); S = P.scale; aS = Math.abs(S); m2 = P.m2; F2 = P.F2; kA = P.kA; L2 = 2 * P.fold; R = P.hasRot ? P.R : null;
+    if (sch) { const P = boxAt(p, it); S = P.scale; aS = Math.abs(S); m2 = P.m2; F2 = P.F2; kA = P.kA; L2 = 2 * P.fold; R = P.hasRot ? P.R : null; Tk = P.T;
       if (O.julia) cD = O.KS[Math.min(it, O.KS.length - 1)]; }
     if (direct) {                                // DIRECT AFTER A REBASE (grep): from the first rebase on, z itself
       let x = zx, y = zy, w = zz;
       if (R) { x = R[0][0]*zx + R[0][1]*zy + R[0][2]*zz; y = R[1][0]*zx + R[1][1]*zy + R[1][2]*zz; w = R[2][0]*zx + R[2][1]*zy + R[2][2]*zz; }
-      if (p.kali) { x = Math.abs(x) + p.T[0]; y = Math.abs(y) + p.T[1]; w = Math.abs(w) + p.T[2]; }   // KALIBOX (grep): its fold and translation
+      if (p.kali) { x = Math.abs(x) + Tk[0]; y = Math.abs(y) + Tk[1]; w = Math.abs(w) + Tk[2]; }   // KALIBOX (grep): its fold and translation
       else { const L = 0.5 * L2; x = Math.max(-L, Math.min(L, x)) * 2 - x; y = Math.max(-L, Math.min(L, y)) * 2 - y; w = Math.max(-L, Math.min(L, w)) * 2 - w; }
       const k = Math.max(1, Math.min(kA, F2 / Math.max(x*x + y*y + w*w, 1e-300)));
       zx = x * k * S + cD[0]; zy = y * k * S + cD[1]; zz = w * k * S + cD[2];
